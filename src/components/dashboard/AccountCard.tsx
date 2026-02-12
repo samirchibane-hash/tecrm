@@ -76,9 +76,10 @@ interface AccountCardProps {
   accountName: string;
   rows: AdRow[];
   visibleKpis: KpiKey[];
+  dateRange?: { from?: Date; to?: Date };
 }
 
-export function AccountCard({ accountName, rows, visibleKpis }: AccountCardProps) {
+export function AccountCard({ accountName, rows, visibleKpis, dateRange }: AccountCardProps) {
   const queryClient = useQueryClient();
   const [logOpen, setLogOpen] = useState(false);
 
@@ -105,7 +106,7 @@ export function AccountCard({ accountName, rows, visibleKpis }: AccountCardProps
 
   // Fetch GHL conversions matched by tecrm_id (first 8 chars of account UUID)
   const accountIdPrefix = account?.id?.slice(0, 8) ?? "";
-  const { data: ghlConversions = [] } = useQuery({
+  const { data: ghlConversionsRaw = [] } = useQuery({
     queryKey: ["ghl-conversions", accountIdPrefix],
     queryFn: async () => {
       if (!accountIdPrefix) return [];
@@ -118,6 +119,17 @@ export function AccountCard({ accountName, rows, visibleKpis }: AccountCardProps
     },
     enabled: !!accountIdPrefix,
   });
+
+  // Filter GHL conversions by date range using created_on field
+  const ghlConversions = useMemo(() => {
+    if (!dateRange?.from) return ghlConversionsRaw;
+    return ghlConversionsRaw.filter((c) => {
+      const d = new Date(c.created_on);
+      if (dateRange.from && d < dateRange.from) return false;
+      if (dateRange.to && d > new Date(dateRange.to.getTime() + 86400000 - 1)) return false;
+      return true;
+    });
+  }, [ghlConversionsRaw, dateRange]);
   const [showForm, setShowForm] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState("");
   const [category, setCategory] = useState<string>("other");

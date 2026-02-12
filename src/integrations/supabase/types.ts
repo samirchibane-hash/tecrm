@@ -115,7 +115,7 @@ export type Database = {
           contact_email: string | null
           contact_name: string | null
           contact_phone: number | null
-          created_at: string
+          created_on: string
           ghl_contact_id: string
           location_id: string | null
           tecrm_id: string | null
@@ -127,7 +127,7 @@ export type Database = {
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: number | null
-          created_at: string
+          created_on: string
           ghl_contact_id: string
           location_id?: string | null
           tecrm_id?: string | null
@@ -139,7 +139,7 @@ export type Database = {
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: number | null
-          created_at?: string
+          created_on?: string
           ghl_contact_id?: string
           location_id?: string | null
           tecrm_id?: string | null
