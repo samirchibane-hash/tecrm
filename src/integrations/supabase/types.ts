@@ -68,30 +68,6 @@ export type Database = {
         }
         Relationships: []
       }
-      Facebook_ads_data: {
-        Row: {
-          "Account name": string
-          "Campaign name": string | null
-          id: number
-          report_date: string | null
-          spend: number | null
-        }
-        Insert: {
-          "Account name": string
-          "Campaign name"?: string | null
-          id?: number
-          report_date?: string | null
-          spend?: number | null
-        }
-        Update: {
-          "Account name"?: string
-          "Campaign name"?: string | null
-          id?: number
-          report_date?: string | null
-          spend?: number | null
-        }
-        Relationships: []
-      }
     }
     Views: {
       [_ in never]: never

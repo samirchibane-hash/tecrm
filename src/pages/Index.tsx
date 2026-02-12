@@ -1,67 +1,144 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useCouplerData } from "@/hooks/useCouplerData";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, RefreshCw, ChevronRight, Users, DollarSign, BarChart3 } from "lucide-react";
+import { AlertCircle, RefreshCw, CalendarDays, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
-
-interface AccountSummary {
-  name: string;
-  totalSpend: number;
-  totalClicks: number;
-  totalImpressions: number;
-  campaignCount: number;
-}
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
+import { AccountCard, ALL_KPIS, type KpiKey } from "@/components/dashboard/AccountCard";
+import type { AdRow } from "@/hooks/useCouplerData";
+import type { DateRange } from "react-day-picker";
 
 const Index = () => {
   const { data, isLoading, isError, error, refetch, isFetching } = useCouplerData();
-  const navigate = useNavigate();
 
-  const accounts = useMemo(() => {
-    if (!data || data.length === 0) return [];
-    const map: Record<string, AccountSummary> = {};
-    const campaignSets: Record<string, Set<string>> = {};
+  const [visibleKpis, setVisibleKpis] = useState<KpiKey[]>([
+    "totalSpend", "totalClicks", "totalImpressions", "avgCTR",
+  ]);
 
-    data.forEach((row) => {
-      const name = row["Account: Account name"];
-      if (!map[name]) {
-        map[name] = { name, totalSpend: 0, totalClicks: 0, totalImpressions: 0, campaignCount: 0 };
-        campaignSets[name] = new Set();
-      }
-      map[name].totalSpend += row["Cost: Amount spend"] ?? 0;
-      map[name].totalClicks += row["Performance: Clicks"] ?? 0;
-      map[name].totalImpressions += row["Performance: Impressions"] ?? 0;
-      campaignSets[name].add(row["Campaign: Campaign name"]);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
+
+  const filteredData = useMemo(() => {
+    if (!data) return [];
+    if (!dateRange?.from) return data;
+    return data.filter((row) => {
+      const d = new Date(row["Report: Date"]);
+      if (dateRange.from && d < dateRange.from) return false;
+      if (dateRange.to && d > dateRange.to) return false;
+      return true;
     });
+  }, [data, dateRange]);
 
-    return Object.values(map)
-      .map((a) => ({ ...a, campaignCount: campaignSets[a.name].size }))
-      .sort((a, b) => b.totalSpend - a.totalSpend);
-  }, [data]);
+  const accountGroups = useMemo(() => {
+    if (filteredData.length === 0) return [];
+    const map: Record<string, AdRow[]> = {};
+    filteredData.forEach((row) => {
+      const name = row["Account: Account name"];
+      if (!map[name]) map[name] = [];
+      map[name].push(row);
+    });
+    return Object.entries(map)
+      .sort(([, a], [, b]) => {
+        const spendA = a.reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
+        const spendB = b.reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
+        return spendB - spendA;
+      });
+  }, [filteredData]);
+
+  const toggleKpi = (key: KpiKey) => {
+    setVisibleKpis((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
+  const dateLabel = dateRange?.from
+    ? dateRange.to
+      ? `${format(dateRange.from, "MMM d")} – ${format(dateRange.to, "MMM d, yyyy")}`
+      : format(dateRange.from, "MMM d, yyyy")
+    : "All time";
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
-        <div className="mb-10 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Ad Accounts</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Select an account to view campaign performance</p>
+            <p className="mt-1 text-sm text-muted-foreground">Campaign performance &amp; change logs</p>
           </div>
-          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="w-fit">
-            <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Date Range Picker */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <CalendarDays className="h-4 w-4" />
+                  <span className="text-xs">{dateLabel}</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <div className="p-3 space-y-2">
+                  <Calendar
+                    mode="range"
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    numberOfMonths={2}
+                    className={cn("pointer-events-auto")}
+                  />
+                  {dateRange?.from && (
+                    <Button variant="ghost" size="sm" className="w-full" onClick={() => setDateRange(undefined)}>
+                      Clear dates
+                    </Button>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* KPI Selector */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <SlidersHorizontal className="h-4 w-4" />
+                  <span className="text-xs">KPIs ({visibleKpis.length})</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56" align="end">
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-foreground">Visible KPIs</p>
+                  {ALL_KPIS.map(({ key, label }) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`kpi-${key}`}
+                        checked={visibleKpis.includes(key)}
+                        onCheckedChange={() => toggleKpi(key)}
+                      />
+                      <Label htmlFor={`kpi-${key}`} className="text-sm cursor-pointer">{label}</Label>
+                    </div>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
 
+        {/* Loading */}
         {isLoading && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-40 rounded-2xl" />
+          <div className="space-y-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-32 rounded-2xl" />
             ))}
           </div>
         )}
 
+        {/* Error */}
         {isError && (
           <div className="flex flex-col items-center gap-4 py-20 text-center">
             <AlertCircle className="h-12 w-12 text-destructive" />
@@ -71,35 +148,16 @@ const Index = () => {
           </div>
         )}
 
-        {accounts.length > 0 && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {accounts.map((account) => (
-              <Card
-                key={account.name}
-                className="cursor-pointer border-border/60 transition-all hover:shadow-md hover:border-foreground/20 active:scale-[0.98]"
-                onClick={() => navigate(`/account/${encodeURIComponent(account.name)}`)}
-              >
-                <CardContent className="flex items-center justify-between p-6">
-                  <div className="space-y-3">
-                    <h2 className="text-lg font-semibold text-foreground">{account.name}</h2>
-                    <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1.5">
-                        <DollarSign className="h-3.5 w-3.5" />
-                        ${account.totalSpend.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <BarChart3 className="h-3.5 w-3.5" />
-                        {account.totalClicks.toLocaleString()} clicks
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <Users className="h-3.5 w-3.5" />
-                        {account.campaignCount} campaigns
-                      </span>
-                    </div>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                </CardContent>
-              </Card>
+        {/* Account Cards */}
+        {accountGroups.length > 0 && (
+          <div className="space-y-4">
+            {accountGroups.map(([name, rows]) => (
+              <AccountCard
+                key={name}
+                accountName={name}
+                rows={rows}
+                visibleKpis={visibleKpis}
+              />
             ))}
           </div>
         )}
