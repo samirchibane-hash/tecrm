@@ -157,6 +157,7 @@ const Index = () => {
                 accountName={name}
                 rows={rows}
                 visibleKpis={visibleKpis}
+                dateRange={dateRange}
               />
             ))}
           </div>
