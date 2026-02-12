@@ -16,9 +16,21 @@ import type { DateRange } from "react-day-picker";
 const Index = () => {
   const { data, isLoading, isError, error, refetch, isFetching } = useCouplerData();
 
-  const [visibleKpis, setVisibleKpis] = useState<KpiKey[]>([
-    "totalSpend", "totalClicks", "totalImpressions", "avgCTR",
-  ]);
+  const [visibleKpis, setVisibleKpis] = useState<KpiKey[]>(() => {
+    try {
+      const saved = localStorage.getItem("dashboard-visible-kpis");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return ["totalSpend", "totalClicks", "totalImpressions", "avgCTR"];
+  });
+
+  const updateVisibleKpis = (updater: (prev: KpiKey[]) => KpiKey[]) => {
+    setVisibleKpis((prev) => {
+      const next = updater(prev);
+      localStorage.setItem("dashboard-visible-kpis", JSON.stringify(next));
+      return next;
+    });
+  };
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
 
@@ -50,7 +62,7 @@ const Index = () => {
   }, [filteredData]);
 
   const toggleKpi = (key: KpiKey) => {
-    setVisibleKpis((prev) =>
+    updateVisibleKpis((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
   };
