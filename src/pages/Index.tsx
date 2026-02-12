@@ -32,8 +32,10 @@ const Index = () => {
     const from = startOfDay(dateRange.from);
     const to = dateRange.to ? startOfDay(dateRange.to) : from;
     return data.filter((row) => {
-      const d = startOfDay(new Date(row["Report: Date"]));
-      return d >= from && d <= to;
+      // Parse YYYY-MM-DD as local date to avoid UTC timezone shift
+      const [y, m, d] = row["Report: Date"].split("-").map(Number);
+      const rowDate = new Date(y, m - 1, d);
+      return rowDate >= from && rowDate <= to;
     });
   }, [data, dateRange]);
 
