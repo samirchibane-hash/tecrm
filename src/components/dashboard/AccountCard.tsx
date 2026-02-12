@@ -20,6 +20,10 @@ import {
   Users,
   TrendingUp,
   BarChart3,
+  CalendarCheck,
+  UserCheck,
+  Target,
+  PhoneCall,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { AdRow } from "@/hooks/useCouplerData";
@@ -42,7 +46,10 @@ const categoryColors: Record<string, string> = {
   other: "bg-muted text-muted-foreground",
 };
 
-export type KpiKey = "totalSpend" | "totalClicks" | "totalImpressions" | "totalReach" | "avgCTR" | "avgCPC";
+export type KpiKey =
+  | "totalSpend" | "totalClicks" | "totalImpressions" | "totalReach" | "avgCTR" | "avgCPC" | "avgCPM"
+  | "webApptTotal" | "webApptCost" | "apptTotal" | "apptCost"
+  | "leadsTotal" | "leadsCost" | "fbLeadsTotal" | "fbLeadsCost";
 
 export const ALL_KPIS: { key: KpiKey; label: string; icon: typeof DollarSign; format: (v: number) => string }[] = [
   { key: "totalSpend", label: "Spend", icon: DollarSign, format: (v) => `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
@@ -51,6 +58,15 @@ export const ALL_KPIS: { key: KpiKey; label: string; icon: typeof DollarSign; fo
   { key: "totalReach", label: "Reach", icon: Users, format: (v) => v.toLocaleString() },
   { key: "avgCTR", label: "Avg CTR", icon: TrendingUp, format: (v) => `${v.toFixed(2)}%` },
   { key: "avgCPC", label: "Avg CPC", icon: BarChart3, format: (v) => `$${v.toFixed(2)}` },
+  { key: "avgCPM", label: "Avg CPM", icon: BarChart3, format: (v) => `$${v.toFixed(2)}` },
+  { key: "webApptTotal", label: "Web Appts", icon: CalendarCheck, format: (v) => v.toLocaleString() },
+  { key: "webApptCost", label: "Cost/Web Appt", icon: CalendarCheck, format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
+  { key: "apptTotal", label: "Appts Scheduled", icon: PhoneCall, format: (v) => v.toLocaleString() },
+  { key: "apptCost", label: "Cost/Appt", icon: PhoneCall, format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
+  { key: "leadsTotal", label: "Leads", icon: UserCheck, format: (v) => v.toLocaleString() },
+  { key: "leadsCost", label: "Cost/Lead", icon: UserCheck, format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
+  { key: "fbLeadsTotal", label: "FB Leads", icon: Target, format: (v) => v.toLocaleString() },
+  { key: "fbLeadsCost", label: "Cost/FB Lead", icon: Target, format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
 ];
 
 interface AccountCardProps {
@@ -75,15 +91,38 @@ export function AccountCard({ accountName, rows, visibleKpis }: AccountCardProps
   }, [rows]);
 
   const kpis = useMemo(() => {
-    if (rows.length === 0)
-      return { totalSpend: 0, totalClicks: 0, totalImpressions: 0, totalReach: 0, avgCTR: 0, avgCPC: 0 };
+    const empty: Record<KpiKey, number> = {
+      totalSpend: 0, totalClicks: 0, totalImpressions: 0, totalReach: 0,
+      avgCTR: 0, avgCPC: 0, avgCPM: 0,
+      webApptTotal: 0, webApptCost: 0, apptTotal: 0, apptCost: 0,
+      leadsTotal: 0, leadsCost: 0, fbLeadsTotal: 0, fbLeadsCost: 0,
+    };
+    if (rows.length === 0) return empty;
+
     const totalSpend = rows.reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
     const totalClicks = rows.reduce((s, r) => s + (r["Performance: Clicks"] ?? 0), 0);
     const totalImpressions = rows.reduce((s, r) => s + (r["Performance: Impressions"] ?? 0), 0);
     const totalReach = rows.reduce((s, r) => s + (r["Performance: Reach"] ?? 0), 0);
     const avgCTR = rows.reduce((s, r) => s + (r["Clicks: CTR"] ?? 0), 0) / rows.length;
     const avgCPC = rows.reduce((s, r) => s + (r["Cost: CPC"] ?? 0), 0) / rows.length;
-    return { totalSpend, totalClicks, totalImpressions, totalReach, avgCTR, avgCPC };
+    const avgCPM = rows.reduce((s, r) => s + (r["Cost: CPM"] ?? 0), 0) / rows.length;
+
+    const webApptTotal = rows.reduce((s, r) => s + (r["Conversions: Website Appointments Scheduled - Total"] ?? 0), 0);
+    const webApptCost = rows.reduce((s, r) => s + (r["Conversions: Website Appointments Scheduled - Cost"] ?? 0), 0);
+    const apptTotal = rows.reduce((s, r) => s + (r["Conversions: Appointments Scheduled - Total"] ?? 0), 0);
+    const apptCost = rows.reduce((s, r) => s + (r["Conversions: Appointments Scheduled - Cost"] ?? 0), 0);
+    const leadsTotal = rows.reduce((s, r) => s + (r["Conversions: Leads - Total"] ?? 0), 0);
+    const leadsCost = rows.reduce((s, r) => s + (r["Conversions: Leads - Cost"] ?? 0), 0);
+    const fbLeadsTotal = rows.reduce((s, r) => s + (r["Conversions: All On-Facebook Leads - Total"] ?? 0), 0);
+    const fbLeadsCost = rows.reduce((s, r) => s + (r["Conversions: All On-Facebook Leads - Cost"] ?? 0), 0);
+
+    return {
+      totalSpend, totalClicks, totalImpressions, totalReach, avgCTR, avgCPC, avgCPM,
+      webApptTotal, webApptCost: webApptTotal > 0 ? webApptCost / webApptTotal : 0,
+      apptTotal, apptCost: apptTotal > 0 ? apptCost / apptTotal : 0,
+      leadsTotal, leadsCost: leadsTotal > 0 ? leadsCost / leadsTotal : 0,
+      fbLeadsTotal, fbLeadsCost: fbLeadsTotal > 0 ? fbLeadsCost / fbLeadsTotal : 0,
+    };
   }, [rows]);
 
   const { data: updates = [] } = useQuery({
