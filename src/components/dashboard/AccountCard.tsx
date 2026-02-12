@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { AdRow } from "@/hooks/useCouplerData";
+import { getDefaultCampaigns } from "@/pages/Settings";
 
 const CATEGORIES = [
   { value: "budget_change", label: "Budget Change" },
@@ -147,7 +148,8 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange }: Accou
     const set = new Set<string>();
     rows.forEach((r) => set.add(r["Campaign: Campaign name"]));
     const sorted = Array.from(set).sort();
-    return [...sorted, "CRM", "Retell Ai"];
+    const defaults = getDefaultCampaigns().filter((c) => !set.has(c));
+    return [...sorted, ...defaults];
   }, [rows]);
 
   const kpis = useMemo(() => {
