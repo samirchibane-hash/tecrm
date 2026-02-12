@@ -24,6 +24,10 @@ import {
   UserCheck,
   Target,
   PhoneCall,
+  Link,
+  ImagePlus,
+  ExternalLink,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { AdRow } from "@/hooks/useCouplerData";
@@ -133,8 +137,11 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange }: Accou
   const [showForm, setShowForm] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState("");
   const [category, setCategory] = useState<string>("other");
-  const [title, setTitle] = useState("");
   const [details, setDetails] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const campaigns = useMemo(() => {
     const set = new Set<string>();
@@ -195,14 +202,39 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange }: Accou
     },
   });
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
   const addUpdate = useMutation({
     mutationFn: async () => {
+      setUploading(true);
+      let image_url: string | null = null;
+
+      if (imageFile) {
+        const ext = imageFile.name.split(".").pop();
+        const path = `${accountName}/${Date.now()}.${ext}`;
+        const { error: uploadErr } = await supabase.storage
+          .from("changelog-attachments")
+          .upload(path, imageFile);
+        if (uploadErr) throw uploadErr;
+        const { data: urlData } = supabase.storage
+          .from("changelog-attachments")
+          .getPublicUrl(path);
+        image_url = urlData.publicUrl;
+      }
+
       const { error } = await supabase.from("campaign_updates").insert({
         account_name: accountName,
         campaign_name: selectedCampaign,
         category: category as any,
-        title,
+        title: "",
         details: details || null,
+        link_url: linkUrl || null,
+        image_url,
       });
       if (error) throw error;
     },
@@ -210,12 +242,15 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange }: Accou
       queryClient.invalidateQueries({ queryKey: ["campaign-updates", accountName] });
       setSelectedCampaign("");
       setCategory("other");
-      setTitle("");
       setDetails("");
+      setLinkUrl("");
+      setImageFile(null);
+      setImagePreview(null);
       setShowForm(false);
+      setUploading(false);
       toast.success("Update logged");
     },
-    onError: () => toast.error("Failed to log update"),
+    onError: () => { setUploading(false); toast.error("Failed to log update"); },
   });
 
   const deleteUpdate = useMutation({
@@ -303,14 +338,32 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange }: Accou
                     </SelectContent>
                   </Select>
                 </div>
-                <Input placeholder="Title (e.g. Increased budget to $500/day)" value={title} onChange={(e) => setTitle(e.target.value)} />
-                <Textarea placeholder="Additional details (optional)" value={details} onChange={(e) => setDetails(e.target.value)} rows={2} />
+                <Textarea placeholder="What changed? (details)" value={details} onChange={(e) => setDetails(e.target.value)} rows={2} />
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <input type="file" accept="image/*" className="absolute inset-0 opacity-0 w-full cursor-pointer" onChange={handleImageSelect} />
+                    <Button type="button" variant="outline" size="sm" className="gap-1.5">
+                      <ImagePlus className="h-3.5 w-3.5" /> Image
+                    </Button>
+                  </div>
+                  <div className="flex-1">
+                    <Input placeholder="Link URL (optional)" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} className="h-8 text-sm" />
+                  </div>
+                </div>
+                {imagePreview && (
+                  <div className="relative w-20 h-20 rounded-md overflow-hidden border border-border">
+                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                    <button className="absolute top-0.5 right-0.5 bg-background/80 rounded-full p-0.5" onClick={() => { setImageFile(null); setImagePreview(null); }}>
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
                 <Button
                   size="sm"
                   onClick={() => addUpdate.mutate()}
-                  disabled={!selectedCampaign || !title.trim() || addUpdate.isPending}
+                  disabled={!selectedCampaign || (!details.trim() && !imageFile && !linkUrl.trim()) || addUpdate.isPending || uploading}
                 >
-                  Log Update
+                  {uploading ? "Uploading…" : "Log Update"}
                 </Button>
               </div>
             )}
@@ -343,8 +396,15 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange }: Accou
                       </Button>
                     </div>
                   </div>
-                  <p className="text-sm font-medium text-foreground">{update.title}</p>
-                  {update.details && <p className="text-xs text-muted-foreground">{update.details}</p>}
+                  {update.details && <p className="text-sm text-foreground">{update.details}</p>}
+                  {(update as any).image_url && (
+                    <img src={(update as any).image_url} alt="Attachment" className="mt-1 max-w-[200px] rounded-md border border-border" />
+                  )}
+                  {(update as any).link_url && (
+                    <a href={(update as any).link_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1">
+                      <ExternalLink className="h-3 w-3" /> {(update as any).link_url}
+                    </a>
+                  )}
                 </div>
               ))}
             </div>
