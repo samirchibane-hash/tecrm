@@ -23,7 +23,10 @@ const Index = () => {
   const availableKpis = ALL_KPIS.filter((k) => enabledKpis.includes(k.key));
   const visibleKpis = settings.visible_kpis.filter((k) => enabledKpis.includes(k));
 
-  const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: startOfDay(subDays(new Date(), 7)),
+    to: startOfDay(subDays(new Date(), 1)),
+  });
   const [showCustomCalendar, setShowCustomCalendar] = useState(false);
 
   const filteredData = useMemo(() => {
