@@ -139,14 +139,15 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange }: Accou
   const [category, setCategory] = useState<string>("other");
   const [details, setDetails] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
 
   const campaigns = useMemo(() => {
     const set = new Set<string>();
     rows.forEach((r) => set.add(r["Campaign: Campaign name"]));
-    return Array.from(set).sort();
+    const sorted = Array.from(set).sort();
+    return [...sorted, "CRM", "Retell Ai"];
   }, [rows]);
 
   const kpis = useMemo(() => {
@@ -203,28 +204,33 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange }: Accou
   });
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    setImageFiles((prev) => [...prev, ...files]);
+    setImagePreviews((prev) => [...prev, ...files.map((f) => URL.createObjectURL(f))]);
+  };
+
+  const removeImage = (index: number) => {
+    setImageFiles((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
   };
 
   const addUpdate = useMutation({
     mutationFn: async () => {
       setUploading(true);
-      let image_url: string | null = null;
+      const uploadedUrls: string[] = [];
 
-      if (imageFile) {
-        const ext = imageFile.name.split(".").pop();
-        const path = `${accountName}/${Date.now()}.${ext}`;
+      for (const file of imageFiles) {
+        const ext = file.name.split(".").pop();
+        const path = `${accountName}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
         const { error: uploadErr } = await supabase.storage
           .from("changelog-attachments")
-          .upload(path, imageFile);
+          .upload(path, file);
         if (uploadErr) throw uploadErr;
         const { data: urlData } = supabase.storage
           .from("changelog-attachments")
           .getPublicUrl(path);
-        image_url = urlData.publicUrl;
+        uploadedUrls.push(urlData.publicUrl);
       }
 
       const { error } = await supabase.from("campaign_updates").insert({
@@ -234,7 +240,7 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange }: Accou
         title: "",
         details: details || null,
         link_url: linkUrl || null,
-        image_url,
+        image_url: uploadedUrls.length > 0 ? uploadedUrls.join(",") : null,
       });
       if (error) throw error;
     },
@@ -244,8 +250,8 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange }: Accou
       setCategory("other");
       setDetails("");
       setLinkUrl("");
-      setImageFile(null);
-      setImagePreview(null);
+      setImageFiles([]);
+      setImagePreviews([]);
       setShowForm(false);
       setUploading(false);
       toast.success("Update logged");
@@ -341,27 +347,31 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange }: Accou
                 <Textarea placeholder="What changed? (details)" value={details} onChange={(e) => setDetails(e.target.value)} rows={2} />
                 <div className="flex items-center gap-2">
                   <div className="relative">
-                    <input type="file" accept="image/*" className="absolute inset-0 opacity-0 w-full cursor-pointer" onChange={handleImageSelect} />
+                    <input type="file" accept="image/*" multiple className="absolute inset-0 opacity-0 w-full cursor-pointer" onChange={handleImageSelect} />
                     <Button type="button" variant="outline" size="sm" className="gap-1.5">
-                      <ImagePlus className="h-3.5 w-3.5" /> Image
+                      <ImagePlus className="h-3.5 w-3.5" /> Images
                     </Button>
                   </div>
                   <div className="flex-1">
                     <Input placeholder="Link URL (optional)" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} className="h-8 text-sm" />
                   </div>
                 </div>
-                {imagePreview && (
-                  <div className="relative w-20 h-20 rounded-md overflow-hidden border border-border">
-                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                    <button className="absolute top-0.5 right-0.5 bg-background/80 rounded-full p-0.5" onClick={() => { setImageFile(null); setImagePreview(null); }}>
-                      <X className="h-3 w-3" />
-                    </button>
+                {imagePreviews.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {imagePreviews.map((src, i) => (
+                      <div key={i} className="relative w-16 h-16 rounded-md overflow-hidden border border-border">
+                        <img src={src} alt="Preview" className="w-full h-full object-cover" />
+                        <button className="absolute top-0.5 right-0.5 bg-background/80 rounded-full p-0.5" onClick={() => removeImage(i)}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
                 <Button
                   size="sm"
                   onClick={() => addUpdate.mutate()}
-                  disabled={!selectedCampaign || (!details.trim() && !imageFile && !linkUrl.trim()) || addUpdate.isPending || uploading}
+                  disabled={!selectedCampaign || (!details.trim() && !imageFiles.length && !linkUrl.trim()) || addUpdate.isPending || uploading}
                 >
                   {uploading ? "Uploading…" : "Log Update"}
                 </Button>
@@ -398,7 +408,13 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange }: Accou
                   </div>
                   {update.details && <p className="text-sm text-foreground">{update.details}</p>}
                   {(update as any).image_url && (
-                    <img src={(update as any).image_url} alt="Attachment" className="mt-1 max-w-[200px] rounded-md border border-border" />
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {((update as any).image_url as string).split(",").map((url: string, i: number) => (
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                          <img src={url} alt="Attachment" className="max-w-[120px] rounded-md border border-border hover:opacity-80 transition-opacity" />
+                        </a>
+                      ))}
+                    </div>
                   )}
                   {(update as any).link_url && (
                     <a href={(update as any).link_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1">
