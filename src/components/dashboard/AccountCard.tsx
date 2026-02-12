@@ -78,6 +78,29 @@ interface AccountCardProps {
 export function AccountCard({ accountName, rows, visibleKpis }: AccountCardProps) {
   const queryClient = useQueryClient();
   const [logOpen, setLogOpen] = useState(false);
+
+  // Auto-upsert account row to ensure a stable UUID exists
+  const { data: account } = useQuery({
+    queryKey: ["account", accountName],
+    queryFn: async () => {
+      // Try to find existing
+      const { data: existing } = await supabase
+        .from("accounts")
+        .select("id, account_name")
+        .eq("account_name", accountName)
+        .maybeSingle();
+      if (existing) return existing;
+      // Insert if missing
+      const { data: inserted, error } = await supabase
+        .from("accounts")
+        .insert({ account_name: accountName })
+        .select("id, account_name")
+        .single();
+      if (error) throw error;
+      return inserted;
+    },
+    staleTime: Infinity,
+  });
   const [showForm, setShowForm] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState("");
   const [category, setCategory] = useState<string>("other");
@@ -181,7 +204,14 @@ export function AccountCard({ accountName, rows, visibleKpis }: AccountCardProps
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-foreground">{accountName}</h2>
-            <p className="text-xs text-muted-foreground">{campaigns.length} campaigns</p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-muted-foreground">{campaigns.length} campaigns</p>
+              {account?.id && (
+                <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground">
+                  {account.id.slice(0, 8)}
+                </Badge>
+              )}
+            </div>
           </div>
           <div className="flex flex-wrap gap-4">
             {displayedKpis.map(({ key, label, icon: Icon, format }) => (

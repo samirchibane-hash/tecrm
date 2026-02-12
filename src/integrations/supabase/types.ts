@@ -14,8 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      accounts: {
+        Row: {
+          account_name: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          account_name: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          account_name?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: []
+      }
       campaign_notes: {
         Row: {
+          account_id: string | null
           account_name: string
           campaign_name: string
           content: string
@@ -23,6 +42,7 @@ export type Database = {
           id: string
         }
         Insert: {
+          account_id?: string | null
           account_name: string
           campaign_name: string
           content: string
@@ -30,16 +50,26 @@ export type Database = {
           id?: string
         }
         Update: {
+          account_id?: string | null
           account_name?: string
           campaign_name?: string
           content?: string
           created_at?: string
           id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "campaign_notes_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       campaign_updates: {
         Row: {
+          account_id: string | null
           account_name: string
           campaign_name: string
           category: Database["public"]["Enums"]["update_category"]
@@ -49,6 +79,7 @@ export type Database = {
           title: string
         }
         Insert: {
+          account_id?: string | null
           account_name: string
           campaign_name: string
           category?: Database["public"]["Enums"]["update_category"]
@@ -58,6 +89,7 @@ export type Database = {
           title: string
         }
         Update: {
+          account_id?: string | null
           account_name?: string
           campaign_name?: string
           category?: Database["public"]["Enums"]["update_category"]
@@ -66,10 +98,19 @@ export type Database = {
           id?: string
           title?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "campaign_updates_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ghl_conversions: {
         Row: {
+          account_id: string | null
           appointment_time: string | null
           contact_address: string | null
           contact_email: string | null
@@ -82,6 +123,7 @@ export type Database = {
           type: string | null
         }
         Insert: {
+          account_id?: string | null
           appointment_time?: string | null
           contact_address?: string | null
           contact_email?: string | null
@@ -94,6 +136,7 @@ export type Database = {
           type?: string | null
         }
         Update: {
+          account_id?: string | null
           appointment_time?: string | null
           contact_address?: string | null
           contact_email?: string | null
@@ -105,7 +148,15 @@ export type Database = {
           tecrm_id?: string | null
           type?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ghl_conversions_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
