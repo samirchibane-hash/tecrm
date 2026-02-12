@@ -37,20 +37,28 @@ const Index = () => {
   }, [data, dateRange]);
 
   const accountGroups = useMemo(() => {
-    if (filteredData.length === 0) return [];
+    // Build map from filtered ad data
     const map: Record<string, AdRow[]> = {};
     filteredData.forEach((row) => {
       const name = row["Account: Account name"];
       if (!map[name]) map[name] = [];
       map[name].push(row);
     });
+    // Also include all accounts from the full dataset so GHL-only data still shows
+    if (data) {
+      data.forEach((row) => {
+        const name = row["Account: Account name"];
+        if (!map[name]) map[name] = [];
+      });
+    }
+    if (Object.keys(map).length === 0) return [];
     return Object.entries(map)
       .sort(([, a], [, b]) => {
         const spendA = a.reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
         const spendB = b.reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
         return spendB - spendA;
       });
-  }, [filteredData]);
+  }, [filteredData, data]);
 
   const toggleKpi = (key: KpiKey) => {
     const next = visibleKpis.includes(key)
