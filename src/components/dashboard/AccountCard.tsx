@@ -49,7 +49,8 @@ const categoryColors: Record<string, string> = {
 export type KpiKey =
   | "totalSpend" | "totalClicks" | "totalImpressions" | "totalReach" | "avgCTR" | "avgCPC" | "avgCPM"
   | "webApptTotal" | "webApptCost" | "apptTotal" | "apptCost"
-  | "leadsTotal" | "leadsCost" | "fbLeadsTotal" | "fbLeadsCost";
+  | "leadsTotal" | "leadsCost" | "fbLeadsTotal" | "fbLeadsCost"
+  | "ghlLeads" | "ghlAppointments";
 
 export const ALL_KPIS: { key: KpiKey; label: string; icon: typeof DollarSign; format: (v: number) => string }[] = [
   { key: "totalSpend", label: "Spend", icon: DollarSign, format: (v) => `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
@@ -67,6 +68,8 @@ export const ALL_KPIS: { key: KpiKey; label: string; icon: typeof DollarSign; fo
   { key: "leadsCost", label: "Cost/Lead", icon: UserCheck, format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
   { key: "fbLeadsTotal", label: "FB Leads", icon: Target, format: (v) => v.toLocaleString() },
   { key: "fbLeadsCost", label: "Cost/FB Lead", icon: Target, format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
+  { key: "ghlLeads", label: "GHL Leads", icon: UserCheck, format: (v) => v.toLocaleString() },
+  { key: "ghlAppointments", label: "GHL Appts", icon: CalendarCheck, format: (v) => v.toLocaleString() },
 ];
 
 interface AccountCardProps {
@@ -83,14 +86,12 @@ export function AccountCard({ accountName, rows, visibleKpis }: AccountCardProps
   const { data: account } = useQuery({
     queryKey: ["account", accountName],
     queryFn: async () => {
-      // Try to find existing
       const { data: existing } = await supabase
         .from("accounts")
         .select("id, account_name")
         .eq("account_name", accountName)
         .maybeSingle();
       if (existing) return existing;
-      // Insert if missing
       const { data: inserted, error } = await supabase
         .from("accounts")
         .insert({ account_name: accountName })
@@ -100,6 +101,22 @@ export function AccountCard({ accountName, rows, visibleKpis }: AccountCardProps
       return inserted;
     },
     staleTime: Infinity,
+  });
+
+  // Fetch GHL conversions matched by tecrm_id (first 8 chars of account UUID)
+  const accountIdPrefix = account?.id?.slice(0, 8) ?? "";
+  const { data: ghlConversions = [] } = useQuery({
+    queryKey: ["ghl-conversions", accountIdPrefix],
+    queryFn: async () => {
+      if (!accountIdPrefix) return [];
+      const { data, error } = await supabase
+        .from("ghl_conversions")
+        .select("*")
+        .eq("tecrm_id", accountIdPrefix);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!accountIdPrefix,
   });
   const [showForm, setShowForm] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState("");
@@ -119,8 +136,9 @@ export function AccountCard({ accountName, rows, visibleKpis }: AccountCardProps
       avgCTR: 0, avgCPC: 0, avgCPM: 0,
       webApptTotal: 0, webApptCost: 0, apptTotal: 0, apptCost: 0,
       leadsTotal: 0, leadsCost: 0, fbLeadsTotal: 0, fbLeadsCost: 0,
+      ghlLeads: 0, ghlAppointments: 0,
     };
-    if (rows.length === 0) return empty;
+    if (rows.length === 0) return { ...empty, ghlLeads: ghlConversions.filter(c => c.type === 'lead').length, ghlAppointments: ghlConversions.filter(c => c.type === 'appointment').length };
 
     const totalSpend = rows.reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
     const totalClicks = rows.reduce((s, r) => s + (r["Performance: Clicks"] ?? 0), 0);
@@ -139,14 +157,18 @@ export function AccountCard({ accountName, rows, visibleKpis }: AccountCardProps
     const fbLeadsTotal = rows.reduce((s, r) => s + (r["Conversions: All On-Facebook Leads - Total"] ?? 0), 0);
     const fbLeadsCost = rows.reduce((s, r) => s + (r["Conversions: All On-Facebook Leads - Cost"] ?? 0), 0);
 
+    const ghlLeads = ghlConversions.filter(c => c.type === 'lead').length;
+    const ghlAppointments = ghlConversions.filter(c => c.type === 'appointment').length;
+
     return {
       totalSpend, totalClicks, totalImpressions, totalReach, avgCTR, avgCPC, avgCPM,
       webApptTotal, webApptCost: webApptTotal > 0 ? webApptCost / webApptTotal : 0,
       apptTotal, apptCost: apptTotal > 0 ? apptCost / apptTotal : 0,
       leadsTotal, leadsCost: leadsTotal > 0 ? leadsCost / leadsTotal : 0,
       fbLeadsTotal, fbLeadsCost: fbLeadsTotal > 0 ? fbLeadsCost / fbLeadsTotal : 0,
+      ghlLeads, ghlAppointments,
     };
-  }, [rows]);
+  }, [rows, ghlConversions]);
 
   const { data: updates = [] } = useQuery({
     queryKey: ["campaign-updates", accountName],
