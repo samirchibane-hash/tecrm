@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      campaign_notes: {
+        Row: {
+          account_name: string
+          campaign_name: string
+          content: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          account_name: string
+          campaign_name: string
+          content: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          account_name?: string
+          campaign_name?: string
+          content?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      campaign_updates: {
+        Row: {
+          account_name: string
+          campaign_name: string
+          category: Database["public"]["Enums"]["update_category"]
+          created_at: string
+          details: string | null
+          id: string
+          title: string
+        }
+        Insert: {
+          account_name: string
+          campaign_name: string
+          category?: Database["public"]["Enums"]["update_category"]
+          created_at?: string
+          details?: string | null
+          id?: string
+          title: string
+        }
+        Update: {
+          account_name?: string
+          campaign_name?: string
+          category?: Database["public"]["Enums"]["update_category"]
+          created_at?: string
+          details?: string | null
+          id?: string
+          title?: string
+        }
+        Relationships: []
+      }
       Facebook_ads_data: {
         Row: {
           "Account name": string
@@ -46,7 +100,13 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      update_category:
+        | "budget_change"
+        | "creative_swap"
+        | "audience_update"
+        | "bid_change"
+        | "status_change"
+        | "other"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -173,6 +233,15 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      update_category: [
+        "budget_change",
+        "creative_swap",
+        "audience_update",
+        "bid_change",
+        "status_change",
+        "other",
+      ],
+    },
   },
 } as const
