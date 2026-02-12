@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useCouplerData } from "@/hooks/useCouplerData";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, RefreshCw, CalendarDays, SlidersHorizontal } from "lucide-react";
+import { AlertCircle, RefreshCw, CalendarDays, SlidersHorizontal, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -10,18 +11,22 @@ import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { AccountCard, ALL_KPIS, type KpiKey } from "@/components/dashboard/AccountCard";
+import { getEnabledKpis } from "@/pages/Settings";
 import type { AdRow } from "@/hooks/useCouplerData";
 import type { DateRange } from "react-day-picker";
 
 const Index = () => {
   const { data, isLoading, isError, error, refetch, isFetching } = useCouplerData();
 
+  const enabledKpis = getEnabledKpis();
+  const availableKpis = ALL_KPIS.filter((k) => enabledKpis.includes(k.key));
+
   const [visibleKpis, setVisibleKpis] = useState<KpiKey[]>(() => {
     try {
       const saved = localStorage.getItem("dashboard-visible-kpis");
-      if (saved) return JSON.parse(saved);
+      if (saved) return (JSON.parse(saved) as KpiKey[]).filter((k) => enabledKpis.includes(k));
     } catch {}
-    return ["totalSpend", "totalClicks", "totalImpressions", "avgCTR"];
+    return ["totalSpend", "totalClicks", "totalImpressions", "avgCTR"].filter((k) => enabledKpis.includes(k as KpiKey)) as KpiKey[];
   });
 
   const updateVisibleKpis = (updater: (prev: KpiKey[]) => KpiKey[]) => {
@@ -120,7 +125,7 @@ const Index = () => {
               <PopoverContent className="w-56" align="end">
                 <div className="space-y-3">
                   <p className="text-sm font-medium text-foreground">Visible KPIs</p>
-                  {ALL_KPIS.map(({ key, label }) => (
+                  {availableKpis.map(({ key, label }) => (
                     <div key={key} className="flex items-center gap-2">
                       <Checkbox
                         id={`kpi-${key}`}
@@ -137,6 +142,10 @@ const Index = () => {
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
               <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
               Refresh
+            </Button>
+
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/settings"><Settings className="h-4 w-4" /></Link>
             </Button>
           </div>
         </div>
