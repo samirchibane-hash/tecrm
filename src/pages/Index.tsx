@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { format } from "date-fns";
+import { format, startOfDay, subDays, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { cn } from "@/lib/utils";
 import { AccountCard, ALL_KPIS, type KpiKey } from "@/components/dashboard/AccountCard";
 import { useSettings } from "@/hooks/useSettings";
@@ -84,19 +84,42 @@ const Index = () => {
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="end">
-                <div className="p-3 space-y-2">
-                  <Calendar
-                    mode="range"
-                    selected={dateRange}
-                    onSelect={setDateRange}
-                    numberOfMonths={2}
-                    className={cn("pointer-events-auto")}
-                  />
-                  {dateRange?.from && (
-                    <Button variant="ghost" size="sm" className="w-full" onClick={() => setDateRange(undefined)}>
-                      Clear dates
-                    </Button>
-                  )}
+                <div className="flex">
+                  <div className="flex flex-col gap-1 border-r border-border p-3 min-w-[140px]">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Presets</p>
+                    {[
+                      { label: "Today", range: { from: startOfDay(new Date()), to: new Date() } },
+                      { label: "Yesterday", range: { from: startOfDay(subDays(new Date(), 1)), to: startOfDay(new Date()) } },
+                      { label: "Last 7 days", range: { from: startOfDay(subDays(new Date(), 6)), to: new Date() } },
+                      { label: "Last 14 days", range: { from: startOfDay(subDays(new Date(), 13)), to: new Date() } },
+                      { label: "Last 28 days", range: { from: startOfDay(subDays(new Date(), 27)), to: new Date() } },
+                      { label: "Last month", range: { from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) } },
+                    ].map((preset) => (
+                      <Button
+                        key={preset.label}
+                        variant="ghost"
+                        size="sm"
+                        className="justify-start text-xs h-8"
+                        onClick={() => setDateRange(preset.range)}
+                      >
+                        {preset.label}
+                      </Button>
+                    ))}
+                    {dateRange?.from && (
+                      <Button variant="ghost" size="sm" className="justify-start text-xs h-8 text-muted-foreground" onClick={() => setDateRange(undefined)}>
+                        Clear dates
+                      </Button>
+                    )}
+                  </div>
+                  <div className="p-3">
+                    <Calendar
+                      mode="range"
+                      selected={dateRange}
+                      onSelect={setDateRange}
+                      numberOfMonths={2}
+                      className={cn("pointer-events-auto")}
+                    />
+                  </div>
                 </div>
               </PopoverContent>
             </Popover>
