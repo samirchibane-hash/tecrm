@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { AdRow } from "@/hooks/useCouplerData";
-import { getDefaultCampaigns } from "@/pages/Settings";
+
 
 const CATEGORIES = [
   { value: "budget_change", label: "Budget Change" },
@@ -82,9 +82,10 @@ interface AccountCardProps {
   rows: AdRow[];
   visibleKpis: KpiKey[];
   dateRange?: { from?: Date; to?: Date };
+  defaultCampaigns?: string[];
 }
 
-export function AccountCard({ accountName, rows, visibleKpis, dateRange }: AccountCardProps) {
+export function AccountCard({ accountName, rows, visibleKpis, dateRange, defaultCampaigns = [] }: AccountCardProps) {
   const queryClient = useQueryClient();
   const [logOpen, setLogOpen] = useState(false);
 
@@ -148,9 +149,9 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange }: Accou
     const set = new Set<string>();
     rows.forEach((r) => set.add(r["Campaign: Campaign name"]));
     const sorted = Array.from(set).sort();
-    const defaults = getDefaultCampaigns().filter((c) => !set.has(c));
+    const defaults = defaultCampaigns.filter((c) => !set.has(c));
     return [...sorted, ...defaults];
-  }, [rows]);
+  }, [rows, defaultCampaigns]);
 
   const kpis = useMemo(() => {
     const empty: Record<KpiKey, number> = {

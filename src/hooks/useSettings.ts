@@ -1,0 +1,74 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import type { KpiKey } from "@/components/dashboard/AccountCard";
+
+interface SettingsRow {
+  id: string;
+  enabled_kpis: KpiKey[];
+  default_campaigns: string[];
+  visible_kpis: KpiKey[];
+  updated_at: string;
+}
+
+const DEFAULTS: Omit<SettingsRow, "id" | "updated_at"> = {
+  enabled_kpis: [
+    "totalSpend", "totalClicks", "totalImpressions", "totalReach",
+    "avgCTR", "avgCPC", "avgCPM", "webApptTotal", "webApptCost",
+    "apptTotal", "apptCost", "leadsTotal", "leadsCost",
+    "fbLeadsTotal", "fbLeadsCost", "ghlLeads", "ghlAppointments",
+  ] as KpiKey[],
+  default_campaigns: ["CRM", "Retell Ai"],
+  visible_kpis: ["totalSpend", "totalClicks", "totalImpressions", "avgCTR"] as KpiKey[],
+};
+
+async function fetchSettings(): Promise<Omit<SettingsRow, "id" | "updated_at">> {
+  const { data, error } = await supabase
+    .from("settings" as any)
+    .select("*")
+    .eq("id", "global")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return DEFAULTS;
+  return {
+    enabled_kpis: (data as any).enabled_kpis ?? DEFAULTS.enabled_kpis,
+    default_campaigns: (data as any).default_campaigns ?? DEFAULTS.default_campaigns,
+    visible_kpis: (data as any).visible_kpis ?? DEFAULTS.visible_kpis,
+  };
+}
+
+export function useSettings() {
+  const queryClient = useQueryClient();
+
+  const { data: settings, isLoading } = useQuery({
+    queryKey: ["settings"],
+    queryFn: fetchSettings,
+    staleTime: 30_000,
+  });
+
+  const mutation = useMutation({
+    mutationFn: async (patch: Partial<Omit<SettingsRow, "id" | "updated_at">>) => {
+      const current = queryClient.getQueryData<Omit<SettingsRow, "id" | "updated_at">>(["settings"]) ?? DEFAULTS;
+      const merged = { ...current, ...patch };
+      const { error } = await supabase
+        .from("settings" as any)
+        .update({
+          enabled_kpis: merged.enabled_kpis,
+          default_campaigns: merged.default_campaigns,
+          visible_kpis: merged.visible_kpis,
+          updated_at: new Date().toISOString(),
+        } as any)
+        .eq("id", "global");
+      if (error) throw error;
+      return merged;
+    },
+    onSuccess: (merged) => {
+      queryClient.setQueryData(["settings"], merged);
+    },
+  });
+
+  return {
+    settings: settings ?? DEFAULTS,
+    isLoading,
+    updateSettings: mutation.mutate,
+  };
+}

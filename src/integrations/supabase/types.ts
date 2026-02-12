@@ -153,6 +153,30 @@ export type Database = {
         }
         Relationships: []
       }
+      settings: {
+        Row: {
+          default_campaigns: Json
+          enabled_kpis: Json
+          id: string
+          updated_at: string
+          visible_kpis: Json
+        }
+        Insert: {
+          default_campaigns?: Json
+          enabled_kpis?: Json
+          id?: string
+          updated_at?: string
+          visible_kpis?: Json
+        }
+        Update: {
+          default_campaigns?: Json
+          enabled_kpis?: Json
+          id?: string
+          updated_at?: string
+          visible_kpis?: Json
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
