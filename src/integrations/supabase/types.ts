@@ -68,6 +68,45 @@ export type Database = {
         }
         Relationships: []
       }
+      ghl_conversions: {
+        Row: {
+          appointment_time: string | null
+          contact_address: string | null
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: number | null
+          created_at: string
+          ghl_contact_id: number
+          id: number
+          tecrm_id: string | null
+          type: string | null
+        }
+        Insert: {
+          appointment_time?: string | null
+          contact_address?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: number | null
+          created_at: string
+          ghl_contact_id: number
+          id?: number
+          tecrm_id?: string | null
+          type?: string | null
+        }
+        Update: {
+          appointment_time?: string | null
+          contact_address?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: number | null
+          created_at?: string
+          ghl_contact_id?: number
+          id?: number
+          tecrm_id?: string | null
+          type?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
