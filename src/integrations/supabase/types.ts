@@ -110,53 +110,42 @@ export type Database = {
       }
       ghl_conversions: {
         Row: {
-          account_id: string | null
           appointment_time: string | null
           contact_address: string | null
           contact_email: string | null
           contact_name: string | null
           contact_phone: number | null
           created_at: string
-          ghl_contact_id: number
-          id: number
+          ghl_contact_id: string
+          location_id: string | null
           tecrm_id: string | null
           type: string | null
         }
         Insert: {
-          account_id?: string | null
           appointment_time?: string | null
           contact_address?: string | null
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: number | null
           created_at: string
-          ghl_contact_id: number
-          id?: number
+          ghl_contact_id: string
+          location_id?: string | null
           tecrm_id?: string | null
           type?: string | null
         }
         Update: {
-          account_id?: string | null
           appointment_time?: string | null
           contact_address?: string | null
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: number | null
           created_at?: string
-          ghl_contact_id?: number
-          id?: number
+          ghl_contact_id?: string
+          location_id?: string | null
           tecrm_id?: string | null
           type?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "ghl_conversions_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
     }
     Views: {
