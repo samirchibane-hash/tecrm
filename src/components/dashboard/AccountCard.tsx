@@ -130,9 +130,11 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
   const ghlConversions = useMemo(() => {
     if (!dateRange?.from) return ghlConversionsRaw;
     return ghlConversionsRaw.filter((c) => {
-      const d = new Date(c.created_on);
-      if (dateRange.from && d < dateRange.from) return false;
-      if (dateRange.to && d > new Date(dateRange.to.getTime() + 86400000 - 1)) return false;
+      // created_on is a date-only field (YYYY-MM-DD); parse parts to avoid timezone shifts
+      const [y, m, d] = c.created_on.split("-").map(Number);
+      const dateVal = new Date(y, m - 1, d); // local midnight
+      if (dateRange.from && dateVal < dateRange.from) return false;
+      if (dateRange.to && dateVal > new Date(dateRange.to.getTime() + 86400000 - 1)) return false;
       return true;
     });
   }, [ghlConversionsRaw, dateRange]);
