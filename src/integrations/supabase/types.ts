@@ -157,6 +157,7 @@ export type Database = {
         Row: {
           default_campaigns: Json
           enabled_kpis: Json
+          hidden_accounts: Json
           id: string
           updated_at: string
           visible_kpis: Json
@@ -164,6 +165,7 @@ export type Database = {
         Insert: {
           default_campaigns?: Json
           enabled_kpis?: Json
+          hidden_accounts?: Json
           id?: string
           updated_at?: string
           visible_kpis?: Json
@@ -171,6 +173,7 @@ export type Database = {
         Update: {
           default_campaigns?: Json
           enabled_kpis?: Json
+          hidden_accounts?: Json
           id?: string
           updated_at?: string
           visible_kpis?: Json

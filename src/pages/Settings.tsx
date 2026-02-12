@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Settings as SettingsIcon, Plus, X } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, Plus, X, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -10,11 +10,29 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ALL_KPIS, type KpiKey } from "@/components/dashboard/AccountCard";
 import { useSettings } from "@/hooks/useSettings";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const Settings = () => {
   const { settings, isLoading, updateSettings } = useSettings();
   const [newCampaign, setNewCampaign] = useState("");
+
+  const { data: accounts = [] } = useQuery({
+    queryKey: ["accounts-list"],
+    queryFn: async () => {
+      const { data } = await supabase.from("accounts").select("account_name").order("account_name");
+      return (data ?? []).map((r) => r.account_name);
+    },
+  });
+
+  const toggleAccount = (name: string) => {
+    const hidden = settings.hidden_accounts;
+    const next = hidden.includes(name)
+      ? hidden.filter((n) => n !== name)
+      : [...hidden, name];
+    updateSettings({ hidden_accounts: next });
+  };
 
   const toggle = (key: KpiKey) => {
     const next = settings.enabled_kpis.includes(key)
@@ -144,6 +162,41 @@ const Settings = () => {
                   </button>
                 </Badge>
               ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-lg">Account Visibility</CardTitle>
+            <CardDescription>
+              Hide client cards from the dashboard. Hidden accounts won't appear on the main page.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {accounts.map((name) => {
+                const isHidden = settings.hidden_accounts.includes(name);
+                return (
+                  <div key={name} className="flex items-center justify-between rounded-lg border border-border p-3">
+                    <div className="flex items-center gap-3">
+                      {isHidden ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <Label className="cursor-pointer font-medium">{name}</Label>
+                    </div>
+                    <Switch
+                      checked={!isHidden}
+                      onCheckedChange={() => toggleAccount(name)}
+                    />
+                  </div>
+                );
+              })}
+              {accounts.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">No accounts found</p>
+              )}
             </div>
           </CardContent>
         </Card>
