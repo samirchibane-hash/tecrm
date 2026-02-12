@@ -11,31 +11,17 @@ import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { AccountCard, ALL_KPIS, type KpiKey } from "@/components/dashboard/AccountCard";
-import { getEnabledKpis } from "@/pages/Settings";
+import { useSettings } from "@/hooks/useSettings";
 import type { AdRow } from "@/hooks/useCouplerData";
 import type { DateRange } from "react-day-picker";
 
 const Index = () => {
   const { data, isLoading, isError, error, refetch, isFetching } = useCouplerData();
+  const { settings, updateSettings } = useSettings();
 
-  const enabledKpis = getEnabledKpis();
+  const enabledKpis = settings.enabled_kpis;
   const availableKpis = ALL_KPIS.filter((k) => enabledKpis.includes(k.key));
-
-  const [visibleKpis, setVisibleKpis] = useState<KpiKey[]>(() => {
-    try {
-      const saved = localStorage.getItem("dashboard-visible-kpis");
-      if (saved) return (JSON.parse(saved) as KpiKey[]).filter((k) => enabledKpis.includes(k));
-    } catch {}
-    return ["totalSpend", "totalClicks", "totalImpressions", "avgCTR"].filter((k) => enabledKpis.includes(k as KpiKey)) as KpiKey[];
-  });
-
-  const updateVisibleKpis = (updater: (prev: KpiKey[]) => KpiKey[]) => {
-    setVisibleKpis((prev) => {
-      const next = updater(prev);
-      localStorage.setItem("dashboard-visible-kpis", JSON.stringify(next));
-      return next;
-    });
-  };
+  const visibleKpis = settings.visible_kpis.filter((k) => enabledKpis.includes(k));
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
 
@@ -67,9 +53,10 @@ const Index = () => {
   }, [filteredData]);
 
   const toggleKpi = (key: KpiKey) => {
-    updateVisibleKpis((prev) =>
-      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
-    );
+    const next = visibleKpis.includes(key)
+      ? visibleKpis.filter((k) => k !== key)
+      : [...visibleKpis, key];
+    updateSettings({ visible_kpis: next });
   };
 
   const dateLabel = dateRange?.from
@@ -179,6 +166,7 @@ const Index = () => {
                 rows={rows}
                 visibleKpis={visibleKpis}
                 dateRange={dateRange}
+                defaultCampaigns={settings.default_campaigns}
               />
             ))}
           </div>
