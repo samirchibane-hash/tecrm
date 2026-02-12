@@ -7,6 +7,7 @@ interface SettingsRow {
   enabled_kpis: KpiKey[];
   default_campaigns: string[];
   visible_kpis: KpiKey[];
+  hidden_accounts: string[];
   updated_at: string;
 }
 
@@ -19,6 +20,7 @@ const DEFAULTS: Omit<SettingsRow, "id" | "updated_at"> = {
   ] as KpiKey[],
   default_campaigns: ["CRM", "Retell Ai"],
   visible_kpis: ["totalSpend", "totalClicks", "totalImpressions", "avgCTR"] as KpiKey[],
+  hidden_accounts: [],
 };
 
 async function fetchSettings(): Promise<Omit<SettingsRow, "id" | "updated_at">> {
@@ -33,6 +35,7 @@ async function fetchSettings(): Promise<Omit<SettingsRow, "id" | "updated_at">> 
     enabled_kpis: (data as any).enabled_kpis ?? DEFAULTS.enabled_kpis,
     default_campaigns: (data as any).default_campaigns ?? DEFAULTS.default_campaigns,
     visible_kpis: (data as any).visible_kpis ?? DEFAULTS.visible_kpis,
+    hidden_accounts: (data as any).hidden_accounts ?? DEFAULTS.hidden_accounts,
   };
 }
 
@@ -55,6 +58,7 @@ export function useSettings() {
           enabled_kpis: merged.enabled_kpis,
           default_campaigns: merged.default_campaigns,
           visible_kpis: merged.visible_kpis,
+          hidden_accounts: merged.hidden_accounts,
           updated_at: new Date().toISOString(),
         } as any)
         .eq("id", "global");

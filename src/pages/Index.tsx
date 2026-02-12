@@ -53,13 +53,15 @@ const Index = () => {
       });
     }
     if (Object.keys(map).length === 0) return [];
+    const hiddenAccounts = settings.hidden_accounts ?? [];
     return Object.entries(map)
+      .filter(([name]) => !hiddenAccounts.includes(name))
       .sort(([, a], [, b]) => {
         const spendA = a.reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
         const spendB = b.reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
         return spendB - spendA;
       });
-  }, [filteredData, data]);
+  }, [filteredData, data, settings.hidden_accounts]);
 
   const toggleKpi = (key: KpiKey) => {
     const next = visibleKpis.includes(key)

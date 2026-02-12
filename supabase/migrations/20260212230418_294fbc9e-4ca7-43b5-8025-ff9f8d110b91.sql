@@ -1,0 +1,1 @@
+ALTER TABLE public.settings ADD COLUMN hidden_accounts jsonb NOT NULL DEFAULT '[]'::jsonb;
