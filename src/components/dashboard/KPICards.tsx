@@ -1,11 +1,13 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { DollarSign, TrendingUp, BarChart3, Layers } from "lucide-react";
+import { DollarSign, MousePointerClick, Eye, Users, TrendingUp, BarChart3 } from "lucide-react";
 
 interface KPICardsProps {
   totalSpend: number;
-  campaignCount: number;
-  accountCount: number;
-  avgSpendPerCampaign: number;
+  totalClicks: number;
+  totalImpressions: number;
+  totalReach: number;
+  avgCTR: number;
+  avgCPC: number;
 }
 
 const kpiConfig = [
@@ -16,28 +18,40 @@ const kpiConfig = [
     key: "totalSpend" as const,
   },
   {
-    label: "Campaigns",
-    icon: Layers,
-    format: (v: number) => v.toString(),
-    key: "campaignCount" as const,
+    label: "Total Clicks",
+    icon: MousePointerClick,
+    format: (v: number) => v.toLocaleString(),
+    key: "totalClicks" as const,
   },
   {
-    label: "Accounts",
-    icon: BarChart3,
-    format: (v: number) => v.toString(),
-    key: "accountCount" as const,
+    label: "Impressions",
+    icon: Eye,
+    format: (v: number) => v.toLocaleString(),
+    key: "totalImpressions" as const,
   },
   {
-    label: "Avg Spend / Campaign",
+    label: "Reach",
+    icon: Users,
+    format: (v: number) => v.toLocaleString(),
+    key: "totalReach" as const,
+  },
+  {
+    label: "Avg CTR",
     icon: TrendingUp,
-    format: (v: number) => `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-    key: "avgSpendPerCampaign" as const,
+    format: (v: number) => `${v.toFixed(2)}%`,
+    key: "avgCTR" as const,
+  },
+  {
+    label: "Avg CPC",
+    icon: BarChart3,
+    format: (v: number) => `$${v.toFixed(2)}`,
+    key: "avgCPC" as const,
   },
 ];
 
 export function KPICards(props: KPICardsProps) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
       {kpiConfig.map(({ label, icon: Icon, format, key }) => (
         <Card key={key} className="border-border/50 bg-card/80 backdrop-blur-sm">
           <CardContent className="flex items-center gap-4 p-5">
