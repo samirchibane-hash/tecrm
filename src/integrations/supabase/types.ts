@@ -76,7 +76,9 @@ export type Database = {
           created_at: string
           details: string | null
           id: string
-          title: string
+          image_url: string | null
+          link_url: string | null
+          title: string | null
         }
         Insert: {
           account_id?: string | null
@@ -86,7 +88,9 @@ export type Database = {
           created_at?: string
           details?: string | null
           id?: string
-          title: string
+          image_url?: string | null
+          link_url?: string | null
+          title?: string | null
         }
         Update: {
           account_id?: string | null
@@ -96,7 +100,9 @@ export type Database = {
           created_at?: string
           details?: string | null
           id?: string
-          title?: string
+          image_url?: string | null
+          link_url?: string | null
+          title?: string | null
         }
         Relationships: [
           {
