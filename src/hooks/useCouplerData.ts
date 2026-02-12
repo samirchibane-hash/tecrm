@@ -14,6 +14,27 @@ export interface AdRow {
   "Performance: Impressions": number;
   "Performance: Reach": number;
   "Report: Date": string;
+  "Report: End date": string;
+  "Conversions: Website Appointments Scheduled - Total": number | null;
+  "Conversions: Website Appointments Scheduled - Unique": number | null;
+  "Conversions: Website Appointments Scheduled - Value": number | null;
+  "Conversions: Website Appointments Scheduled - Cost": number | null;
+  "Conversions: Website Appointments Scheduled - Unique Cost": number | null;
+  "Conversions: Appointments Scheduled - Total": number | null;
+  "Conversions: Appointments Scheduled - Unique": number | null;
+  "Conversions: Appointments Scheduled - Value": number | null;
+  "Conversions: Appointments Scheduled - Cost": number | null;
+  "Conversions: Appointments Scheduled - Unique Cost": number | null;
+  "Conversions: Leads - Total": number | null;
+  "Conversions: Leads - Unique": number | null;
+  "Conversions: Leads - Value": number | null;
+  "Conversions: Leads - Cost": number | null;
+  "Conversions: Leads - Unique Cost": number | null;
+  "Conversions: All On-Facebook Leads - Total": number | null;
+  "Conversions: All On-Facebook Leads - Unique": number | null;
+  "Conversions: All On-Facebook Leads - Value": number | null;
+  "Conversions: All On-Facebook Leads - Cost": number | null;
+  "Conversions: All On-Facebook Leads - Unique Cost": number | null;
 }
 
 async function fetchCouplerData(): Promise<AdRow[]> {
