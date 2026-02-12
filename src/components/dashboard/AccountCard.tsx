@@ -110,20 +110,20 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
     staleTime: Infinity,
   });
 
-  // Fetch GHL conversions matched by tecrm_id (first 8 chars of account UUID)
-  const accountIdPrefix = account?.id?.slice(0, 8) ?? "";
+  // Fetch GHL conversions matched by full account UUID as tecrm_id
+  const accountId = account?.id ?? "";
   const { data: ghlConversionsRaw = [] } = useQuery({
-    queryKey: ["ghl-conversions", accountIdPrefix],
+    queryKey: ["ghl-conversions", accountId],
     queryFn: async () => {
-      if (!accountIdPrefix) return [];
+      if (!accountId) return [];
       const { data, error } = await supabase
         .from("ghl_conversions")
         .select("*")
-        .eq("tecrm_id", accountIdPrefix);
+        .eq("tecrm_id", accountId);
       if (error) throw error;
       return data;
     },
-    enabled: !!accountIdPrefix,
+    enabled: !!accountId,
   });
 
   // Filter GHL conversions by date range using created_on field
@@ -161,7 +161,7 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
       leadsTotal: 0, leadsCost: 0, fbLeadsTotal: 0, fbLeadsCost: 0,
       ghlLeads: 0, ghlAppointments: 0,
     };
-    if (rows.length === 0) return { ...empty, ghlLeads: ghlConversions.filter(c => c.type === 'lead').length, ghlAppointments: ghlConversions.filter(c => c.type === 'appointment').length };
+    if (rows.length === 0) return { ...empty, ghlLeads: ghlConversions.filter(c => c.type === 'lead' || c.type === 'Water Test').length, ghlAppointments: ghlConversions.filter(c => c.type === 'appointment' || c.type === 'Water Test').length };
 
     const totalSpend = rows.reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
     const totalClicks = rows.reduce((s, r) => s + (r["Performance: Clicks"] ?? 0), 0);
@@ -180,8 +180,8 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
     const fbLeadsTotal = rows.reduce((s, r) => s + (r["Conversions: All On-Facebook Leads - Total"] ?? 0), 0);
     const fbLeadsCost = rows.reduce((s, r) => s + (r["Conversions: All On-Facebook Leads - Cost"] ?? 0), 0);
 
-    const ghlLeads = ghlConversions.filter(c => c.type === 'lead').length;
-    const ghlAppointments = ghlConversions.filter(c => c.type === 'appointment').length;
+    const ghlLeads = ghlConversions.filter(c => c.type === 'lead' || c.type === 'Water Test').length;
+    const ghlAppointments = ghlConversions.filter(c => c.type === 'appointment' || c.type === 'Water Test').length;
 
     return {
       totalSpend, totalClicks, totalImpressions, totalReach, avgCTR, avgCPC, avgCPM,
