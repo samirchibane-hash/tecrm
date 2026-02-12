@@ -21,8 +21,10 @@ export function SpendChart({ data }: SpendChartProps) {
   const chartData = useMemo(() => {
     const byDate: Record<string, number> = {};
     data.forEach((row) => {
-      if (!row.report_date || row.spend == null) return;
-      byDate[row.report_date] = (byDate[row.report_date] ?? 0) + row.spend;
+      const date = row["Report: Date"];
+      const spend = row["Cost: Amount spend"];
+      if (!date || spend == null) return;
+      byDate[date] = (byDate[date] ?? 0) + spend;
     });
     return Object.entries(byDate)
       .sort(([a], [b]) => a.localeCompare(b))

@@ -18,6 +18,11 @@ interface CampaignSummary {
   campaign: string;
   account: string;
   totalSpend: number;
+  totalClicks: number;
+  totalImpressions: number;
+  totalReach: number;
+  avgCTR: number;
+  avgCPC: number;
   entries: number;
 }
 
@@ -25,19 +30,35 @@ export function CampaignTable({ data }: CampaignTableProps) {
   const campaigns = useMemo(() => {
     const map: Record<string, CampaignSummary> = {};
     data.forEach((row) => {
-      const key = `${row["Account name"]}__${row["Campaign name"] ?? "Unknown"}`;
+      const key = `${row["Account: Account name"]}__${row["Campaign: Campaign name"]}`;
       if (!map[key]) {
         map[key] = {
-          campaign: row["Campaign name"] ?? "Unknown",
-          account: row["Account name"],
+          campaign: row["Campaign: Campaign name"],
+          account: row["Account: Account name"],
           totalSpend: 0,
+          totalClicks: 0,
+          totalImpressions: 0,
+          totalReach: 0,
+          avgCTR: 0,
+          avgCPC: 0,
           entries: 0,
         };
       }
-      map[key].totalSpend += row.spend ?? 0;
+      map[key].totalSpend += row["Cost: Amount spend"] ?? 0;
+      map[key].totalClicks += row["Performance: Clicks"] ?? 0;
+      map[key].totalImpressions += row["Performance: Impressions"] ?? 0;
+      map[key].totalReach += row["Performance: Reach"] ?? 0;
+      map[key].avgCTR += row["Clicks: CTR"] ?? 0;
+      map[key].avgCPC += row["Cost: CPC"] ?? 0;
       map[key].entries += 1;
     });
-    return Object.values(map).sort((a, b) => b.totalSpend - a.totalSpend);
+    return Object.values(map)
+      .map((c) => ({
+        ...c,
+        avgCTR: c.entries > 0 ? c.avgCTR / c.entries : 0,
+        avgCPC: c.entries > 0 ? c.avgCPC / c.entries : 0,
+      }))
+      .sort((a, b) => b.totalSpend - a.totalSpend);
   }, [data]);
 
   return (
@@ -52,8 +73,11 @@ export function CampaignTable({ data }: CampaignTableProps) {
               <TableRow className="hover:bg-transparent">
                 <TableHead>Campaign</TableHead>
                 <TableHead>Account</TableHead>
-                <TableHead className="text-right">Total Spend</TableHead>
-                <TableHead className="text-right">Entries</TableHead>
+                <TableHead className="text-right">Spend</TableHead>
+                <TableHead className="text-right">Clicks</TableHead>
+                <TableHead className="text-right">Impressions</TableHead>
+                <TableHead className="text-right">CTR</TableHead>
+                <TableHead className="text-right">CPC</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -64,12 +88,15 @@ export function CampaignTable({ data }: CampaignTableProps) {
                   <TableCell className="text-right font-mono">
                     ${c.totalSpend.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </TableCell>
-                  <TableCell className="text-right">{c.entries}</TableCell>
+                  <TableCell className="text-right">{c.totalClicks.toLocaleString()}</TableCell>
+                  <TableCell className="text-right">{c.totalImpressions.toLocaleString()}</TableCell>
+                  <TableCell className="text-right">{c.avgCTR.toFixed(2)}%</TableCell>
+                  <TableCell className="text-right font-mono">${c.avgCPC.toFixed(2)}</TableCell>
                 </TableRow>
               ))}
               {campaigns.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">
                     No campaign data found
                   </TableCell>
                 </TableRow>
