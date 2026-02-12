@@ -29,11 +29,11 @@ const Index = () => {
   const filteredData = useMemo(() => {
     if (!data) return [];
     if (!dateRange?.from) return data;
+    const from = startOfDay(dateRange.from);
+    const to = dateRange.to ? startOfDay(dateRange.to) : from;
     return data.filter((row) => {
-      const d = new Date(row["Report: Date"]);
-      if (dateRange.from && d < dateRange.from) return false;
-      if (dateRange.to && d > dateRange.to) return false;
-      return true;
+      const d = startOfDay(new Date(row["Report: Date"]));
+      return d >= from && d <= to;
     });
   }, [data, dateRange]);
 
@@ -97,11 +97,11 @@ const Index = () => {
               <PopoverContent className="w-48 p-1.5" align="end">
                 <div className="flex flex-col gap-0.5">
                   {[
-                    { label: "Today", range: { from: startOfDay(new Date()), to: new Date() } },
-                    { label: "Yesterday", range: { from: startOfDay(subDays(new Date(), 1)), to: startOfDay(new Date()) } },
-                    { label: "Last 7 days", range: { from: startOfDay(subDays(new Date(), 6)), to: new Date() } },
-                    { label: "Last 14 days", range: { from: startOfDay(subDays(new Date(), 13)), to: new Date() } },
-                    { label: "Last 28 days", range: { from: startOfDay(subDays(new Date(), 27)), to: new Date() } },
+                    { label: "Today", range: { from: startOfDay(new Date()), to: startOfDay(new Date()) } },
+                    { label: "Yesterday", range: { from: startOfDay(subDays(new Date(), 1)), to: startOfDay(subDays(new Date(), 1)) } },
+                    { label: "Last 7 days", range: { from: startOfDay(subDays(new Date(), 7)), to: startOfDay(subDays(new Date(), 1)) } },
+                    { label: "Last 14 days", range: { from: startOfDay(subDays(new Date(), 14)), to: startOfDay(subDays(new Date(), 1)) } },
+                    { label: "Last 28 days", range: { from: startOfDay(subDays(new Date(), 28)), to: startOfDay(subDays(new Date(), 1)) } },
                     { label: "Last month", range: { from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) } },
                   ].map((preset) => (
                     <Button
