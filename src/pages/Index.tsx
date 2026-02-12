@@ -24,6 +24,7 @@ const Index = () => {
   const visibleKpis = settings.visible_kpis.filter((k) => enabledKpis.includes(k));
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [showCustomCalendar, setShowCustomCalendar] = useState(false);
 
   const filteredData = useMemo(() => {
     if (!data) return [];
@@ -91,43 +92,50 @@ const Index = () => {
                   <span className="text-xs">{dateLabel}</span>
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <div className="flex">
-                  <div className="flex flex-col gap-1 border-r border-border p-3 min-w-[140px]">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Presets</p>
-                    {[
-                      { label: "Today", range: { from: startOfDay(new Date()), to: new Date() } },
-                      { label: "Yesterday", range: { from: startOfDay(subDays(new Date(), 1)), to: startOfDay(new Date()) } },
-                      { label: "Last 7 days", range: { from: startOfDay(subDays(new Date(), 6)), to: new Date() } },
-                      { label: "Last 14 days", range: { from: startOfDay(subDays(new Date(), 13)), to: new Date() } },
-                      { label: "Last 28 days", range: { from: startOfDay(subDays(new Date(), 27)), to: new Date() } },
-                      { label: "Last month", range: { from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) } },
-                    ].map((preset) => (
-                      <Button
-                        key={preset.label}
-                        variant="ghost"
-                        size="sm"
-                        className="justify-start text-xs h-8"
-                        onClick={() => setDateRange(preset.range)}
-                      >
-                        {preset.label}
-                      </Button>
-                    ))}
-                    {dateRange?.from && (
-                      <Button variant="ghost" size="sm" className="justify-start text-xs h-8 text-muted-foreground" onClick={() => setDateRange(undefined)}>
-                        Clear dates
-                      </Button>
-                    )}
-                  </div>
-                  <div className="p-3">
-                    <Calendar
-                      mode="range"
-                      selected={dateRange}
-                      onSelect={setDateRange}
-                      numberOfMonths={2}
-                      className={cn("pointer-events-auto")}
-                    />
-                  </div>
+              <PopoverContent className="w-48 p-1.5" align="end">
+                <div className="flex flex-col gap-0.5">
+                  {[
+                    { label: "Today", range: { from: startOfDay(new Date()), to: new Date() } },
+                    { label: "Yesterday", range: { from: startOfDay(subDays(new Date(), 1)), to: startOfDay(new Date()) } },
+                    { label: "Last 7 days", range: { from: startOfDay(subDays(new Date(), 6)), to: new Date() } },
+                    { label: "Last 14 days", range: { from: startOfDay(subDays(new Date(), 13)), to: new Date() } },
+                    { label: "Last 28 days", range: { from: startOfDay(subDays(new Date(), 27)), to: new Date() } },
+                    { label: "Last month", range: { from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) } },
+                  ].map((preset) => (
+                    <Button
+                      key={preset.label}
+                      variant="ghost"
+                      size="sm"
+                      className="justify-start text-xs h-8 rounded-sm"
+                      onClick={() => { setDateRange(preset.range); setShowCustomCalendar(false); }}
+                    >
+                      {preset.label}
+                    </Button>
+                  ))}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="justify-start text-xs h-8 rounded-sm"
+                    onClick={() => setShowCustomCalendar((v) => !v)}
+                  >
+                    Custom…
+                  </Button>
+                  {dateRange?.from && (
+                    <Button variant="ghost" size="sm" className="justify-start text-xs h-8 rounded-sm text-muted-foreground" onClick={() => { setDateRange(undefined); setShowCustomCalendar(false); }}>
+                      Clear
+                    </Button>
+                  )}
+                  {showCustomCalendar && (
+                    <div className="border-t border-border pt-2 mt-1">
+                      <Calendar
+                        mode="range"
+                        selected={dateRange}
+                        onSelect={setDateRange}
+                        numberOfMonths={1}
+                        className={cn("p-0 pointer-events-auto")}
+                      />
+                    </div>
+                  )}
                 </div>
               </PopoverContent>
             </Popover>
