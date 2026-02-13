@@ -80,6 +80,20 @@ const Creatives = () => {
   }, [creatives, filterAccount, filterBatch]);
 
   // Group by batch for display
+  // Color palette for account badges
+  const accountColors = useMemo(() => {
+    const palette = [
+      "bg-blue-100 text-blue-800", "bg-emerald-100 text-emerald-800",
+      "bg-amber-100 text-amber-800", "bg-purple-100 text-purple-800",
+      "bg-rose-100 text-rose-800", "bg-cyan-100 text-cyan-800",
+      "bg-orange-100 text-orange-800", "bg-indigo-100 text-indigo-800",
+    ];
+    const map: Record<string, string> = {};
+    const names = [...new Set(creatives.map((c) => c.account_name))].sort();
+    names.forEach((name, i) => { map[name] = palette[i % palette.length]; });
+    return map;
+  }, [creatives]);
+
   const groupedByBatch = useMemo(() => {
     const map: Record<string, typeof filtered> = {};
     filtered.forEach((c) => {
@@ -87,7 +101,12 @@ const Creatives = () => {
       if (!map[key]) map[key] = [];
       map[key].push(c);
     });
-    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+    // Sort by most recent launch_date descending
+    return Object.entries(map).sort(([, a], [, b]) => {
+      const dateA = a.find((c) => c.launch_date)?.launch_date || "";
+      const dateB = b.find((c) => c.launch_date)?.launch_date || "";
+      return dateB.localeCompare(dateA);
+    });
   }, [filtered]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -248,6 +267,14 @@ const Creatives = () => {
         {/* Feed-style Creatives */}
         {groupedByBatch.map(([batchName, items]) => (
           <div key={batchName} className="mb-10">
+            {/* Account badges */}
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {[...new Set(items.map((c) => c.account_name))].map((name) => (
+                <span key={name} className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold", accountColors[name])}>
+                  {name}
+                </span>
+              ))}
+            </div>
             <div className="mb-4 flex items-center gap-2">
               <h2 className="text-sm font-semibold text-foreground">{batchName}</h2>
               <Badge variant="secondary" className="text-xs">{items.length}</Badge>
