@@ -258,49 +258,49 @@ const Creatives = () => {
                 </span>
               )}
             </div>
-            <div className="space-y-4">
-              {items.map((creative) =>
-                creative.file_type === "link" ? (
-                  <div key={creative.id} className="group flex items-center gap-3 py-1">
-                    <a
-                      href={creative.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-primary underline underline-offset-2 hover:text-primary/80 truncate"
-                    >
-                      {creative.file_name}
-                    </a>
-                    <span className="text-[11px] text-muted-foreground shrink-0">{creative.account_name}</span>
-                    <button
-                      className="ml-auto rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => deleteCreative.mutate(creative.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                    </button>
-                  </div>
-                ) : (
-                  <div key={creative.id} className="group relative">
+            {/* Links */}
+            {items.filter(c => c.file_type === "link").map((creative) => (
+              <div key={creative.id} className="group flex items-center gap-3 py-1">
+                <a
+                  href={creative.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-primary underline underline-offset-2 hover:text-primary/80 truncate"
+                >
+                  {creative.file_name}
+                </a>
+                <span className="text-[11px] text-muted-foreground shrink-0">{creative.account_name}</span>
+                <button
+                  className="ml-auto rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => deleteCreative.mutate(creative.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                </button>
+              </div>
+            ))}
+            {/* Images in horizontal scroll */}
+            {items.filter(c => c.file_type !== "link").length > 0 && (
+              <div className="flex gap-3 overflow-x-auto pb-2 mt-2">
+                {items.filter(c => c.file_type !== "link").map((creative) => (
+                  <div key={creative.id} className="group relative shrink-0 w-48">
                     <img
                       src={creative.file_url}
                       alt={creative.file_name}
-                      className="w-full rounded-lg cursor-pointer"
+                      className="w-48 h-48 object-cover rounded-lg cursor-pointer"
                       loading="lazy"
                       onClick={() => setLightboxUrl(creative.file_url)}
                     />
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <p className="text-xs font-medium text-foreground truncate">{creative.file_name}</p>
-                      <p className="text-[11px] text-muted-foreground shrink-0">{creative.account_name}</p>
-                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground truncate">{creative.file_name}</p>
                     <button
-                      className="absolute top-2 right-2 rounded-full bg-background/80 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute top-1.5 right-1.5 rounded-full bg-background/80 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={() => deleteCreative.mutate(creative.id)}
                     >
                       <Trash2 className="h-3.5 w-3.5 text-destructive" />
                     </button>
                   </div>
-                )
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         ))}
 
