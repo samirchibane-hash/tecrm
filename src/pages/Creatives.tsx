@@ -40,6 +40,7 @@ const Creatives = () => {
   const [uploadLaunchDate, setUploadLaunchDate] = useState<Date | undefined>();
   const [uploading, setUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [linkUrl, setLinkUrl] = useState("");
 
   // Fetch accounts
   const { data: accounts = [] } = useQuery({
@@ -104,9 +105,10 @@ const Creatives = () => {
 
   const uploadCreatives = useMutation({
     mutationFn: async () => {
-      if (!uploadAccount || selectedFiles.length === 0) return;
+      if (!uploadAccount || (selectedFiles.length === 0 && !linkUrl.trim())) return;
       setUploading(true);
 
+      // Upload image files
       for (const file of selectedFiles) {
         const ext = file.name.split(".").pop();
         const path = `${uploadAccount}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
@@ -114,14 +116,26 @@ const Creatives = () => {
         if (uploadErr) throw uploadErr;
 
         const { data: urlData } = supabase.storage.from("creatives").getPublicUrl(path);
-        const fileType = file.type.startsWith("video/") ? "video" : "image";
 
         const { error: insertErr } = await supabase.from("creatives").insert({
           account_name: uploadAccount,
           batch_name: uploadBatch || "",
           file_name: file.name,
           file_url: urlData.publicUrl,
-          file_type: fileType,
+          file_type: "image",
+          launch_date: uploadLaunchDate ? format(uploadLaunchDate, "yyyy-MM-dd") : null,
+        });
+        if (insertErr) throw insertErr;
+      }
+
+      // Save link if provided
+      if (linkUrl.trim()) {
+        const { error: insertErr } = await supabase.from("creatives").insert({
+          account_name: uploadAccount,
+          batch_name: uploadBatch || "",
+          file_name: linkUrl.trim(),
+          file_url: linkUrl.trim(),
+          file_type: "link",
           launch_date: uploadLaunchDate ? format(uploadLaunchDate, "yyyy-MM-dd") : null,
         });
         if (insertErr) throw insertErr;
@@ -157,11 +171,9 @@ const Creatives = () => {
     setUploadBatch("");
     setUploadLaunchDate(undefined);
     setUploading(false);
+    setLinkUrl("");
   };
 
-  const isVideo = (url: string) => {
-    return /\.(mp4|webm|mov|avi)$/i.test(url);
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -253,17 +265,18 @@ const Creatives = () => {
                   <CardContent className="p-0">
                     <div
                       className="aspect-square cursor-pointer"
-                      onClick={() => setLightboxUrl(creative.file_url)}
+                      onClick={() => {
+                        if (creative.file_type === "link") {
+                          window.open(creative.file_url, "_blank");
+                        } else {
+                          setLightboxUrl(creative.file_url);
+                        }
+                      }}
                     >
-                      {creative.file_type === "video" || isVideo(creative.file_url) ? (
+                      {creative.file_type === "link" ? (
                         <div className="relative w-full h-full bg-muted flex items-center justify-center">
-                          <video
-                            src={creative.file_url}
-                            className="w-full h-full object-cover"
-                            muted
-                            preload="metadata"
-                          />
-                          <Film className="absolute h-8 w-8 text-foreground/60" />
+                          <Film className="h-8 w-8 text-foreground/60" />
+                          <span className="absolute bottom-2 text-[10px] text-muted-foreground px-2 truncate w-full text-center">Link</span>
                         </div>
                       ) : (
                         <img
@@ -333,27 +346,28 @@ const Creatives = () => {
               <div className="relative rounded-xl border-2 border-dashed border-border p-6 text-center">
                 <input
                   type="file"
-                  accept="image/*,video/*"
+                  accept="image/*"
                   multiple
                   className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
                   onChange={handleFileSelect}
                 />
                 <Upload className="mx-auto h-8 w-8 text-muted-foreground/40 mb-2" />
-                <p className="text-sm text-muted-foreground">Drop images &amp; videos or click to browse</p>
+                <p className="text-sm text-muted-foreground">Drop images or click to browse</p>
               </div>
+
+              {/* Link input */}
+              <Input
+                placeholder="GDrive or external link (optional)"
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+              />
 
               {/* Preview grid */}
               {filePreviews.length > 0 && (
                 <div className="grid grid-cols-4 gap-2">
                   {filePreviews.map((src, i) => (
                     <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-border">
-                      {selectedFiles[i]?.type.startsWith("video/") ? (
-                        <div className="w-full h-full bg-muted flex items-center justify-center">
-                          <Film className="h-6 w-6 text-muted-foreground" />
-                        </div>
-                      ) : (
-                        <img src={src} alt="Preview" className="w-full h-full object-cover" />
-                      )}
+                      <img src={src} alt="Preview" className="w-full h-full object-cover" />
                       <button
                         className="absolute top-0.5 right-0.5 bg-background/80 rounded-full p-0.5"
                         onClick={() => removeFile(i)}
@@ -369,9 +383,9 @@ const Creatives = () => {
               <Button variant="outline" onClick={resetUploadForm}>Cancel</Button>
               <Button
                 onClick={() => uploadCreatives.mutate()}
-                disabled={!uploadAccount || selectedFiles.length === 0 || uploading}
+                disabled={!uploadAccount || (selectedFiles.length === 0 && !linkUrl.trim()) || uploading}
               >
-                {uploading ? "Uploading…" : `Upload ${selectedFiles.length} file${selectedFiles.length !== 1 ? "s" : ""}`}
+                {uploading ? "Uploading…" : "Save"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -380,11 +394,9 @@ const Creatives = () => {
         {/* Lightbox */}
         <Dialog open={!!lightboxUrl} onOpenChange={() => setLightboxUrl(null)}>
           <DialogContent className="max-w-3xl p-2">
-            {lightboxUrl && (isVideo(lightboxUrl) ? (
-              <video src={lightboxUrl} controls className="w-full rounded-lg" autoPlay />
-            ) : (
+            {lightboxUrl && (
               <img src={lightboxUrl} alt="Creative" className="w-full rounded-lg" />
-            ))}
+            )}
           </DialogContent>
         </Dialog>
       </div>
