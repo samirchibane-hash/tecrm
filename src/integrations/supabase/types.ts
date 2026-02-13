@@ -114,6 +114,56 @@ export type Database = {
           },
         ]
       }
+      creatives: {
+        Row: {
+          account_id: string | null
+          account_name: string
+          batch_name: string
+          created_at: string
+          file_name: string
+          file_type: string
+          file_url: string
+          id: string
+          launch_date: string | null
+          notes: string | null
+          status: string
+        }
+        Insert: {
+          account_id?: string | null
+          account_name: string
+          batch_name?: string
+          created_at?: string
+          file_name: string
+          file_type?: string
+          file_url: string
+          id?: string
+          launch_date?: string | null
+          notes?: string | null
+          status?: string
+        }
+        Update: {
+          account_id?: string | null
+          account_name?: string
+          batch_name?: string
+          created_at?: string
+          file_name?: string
+          file_type?: string
+          file_url?: string
+          id?: string
+          launch_date?: string | null
+          notes?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creatives_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ghl_conversions: {
         Row: {
           appointment_time: string | null
