@@ -313,7 +313,7 @@ const Creatives = () => {
                     <img
                       src={creative.file_url}
                       alt={creative.file_name}
-                      className="w-48 h-48 object-cover rounded-lg cursor-pointer"
+                      className="w-48 rounded-lg cursor-pointer"
                       loading="lazy"
                       onClick={() => setLightboxUrl(creative.file_url)}
                     />
@@ -416,9 +416,9 @@ const Creatives = () => {
 
         {/* Lightbox */}
         <Dialog open={!!lightboxUrl} onOpenChange={() => setLightboxUrl(null)}>
-          <DialogContent className="max-w-3xl p-2">
+          <DialogContent className="max-w-4xl p-2">
             {lightboxUrl && (
-              <img src={lightboxUrl} alt="Creative" className="w-full rounded-lg" />
+              <img src={lightboxUrl} alt="Creative" className="max-w-full max-h-[85vh] object-contain mx-auto rounded-lg" />
             )}
           </DialogContent>
         </Dialog>
