@@ -97,7 +97,7 @@ const Creatives = () => {
   const groupedByBatch = useMemo(() => {
     const map: Record<string, typeof filtered> = {};
     filtered.forEach((c) => {
-      const key = c.batch_name || "Ungrouped";
+      const key = `${c.account_name}|||${c.batch_name || "Ungrouped"}`;
       if (!map[key]) map[key] = [];
       map[key].push(c);
     });
@@ -265,8 +265,10 @@ const Creatives = () => {
         )}
 
         {/* Feed-style Creatives */}
-        {groupedByBatch.map(([batchName, items]) => (
-          <div key={batchName} className="mb-10">
+        {groupedByBatch.map(([compositeKey, items]) => {
+          const batchName = compositeKey.split("|||")[1] || "Ungrouped";
+          return (
+          <div key={compositeKey} className="mb-10">
             {/* Account badges */}
             <div className="mb-2 flex flex-wrap gap-1.5">
               {[...new Set(items.map((c) => c.account_name))].map((name) => (
@@ -329,7 +331,8 @@ const Creatives = () => {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
 
         {/* Upload Dialog */}
         <Dialog open={uploadOpen} onOpenChange={(open) => { if (!open) resetUploadForm(); else setUploadOpen(true); }}>
