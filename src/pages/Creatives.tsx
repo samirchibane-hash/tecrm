@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,6 @@ import {
   Upload,
   Trash2,
   Image as ImageIcon,
-  Film,
   Filter,
   Plus,
   X,
@@ -246,10 +245,10 @@ const Creatives = () => {
           </div>
         )}
 
-        {/* Grouped Creatives */}
+        {/* Feed-style Creatives */}
         {groupedByBatch.map(([batchName, items]) => (
-          <div key={batchName} className="mb-8">
-            <div className="mb-3 flex items-center gap-2">
+          <div key={batchName} className="mb-10">
+            <div className="mb-4 flex items-center gap-2">
               <h2 className="text-sm font-semibold text-foreground">{batchName}</h2>
               <Badge variant="secondary" className="text-xs">{items.length}</Badge>
               {items[0]?.launch_date && (
@@ -259,51 +258,48 @@ const Creatives = () => {
                 </span>
               )}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {items.map((creative) => (
-                <Card key={creative.id} className="group relative overflow-hidden border-border/60">
-                  <CardContent className="p-0">
-                    <div
-                      className="aspect-square cursor-pointer"
-                      onClick={() => {
-                        if (creative.file_type === "link") {
-                          window.open(creative.file_url, "_blank");
-                        } else {
-                          setLightboxUrl(creative.file_url);
-                        }
-                      }}
+            <div className="space-y-4">
+              {items.map((creative) =>
+                creative.file_type === "link" ? (
+                  <div key={creative.id} className="group flex items-center gap-3 py-1">
+                    <a
+                      href={creative.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-primary underline underline-offset-2 hover:text-primary/80 truncate"
                     >
-                      {creative.file_type === "link" ? (
-                        <div className="relative w-full h-full bg-muted flex items-center justify-center">
-                          <Film className="h-8 w-8 text-foreground/60" />
-                          <span className="absolute bottom-2 text-[10px] text-muted-foreground px-2 truncate w-full text-center">Link</span>
-                        </div>
-                      ) : (
-                        <img
-                          src={creative.file_url}
-                          alt={creative.file_name}
-                          className="w-full h-full object-cover"
-                          loading="lazy"
-                        />
-                      )}
-                    </div>
-                    <div className="p-2.5 space-y-1">
-                      <p className="text-xs font-medium text-foreground truncate">{creative.file_name}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">{creative.account_name}</p>
-                    </div>
-                    {/* Delete button on hover */}
+                      {creative.file_name}
+                    </a>
+                    <span className="text-[11px] text-muted-foreground shrink-0">{creative.account_name}</span>
                     <button
-                      className="absolute top-1.5 right-1.5 rounded-full bg-background/80 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteCreative.mutate(creative.id);
-                      }}
+                      className="ml-auto rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => deleteCreative.mutate(creative.id)}
                     >
                       <Trash2 className="h-3.5 w-3.5 text-destructive" />
                     </button>
-                  </CardContent>
-                </Card>
-              ))}
+                  </div>
+                ) : (
+                  <div key={creative.id} className="group relative">
+                    <img
+                      src={creative.file_url}
+                      alt={creative.file_name}
+                      className="w-full rounded-lg cursor-pointer"
+                      loading="lazy"
+                      onClick={() => setLightboxUrl(creative.file_url)}
+                    />
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <p className="text-xs font-medium text-foreground truncate">{creative.file_name}</p>
+                      <p className="text-[11px] text-muted-foreground shrink-0">{creative.account_name}</p>
+                    </div>
+                    <button
+                      className="absolute top-2 right-2 rounded-full bg-background/80 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => deleteCreative.mutate(creative.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </button>
+                  </div>
+                )
+              )}
             </div>
           </div>
         ))}
