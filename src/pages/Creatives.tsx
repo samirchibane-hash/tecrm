@@ -20,7 +20,11 @@ import {
   Filter,
   Plus,
   X,
+  Pencil,
+  MoreVertical,
 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -40,6 +44,11 @@ const Creatives = () => {
   const [uploading, setUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [linkUrl, setLinkUrl] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
+  const [editKey, setEditKey] = useState<string | null>(null);
+  const [editBatchName, setEditBatchName] = useState("");
+  const [editLaunchDate, setEditLaunchDate] = useState<Date | undefined>();
+  const [deleteConfirmKey, setDeleteConfirmKey] = useState<string | null>(null);
 
   // Fetch accounts
   const { data: accounts = [] } = useQuery({
@@ -181,6 +190,50 @@ const Creatives = () => {
     },
   });
 
+  // Update all creatives in a batch group
+  const updateBatchGroup = useMutation({
+    mutationFn: async ({ items, newBatchName, newLaunchDate }: { items: typeof creatives; newBatchName: string; newLaunchDate: Date | undefined }) => {
+      for (const item of items) {
+        const updates: Record<string, string | null> = {};
+        if (newBatchName !== item.batch_name) updates.batch_name = newBatchName;
+        const newDateStr = newLaunchDate ? format(newLaunchDate, "yyyy-MM-dd") : null;
+        if (newDateStr !== item.launch_date) updates.launch_date = newDateStr;
+        if (Object.keys(updates).length > 0) {
+          const { error } = await supabase.from("creatives").update(updates).eq("id", item.id);
+          if (error) throw error;
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["creatives"] });
+      setEditOpen(false);
+      setEditKey(null);
+      toast.success("Batch updated");
+    },
+    onError: (err: Error) => toast.error(`Update failed: ${err.message}`),
+  });
+
+  // Delete all creatives in a batch group
+  const deleteBatchGroup = useMutation({
+    mutationFn: async (items: typeof creatives) => {
+      for (const item of items) {
+        // Also delete from storage if it's an image
+        if (item.file_type !== "link" && item.file_url.includes("creatives/")) {
+          const path = item.file_url.split("/storage/v1/object/public/creatives/")[1];
+          if (path) await supabase.storage.from("creatives").remove([path]);
+        }
+        const { error } = await supabase.from("creatives").delete().eq("id", item.id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["creatives"] });
+      setDeleteConfirmKey(null);
+      toast.success("Batch deleted");
+    },
+    onError: (err: Error) => toast.error(`Delete failed: ${err.message}`),
+  });
+
   const resetUploadForm = () => {
     setUploadOpen(false);
     setSelectedFiles([]);
@@ -286,6 +339,26 @@ const Creatives = () => {
                   {format(new Date(items[0].launch_date + "T00:00:00"), "MMM d, yyyy")}
                 </span>
               )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 ml-auto">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => {
+                    setEditKey(compositeKey);
+                    setEditBatchName(batchName === "Ungrouped" ? "" : batchName);
+                    setEditLaunchDate(items[0]?.launch_date ? new Date(items[0].launch_date + "T00:00:00") : undefined);
+                    setEditOpen(true);
+                  }}>
+                    <Pencil className="mr-2 h-3.5 w-3.5" /> Edit batch
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="text-destructive" onClick={() => setDeleteConfirmKey(compositeKey)}>
+                    <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete batch
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
             {/* Links */}
             {items.filter(c => c.file_type === "link").map((creative) => (
@@ -425,6 +498,68 @@ const Creatives = () => {
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Edit Batch Dialog */}
+        <Dialog open={editOpen} onOpenChange={(open) => { if (!open) { setEditOpen(false); setEditKey(null); } }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Edit Batch</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <Input
+                placeholder="Batch name"
+                value={editBatchName}
+                onChange={(e) => setEditBatchName(e.target.value)}
+              />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !editLaunchDate && "text-muted-foreground")}>
+                    <CalendarDays className="mr-2 h-4 w-4" />
+                    {editLaunchDate ? format(editLaunchDate, "MMM d, yyyy") : "Launch date (optional)"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar mode="single" selected={editLaunchDate} onSelect={setEditLaunchDate} />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setEditOpen(false); setEditKey(null); }}>Cancel</Button>
+              <Button onClick={() => {
+                if (!editKey) return;
+                const items = groupedByBatch.find(([k]) => k === editKey)?.[1] ?? [];
+                updateBatchGroup.mutate({ items, newBatchName: editBatchName, newLaunchDate: editLaunchDate });
+              }}>
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Batch Confirmation */}
+        <AlertDialog open={!!deleteConfirmKey} onOpenChange={(open) => { if (!open) setDeleteConfirmKey(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete entire batch?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete all {deleteConfirmKey ? (groupedByBatch.find(([k]) => k === deleteConfirmKey)?.[1]?.length ?? 0) : 0} creatives in this batch. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => {
+                  if (!deleteConfirmKey) return;
+                  const items = groupedByBatch.find(([k]) => k === deleteConfirmKey)?.[1] ?? [];
+                  deleteBatchGroup.mutate(items);
+                }}
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
