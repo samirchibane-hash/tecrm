@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useCouplerData } from "@/hooks/useCouplerData";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, RefreshCw, CalendarDays, SlidersHorizontal, Settings } from "lucide-react";
+import { AlertCircle, RefreshCw, CalendarDays, SlidersHorizontal, Settings, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -175,6 +175,10 @@ const Index = () => {
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
               <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
               Refresh
+            </Button>
+
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/creatives"><ImageIcon className="h-4 w-4" /></Link>
             </Button>
 
             <Button variant="ghost" size="sm" asChild>
