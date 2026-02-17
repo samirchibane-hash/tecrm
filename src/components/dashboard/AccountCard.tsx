@@ -55,7 +55,7 @@ export type KpiKey =
   | "totalSpend" | "totalClicks" | "totalImpressions" | "totalReach" | "avgCTR" | "avgCPC" | "avgCPM"
   | "webApptTotal" | "webApptCost" | "apptTotal" | "apptCost"
   | "leadsTotal" | "leadsCost" | "fbLeadsTotal" | "fbLeadsCost"
-  | "ghlLeads" | "ghlAppointments";
+  | "ghlLeads" | "ghlAppointments" | "ghlCostPerLead" | "ghlCostPerAppt";
 
 export const ALL_KPIS: { key: KpiKey; label: string; icon: typeof DollarSign; format: (v: number) => string }[] = [
   { key: "totalSpend", label: "Spend", icon: DollarSign, format: (v) => `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
@@ -75,6 +75,8 @@ export const ALL_KPIS: { key: KpiKey; label: string; icon: typeof DollarSign; fo
   { key: "fbLeadsCost", label: "Cost/FB Lead", icon: Target, format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
   { key: "ghlLeads", label: "GHL Leads", icon: UserCheck, format: (v) => v.toLocaleString() },
   { key: "ghlAppointments", label: "GHL Appts", icon: CalendarCheck, format: (v) => v.toLocaleString() },
+  { key: "ghlCostPerLead", label: "Cost/GHL Lead", icon: DollarSign, format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
+  { key: "ghlCostPerAppt", label: "Cost/GHL Appt", icon: DollarSign, format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
 ];
 
 interface AccountCardProps {
@@ -161,9 +163,9 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
       avgCTR: 0, avgCPC: 0, avgCPM: 0,
       webApptTotal: 0, webApptCost: 0, apptTotal: 0, apptCost: 0,
       leadsTotal: 0, leadsCost: 0, fbLeadsTotal: 0, fbLeadsCost: 0,
-      ghlLeads: 0, ghlAppointments: 0,
+      ghlLeads: 0, ghlAppointments: 0, ghlCostPerLead: 0, ghlCostPerAppt: 0,
     };
-    if (rows.length === 0) return { ...empty, ghlLeads: ghlConversions.filter(c => c.type?.toLowerCase() === 'lead' || c.type?.toLowerCase() === 'water test').length, ghlAppointments: ghlConversions.filter(c => c.type?.toLowerCase() === 'appointment' || c.type?.toLowerCase() === 'water test').length };
+    if (rows.length === 0) return { ...empty, ghlLeads: ghlConversions.filter(c => c.type?.toLowerCase() === 'lead' || c.type?.toLowerCase() === 'water test').length, ghlAppointments: ghlConversions.filter(c => c.type?.toLowerCase() === 'appointment' || c.type?.toLowerCase() === 'water test').length, ghlCostPerLead: 0, ghlCostPerAppt: 0 };
 
     const totalSpend = rows.reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
     const totalClicks = rows.reduce((s, r) => s + (r["Performance: Clicks"] ?? 0), 0);
@@ -192,6 +194,8 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
       leadsTotal, leadsCost: leadsTotal > 0 ? leadsCost / leadsTotal : 0,
       fbLeadsTotal, fbLeadsCost: fbLeadsTotal > 0 ? fbLeadsCost / fbLeadsTotal : 0,
       ghlLeads, ghlAppointments,
+      ghlCostPerLead: ghlLeads > 0 ? totalSpend / ghlLeads : 0,
+      ghlCostPerAppt: ghlAppointments > 0 ? totalSpend / ghlAppointments : 0,
     };
   }, [rows, ghlConversions]);
 
