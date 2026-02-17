@@ -297,14 +297,51 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
               )}
             </div>
           </div>
-          <div className="flex flex-wrap gap-4">
-            {displayedKpis.map(({ key, label, icon: Icon, format }) => (
-              <div key={key} className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                <Icon className="h-3.5 w-3.5" />
-                <span className="font-medium text-foreground">{format(kpis[key])}</span>
-                <span className="hidden sm:inline text-xs">{label}</span>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Spend */}
+            {visibleKpis.includes("totalSpend") && (
+              <div className="flex items-center gap-1.5 text-sm">
+                <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="font-semibold text-foreground">{ALL_KPIS.find(k => k.key === "totalSpend")!.format(kpis.totalSpend)}</span>
               </div>
-            ))}
+            )}
+
+            {/* GHL Leads group */}
+            {(visibleKpis.includes("ghlLeads") || visibleKpis.includes("ghlCostPerLead")) && (
+              <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1 text-sm">
+                <UserCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                {visibleKpis.includes("ghlLeads") && (
+                  <span className="font-medium text-foreground">{kpis.ghlLeads} <span className="text-xs text-muted-foreground">leads</span></span>
+                )}
+                {visibleKpis.includes("ghlCostPerLead") && (
+                  <span className="text-xs text-muted-foreground">@ <span className="font-medium text-foreground">{kpis.ghlCostPerLead > 0 ? `$${kpis.ghlCostPerLead.toFixed(2)}` : "–"}</span></span>
+                )}
+              </div>
+            )}
+
+            {/* GHL Appts group */}
+            {(visibleKpis.includes("ghlAppointments") || visibleKpis.includes("ghlCostPerAppt")) && (
+              <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1 text-sm">
+                <CalendarCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                {visibleKpis.includes("ghlAppointments") && (
+                  <span className="font-medium text-foreground">{kpis.ghlAppointments} <span className="text-xs text-muted-foreground">appts</span></span>
+                )}
+                {visibleKpis.includes("ghlCostPerAppt") && (
+                  <span className="text-xs text-muted-foreground">@ <span className="font-medium text-foreground">{kpis.ghlCostPerAppt > 0 ? `$${kpis.ghlCostPerAppt.toFixed(2)}` : "–"}</span></span>
+                )}
+              </div>
+            )}
+
+            {/* Remaining KPIs */}
+            {displayedKpis
+              .filter(({ key }) => !["totalSpend", "ghlLeads", "ghlCostPerLead", "ghlAppointments", "ghlCostPerAppt"].includes(key))
+              .map(({ key, label, icon: Icon, format }) => (
+                <div key={key} className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Icon className="h-3.5 w-3.5" />
+                  <span className="font-medium text-foreground">{format(kpis[key])}</span>
+                  <span className="hidden sm:inline text-xs">{label}</span>
+                </div>
+              ))}
           </div>
         </div>
 
