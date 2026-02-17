@@ -28,7 +28,10 @@ import {
   ImagePlus,
   ExternalLink,
   X,
+  Image as ImageIcon,
+  CalendarDays,
 } from "lucide-react";
+import { format } from "date-fns";
 import { toast } from "sonner";
 import type { AdRow } from "@/hooks/useCouplerData";
 
@@ -212,6 +215,50 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
     },
   });
 
+  // Fetch creatives for this account
+  const { data: creatives = [] } = useQuery({
+    queryKey: ["creatives", accountName],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("creatives")
+        .select("*")
+        .eq("account_name", accountName)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Merge updates + creatives into a unified timeline
+  type TimelineItem =
+    | { type: "update"; date: string; data: (typeof updates)[number] }
+    | { type: "creative-batch"; date: string; batchName: string; items: (typeof creatives) };
+
+  const timeline = useMemo<TimelineItem[]>(() => {
+    const items: TimelineItem[] = updates.map((u) => ({
+      type: "update" as const,
+      date: u.created_at,
+      data: u,
+    }));
+
+    // Group creatives by batch_name
+    const batchMap: Record<string, typeof creatives> = {};
+    creatives.forEach((c) => {
+      const key = c.batch_name || "Ungrouped";
+      if (!batchMap[key]) batchMap[key] = [];
+      batchMap[key].push(c);
+    });
+    Object.entries(batchMap).forEach(([batchName, batchItems]) => {
+      const mostRecent = batchItems[0]?.created_at ?? "";
+      items.push({ type: "creative-batch", date: mostRecent, batchName, items: batchItems });
+    });
+
+    items.sort((a, b) => b.date.localeCompare(a.date));
+    return items;
+  }, [updates, creatives]);
+
+  const totalLogCount = updates.length + (creatives.length > 0 ? Object.keys(creatives.reduce((acc, c) => { acc[c.batch_name || "Ungrouped"] = true; return acc; }, {} as Record<string, boolean>)).length : 0);
+
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
@@ -352,7 +399,7 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
               <Button variant="ghost" size="sm" className="gap-1.5 px-2 text-muted-foreground hover:text-foreground">
                 {logOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                 <ClipboardList className="h-4 w-4" />
-                Change Log ({updates.length})
+                Change Log ({totalLogCount})
               </Button>
             </CollapsibleTrigger>
             <Button
@@ -424,51 +471,107 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
               </div>
             )}
 
-            {updates.length === 0 && !showForm && (
+            {timeline.length === 0 && !showForm && (
               <p className="text-sm text-muted-foreground text-center py-4">No updates logged</p>
             )}
 
-            <div className="space-y-2 max-h-[300px] overflow-y-auto">
-              {updates.map((update) => (
-                <div key={update.id} className="group rounded-lg border border-border/60 p-3 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className={`text-xs ${categoryColors[update.category] ?? categoryColors.other}`}>
-                        {CATEGORIES.find((c) => c.value === update.category)?.label ?? update.category}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">{update.campaign_name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(update.created_at).toLocaleDateString()}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => deleteUpdate.mutate(update.id)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                  {update.details && <p className="text-sm text-foreground">{update.details}</p>}
-                  {(update as any).image_url && (
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {((update as any).image_url as string).split(",").map((url: string, i: number) => (
-                        <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                          <img src={url} alt="Attachment" className="max-w-[120px] rounded-md border border-border hover:opacity-80 transition-opacity" />
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              {timeline.map((item) => {
+                if (item.type === "update") {
+                  const update = item.data;
+                  return (
+                    <div key={update.id} className="group rounded-lg border border-border/60 p-3 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className={`text-xs ${categoryColors[update.category] ?? categoryColors.other}`}>
+                            {CATEGORIES.find((c) => c.value === update.category)?.label ?? update.category}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">{update.campaign_name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(update.created_at).toLocaleDateString()}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => deleteUpdate.mutate(update.id)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      {update.details && <p className="text-sm text-foreground">{update.details}</p>}
+                      {(update as any).image_url && (
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {((update as any).image_url as string).split(",").map((url: string, i: number) => (
+                            <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                              <img src={url} alt="Attachment" className="max-w-[120px] rounded-md border border-border hover:opacity-80 transition-opacity" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                      {(update as any).link_url && (
+                        <a href={(update as any).link_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1">
+                          <ExternalLink className="h-3 w-3" /> {(update as any).link_url}
                         </a>
-                      ))}
+                      )}
                     </div>
-                  )}
-                  {(update as any).link_url && (
-                    <a href={(update as any).link_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1">
-                      <ExternalLink className="h-3 w-3" /> {(update as any).link_url}
-                    </a>
-                  )}
-                </div>
-              ))}
+                  );
+                }
+
+                // Creative batch entry
+                const { batchName, items: batchItems } = item;
+                const launchDate = batchItems.find((c) => c.launch_date)?.launch_date;
+                const links = batchItems.filter((c) => c.file_type === "link");
+                const images = batchItems.filter((c) => c.file_type !== "link");
+
+                return (
+                  <div key={`creative-${batchName}`} className="rounded-lg border border-border/60 p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300 text-xs">
+                          <ImageIcon className="h-3 w-3 mr-1" /> Creative
+                        </Badge>
+                        <span className="text-xs font-medium text-foreground">{batchName}</span>
+                        <span className="text-xs text-muted-foreground">({batchItems.length})</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {launchDate && (
+                          <span className="text-xs text-muted-foreground">
+                            <CalendarDays className="inline h-3 w-3 mr-0.5" />
+                            {format(new Date(launchDate + "T00:00:00"), "MMM d, yyyy")}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {links.length > 0 && (
+                      <div className="space-y-0.5">
+                        {links.map((l) => (
+                          <a key={l.id} href={l.file_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                            <ExternalLink className="h-3 w-3" /> {l.file_name}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    {images.length > 0 && (
+                      <div className="flex gap-2 overflow-x-auto pb-1">
+                        {images.map((img) => (
+                          <a key={img.id} href={img.file_url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                            <img
+                              src={img.file_url}
+                              alt={img.file_name}
+                              className="h-16 rounded-md border border-border hover:opacity-80 transition-opacity"
+                              loading="lazy"
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </CollapsibleContent>
         </Collapsible>
