@@ -336,14 +336,6 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-foreground">{accountName}</h2>
-            <div className="flex items-center gap-2">
-              <p className="text-xs text-muted-foreground">{campaigns.length} campaigns</p>
-              {account?.id && (
-                <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground">
-                  {account.id.slice(0, 8)}
-                </Badge>
-              )}
-            </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {/* Spend */}
