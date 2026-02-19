@@ -166,6 +166,7 @@ export type Database = {
       }
       ghl_conversions: {
         Row: {
+          "Ad Name": string | null
           appointment_time: string | null
           contact_address: string | null
           contact_email: string | null
@@ -178,6 +179,7 @@ export type Database = {
           type: string | null
         }
         Insert: {
+          "Ad Name"?: string | null
           appointment_time?: string | null
           contact_address?: string | null
           contact_email?: string | null
@@ -190,6 +192,7 @@ export type Database = {
           type?: string | null
         }
         Update: {
+          "Ad Name"?: string | null
           appointment_time?: string | null
           contact_address?: string | null
           contact_email?: string | null
