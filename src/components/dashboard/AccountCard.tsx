@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import {
   ChevronDown,
   ChevronRight,
@@ -93,6 +94,7 @@ interface AccountCardProps {
 export function AccountCard({ accountName, rows, visibleKpis, dateRange, defaultCampaigns = [] }: AccountCardProps) {
   const queryClient = useQueryClient();
   const [logOpen, setLogOpen] = useState(false);
+  const [activeAdChart, setActiveAdChart] = useState<"leads" | "appts" | null>(null);
 
   // Auto-upsert account row to ensure a stable UUID exists
   const { data: account } = useQuery({
@@ -201,6 +203,36 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
       ghlCostPerAppt: ghlAppointments > 0 ? totalSpend / ghlAppointments : 0,
     };
   }, [rows, ghlConversions]);
+
+  // Group ghlConversions by Ad Name for the breakdown charts
+  const leadsByAd = useMemo(() => {
+    const map: Record<string, number> = {};
+    ghlConversions
+      .filter(c => c.type?.toLowerCase() === 'lead' || c.type?.toLowerCase() === 'water test')
+      .forEach(c => {
+        const name = c["Ad Name"] || "(No Ad Name)";
+        map[name] = (map[name] ?? 0) + 1;
+      });
+    return Object.entries(map)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+  }, [ghlConversions]);
+
+  const apptsByAd = useMemo(() => {
+    const map: Record<string, number> = {};
+    ghlConversions
+      .filter(c => c.type?.toLowerCase() === 'appointment' || c.type?.toLowerCase() === 'water test')
+      .forEach(c => {
+        const name = c["Ad Name"] || "(No Ad Name)";
+        map[name] = (map[name] ?? 0) + 1;
+      });
+    return Object.entries(map)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+  }, [ghlConversions]);
+
 
   const { data: updates = [] } = useQuery({
     queryKey: ["campaign-updates", accountName],
@@ -346,9 +378,12 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
               </div>
             )}
 
-            {/* GHL Leads group */}
+            {/* GHL Leads group — clickable */}
             {(visibleKpis.includes("ghlLeads") || visibleKpis.includes("ghlCostPerLead")) && (
-              <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1 text-sm">
+              <button
+                onClick={() => setActiveAdChart(prev => prev === "leads" ? null : "leads")}
+                className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors cursor-pointer ${activeAdChart === "leads" ? "border-primary/60 bg-primary/10" : "border-border/60 bg-muted/30 hover:bg-muted/50"}`}
+              >
                 <UserCheck className="h-3.5 w-3.5 text-muted-foreground" />
                 {visibleKpis.includes("ghlLeads") && (
                   <span className="font-medium text-foreground">{kpis.ghlLeads} <span className="text-xs text-muted-foreground">leads</span></span>
@@ -356,12 +391,15 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
                 {visibleKpis.includes("ghlCostPerLead") && (
                   <span className="text-xs text-muted-foreground">@ <span className="font-medium text-foreground">{kpis.ghlCostPerLead > 0 ? `$${kpis.ghlCostPerLead.toFixed(2)}` : "–"}</span></span>
                 )}
-              </div>
+              </button>
             )}
 
-            {/* GHL Appts group */}
+            {/* GHL Appts group — clickable */}
             {(visibleKpis.includes("ghlAppointments") || visibleKpis.includes("ghlCostPerAppt")) && (
-              <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1 text-sm">
+              <button
+                onClick={() => setActiveAdChart(prev => prev === "appts" ? null : "appts")}
+                className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors cursor-pointer ${activeAdChart === "appts" ? "border-primary/60 bg-primary/10" : "border-border/60 bg-muted/30 hover:bg-muted/50"}`}
+              >
                 <CalendarCheck className="h-3.5 w-3.5 text-muted-foreground" />
                 {visibleKpis.includes("ghlAppointments") && (
                   <span className="font-medium text-foreground">{kpis.ghlAppointments} <span className="text-xs text-muted-foreground">appts</span></span>
@@ -369,7 +407,7 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
                 {visibleKpis.includes("ghlCostPerAppt") && (
                   <span className="text-xs text-muted-foreground">@ <span className="font-medium text-foreground">{kpis.ghlCostPerAppt > 0 ? `$${kpis.ghlCostPerAppt.toFixed(2)}` : "–"}</span></span>
                 )}
-              </div>
+              </button>
             )}
 
             {/* Remaining KPIs */}
@@ -384,6 +422,49 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
               ))}
           </div>
         </div>
+
+        {/* Ad Breakdown Chart Panel */}
+        {activeAdChart && (
+          <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-foreground">
+                {activeAdChart === "leads" ? "Leads by Ad" : "Appts by Ad"}
+              </span>
+              <button onClick={() => setActiveAdChart(null)} className="text-muted-foreground hover:text-foreground transition-colors">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {(activeAdChart === "leads" ? leadsByAd : apptsByAd).length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-3">No data available</p>
+            ) : (
+              <div style={{ height: Math.max(120, (activeAdChart === "leads" ? leadsByAd : apptsByAd).length * 32) }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    layout="vertical"
+                    data={activeAdChart === "leads" ? leadsByAd : apptsByAd}
+                    margin={{ top: 0, right: 36, left: 8, bottom: 0 }}
+                  >
+                    <XAxis type="number" hide />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={160}
+                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <Tooltip
+                      cursor={{ fill: "hsl(var(--muted))" }}
+                      contentStyle={{ fontSize: 12, borderRadius: 6, border: "1px solid hsl(var(--border))", background: "hsl(var(--background))", color: "hsl(var(--foreground))" }}
+                      formatter={(value) => [value, activeAdChart === "leads" ? "Leads" : "Appts"]}
+                    />
+                    <Bar dataKey="count" radius={[0, 4, 4, 0]} fill="hsl(var(--primary))" label={{ position: "right", fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Expandable Change Log */}
         <Collapsible open={logOpen} onOpenChange={setLogOpen}>
