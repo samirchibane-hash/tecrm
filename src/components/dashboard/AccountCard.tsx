@@ -33,6 +33,8 @@ import {
   SquareArrowOutUpRight,
   Trophy,
   Zap,
+  Sparkles,
+  ChevronUp,
 } from "lucide-react";
 import { Link as RouterLink } from "react-router-dom";
 import { format } from "date-fns";
@@ -250,6 +252,40 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
       adRoi: totalSpend > 0 ? totalRevenue / totalSpend : 0,
     };
   }, [prevRows, prevGhlConversions]);
+
+  const [aiSuggestions, setAiSuggestions] = useState<{ priority: string; suggestion: string }[] | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const fetchAiSuggestions = async () => {
+    if (aiLoading) return;
+    setAiLoading(true);
+    setAiOpen(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("ai-suggestions", {
+        body: {
+          accountName,
+          kpis,
+          prevKpis,
+          updates: updates.slice(0, 10).map((u) => ({
+            date: new Date(u.created_at).toLocaleDateString(),
+            title: (u as any).title || u.category,
+            details: u.details,
+          })),
+          dateLabel: dateRange?.from
+            ? `${dateRange.from.toLocaleDateString()} – ${dateRange.to?.toLocaleDateString() ?? ""}`
+            : "All time",
+        },
+      });
+      if (error) throw error;
+      setAiSuggestions(data.suggestions ?? []);
+    } catch {
+      toast.error("Failed to get AI suggestions");
+      setAiOpen(false);
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const [showForm, setShowForm] = useState(false);
   // selectedLogOption format: "ParentLabel||SubOption" or "CampaignName||" when no sub-option
@@ -634,6 +670,56 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
             )}
           </div>
         )}
+
+        {/* AI Suggestions */}
+        <div>
+          <button
+            onClick={() => {
+              if (aiSuggestions) {
+                setAiOpen((v) => !v);
+              } else {
+                fetchAiSuggestions();
+              }
+            }}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {aiLoading ? (
+              <Sparkles className="h-3.5 w-3.5 animate-pulse text-violet-500" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5 text-violet-500" />
+            )}
+            <span>{aiLoading ? "Analyzing…" : aiSuggestions ? (aiOpen ? "Hide AI Insights" : "Show AI Insights") : "Get AI Insights"}</span>
+            {aiSuggestions && !aiLoading && (
+              aiOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+            )}
+          </button>
+
+          {aiOpen && aiSuggestions && aiSuggestions.length > 0 && (
+            <div className="mt-2 rounded-lg border border-violet-200 bg-violet-50/50 dark:border-violet-800 dark:bg-violet-950/20 p-3 space-y-2">
+              <p className="text-xs font-semibold text-violet-700 dark:text-violet-300 flex items-center gap-1">
+                <Sparkles className="h-3 w-3" /> AI Insights
+              </p>
+              {aiSuggestions.map((s, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className={`mt-0.5 shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                    s.priority === "high"
+                      ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+                      : s.priority === "medium"
+                      ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"
+                      : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                  }`}>{s.priority}</span>
+                  <p className="text-xs text-foreground leading-relaxed">{s.suggestion}</p>
+                </div>
+              ))}
+              <button
+                onClick={() => { setAiSuggestions(null); fetchAiSuggestions(); }}
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Refresh
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Expandable Change Log */}
         <Collapsible open={logOpen} onOpenChange={setLogOpen}>
