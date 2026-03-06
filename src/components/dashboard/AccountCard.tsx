@@ -326,9 +326,9 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, changeL
       batchMap[key].push(c);
     });
     Object.entries(batchMap).forEach(([batchName, batchItems]) => {
-      // Use the most recent created_at across all items in the batch
-      const mostRecent = batchItems.reduce((latest, c) => c.created_at > latest ? c.created_at : latest, batchItems[0]?.created_at ?? "");
-      items.push({ type: "creative-batch", date: mostRecent, batchName, items: batchItems });
+      const launchDate = batchItems.find((c) => c.launch_date)?.launch_date;
+      const sortDate = launchDate ?? batchItems.reduce((latest, c) => c.created_at > latest ? c.created_at : latest, batchItems[0]?.created_at ?? "");
+      items.push({ type: "creative-batch", date: sortDate, batchName, items: batchItems });
     });
 
     items.sort((a, b) => b.date.localeCompare(a.date));
