@@ -27,6 +27,7 @@ const Index = () => {
     from: startOfDay(subDays(new Date(), 7)),
     to: startOfDay(subDays(new Date(), 1)),
   });
+  const [presetLabel, setPresetLabel] = useState<string>("Last 7 days");
   const [showCustomCalendar, setShowCustomCalendar] = useState(false);
 
   const filteredData = useMemo(() => {
@@ -75,11 +76,15 @@ const Index = () => {
     updateSettings({ visible_kpis: next });
   };
 
-  const dateLabel = dateRange?.from
+  const dateRangeStr = dateRange?.from
     ? dateRange.to
-      ? `${format(dateRange.from, "MMM d")} – ${format(dateRange.to, "MMM d, yyyy")}`
-      : format(dateRange.from, "MMM d, yyyy")
-    : "All time";
+      ? `${format(dateRange.from, "MM/dd")} – ${format(dateRange.to, "MM/dd/yyyy")}`
+      : format(dateRange.from, "MM/dd/yyyy")
+    : null;
+
+  const dateLabel = presetLabel && dateRangeStr
+    ? `${presetLabel} (${dateRangeStr})`
+    : dateRangeStr ?? "All time";
 
   return (
     <div className="min-h-screen bg-background">
@@ -114,7 +119,7 @@ const Index = () => {
                       variant="ghost"
                       size="sm"
                       className="justify-start text-xs h-8 rounded-sm"
-                      onClick={() => { setDateRange(preset.range); setShowCustomCalendar(false); }}
+                      onClick={() => { setDateRange(preset.range); setPresetLabel(preset.label); setShowCustomCalendar(false); }}
                     >
                       {preset.label}
                     </Button>
@@ -123,12 +128,12 @@ const Index = () => {
                     variant="ghost"
                     size="sm"
                     className="justify-start text-xs h-8 rounded-sm"
-                    onClick={() => setShowCustomCalendar((v) => !v)}
+                    onClick={() => { setPresetLabel(""); setShowCustomCalendar((v) => !v); }}
                   >
                     Custom…
                   </Button>
                   {dateRange?.from && (
-                    <Button variant="ghost" size="sm" className="justify-start text-xs h-8 rounded-sm text-muted-foreground" onClick={() => { setDateRange(undefined); setShowCustomCalendar(false); }}>
+                    <Button variant="ghost" size="sm" className="justify-start text-xs h-8 rounded-sm text-muted-foreground" onClick={() => { setDateRange(undefined); setPresetLabel(""); setShowCustomCalendar(false); }}>
                       Clear
                     </Button>
                   )}
