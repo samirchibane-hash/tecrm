@@ -167,12 +167,14 @@ export type Database = {
       ghl_conversions: {
         Row: {
           "Ad Name": string | null
+          appointment_status: string | null
           appointment_time: string | null
           contact_address: string | null
           contact_email: string | null
           contact_name: string | null
           contact_phone: number | null
           created_on: string
+          deal_value: number | null
           ghl_contact_id: string
           location_id: string | null
           tecrm_id: string | null
@@ -180,12 +182,14 @@ export type Database = {
         }
         Insert: {
           "Ad Name"?: string | null
+          appointment_status?: string | null
           appointment_time?: string | null
           contact_address?: string | null
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: number | null
           created_on: string
+          deal_value?: number | null
           ghl_contact_id: string
           location_id?: string | null
           tecrm_id?: string | null
@@ -193,12 +197,14 @@ export type Database = {
         }
         Update: {
           "Ad Name"?: string | null
+          appointment_status?: string | null
           appointment_time?: string | null
           contact_address?: string | null
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: number | null
           created_on?: string
+          deal_value?: number | null
           ghl_contact_id?: string
           location_id?: string | null
           tecrm_id?: string | null

@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import AccountDetail from "./pages/AccountDetail";
 import Creatives from "./pages/Creatives";
 import Settings from "./pages/Settings";
+import ClientReport from "./pages/ClientReport";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/account/:accountName" element={<AccountDetail />} />
           <Route path="/creatives" element={<Creatives />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/report/:accountName" element={<ClientReport />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

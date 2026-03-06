@@ -216,7 +216,7 @@ const Index = () => {
                 rows={rows}
                 visibleKpis={visibleKpis}
                 dateRange={dateRange}
-                defaultCampaigns={settings.default_campaigns}
+                changeLogOptions={settings.change_log_options}
               />
             ))}
           </div>

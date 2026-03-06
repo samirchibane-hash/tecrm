@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Settings as SettingsIcon, Plus, X, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, Plus, X, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -8,15 +8,18 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ALL_KPIS, type KpiKey } from "@/components/dashboard/AccountCard";
-import { useSettings } from "@/hooks/useSettings";
+import { useSettings, type ChangeLogOption } from "@/hooks/useSettings";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const Settings = () => {
   const { settings, isLoading, updateSettings } = useSettings();
-  const [newCampaign, setNewCampaign] = useState("");
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newSubOption, setNewSubOption] = useState<Record<string, string>>({});
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
   const { data: accounts = [] } = useQuery({
     queryKey: ["accounts-list"],
@@ -26,14 +29,9 @@ const Settings = () => {
     },
   });
 
-  const toggleAccount = (name: string) => {
-    const hidden = settings.hidden_accounts;
-    const next = hidden.includes(name)
-      ? hidden.filter((n) => n !== name)
-      : [...hidden, name];
-    updateSettings({ hidden_accounts: next });
-  };
+  const changeLogOptions: ChangeLogOption[] = settings.change_log_options ?? [];
 
+  // KPI toggles
   const toggle = (key: KpiKey) => {
     const next = settings.enabled_kpis.includes(key)
       ? settings.enabled_kpis.filter((k) => k !== key)
@@ -43,8 +41,7 @@ const Settings = () => {
   };
 
   const enableAll = () => {
-    const all = ALL_KPIS.map((k) => k.key);
-    updateSettings({ enabled_kpis: all });
+    updateSettings({ enabled_kpis: ALL_KPIS.map((k) => k.key) });
     toast.success("All KPIs enabled");
   };
 
@@ -53,20 +50,57 @@ const Settings = () => {
     toast.success("All KPIs disabled");
   };
 
-  const addCampaign = () => {
-    const name = newCampaign.trim();
+  // Account visibility
+  const toggleAccount = (name: string) => {
+    const hidden = settings.hidden_accounts;
+    const next = hidden.includes(name)
+      ? hidden.filter((n) => n !== name)
+      : [...hidden, name];
+    updateSettings({ hidden_accounts: next });
+  };
+
+  // Change Log Options — categories
+  const addCategory = () => {
+    const name = newCategoryName.trim();
     if (!name) return;
-    if (settings.default_campaigns.includes(name)) {
-      toast.error("Already exists");
+    if (changeLogOptions.some((o) => o.label === name)) {
+      toast.error("Category already exists");
       return;
     }
-    updateSettings({ default_campaigns: [...settings.default_campaigns, name] });
-    setNewCampaign("");
+    updateSettings({ change_log_options: [...changeLogOptions, { label: name, sub_options: [] }] });
+    setNewCategoryName("");
+    setExpandedCategories((prev) => ({ ...prev, [name]: true }));
     toast.success(`Added "${name}"`);
   };
 
-  const removeCampaign = (name: string) => {
-    updateSettings({ default_campaigns: settings.default_campaigns.filter((c) => c !== name) });
+  const removeCategory = (label: string) => {
+    updateSettings({ change_log_options: changeLogOptions.filter((o) => o.label !== label) });
+  };
+
+  // Change Log Options — sub-options
+  const addSubOption = (categoryLabel: string) => {
+    const text = (newSubOption[categoryLabel] ?? "").trim();
+    if (!text) return;
+    const next = changeLogOptions.map((o) =>
+      o.label === categoryLabel
+        ? { ...o, sub_options: [...o.sub_options, text] }
+        : o
+    );
+    updateSettings({ change_log_options: next });
+    setNewSubOption((prev) => ({ ...prev, [categoryLabel]: "" }));
+  };
+
+  const removeSubOption = (categoryLabel: string, sub: string) => {
+    const next = changeLogOptions.map((o) =>
+      o.label === categoryLabel
+        ? { ...o, sub_options: o.sub_options.filter((s) => s !== sub) }
+        : o
+    );
+    updateSettings({ change_log_options: next });
+  };
+
+  const toggleExpanded = (label: string) => {
+    setExpandedCategories((prev) => ({ ...prev, [label]: !prev[label] }));
   };
 
   if (isLoading) {
@@ -96,6 +130,7 @@ const Settings = () => {
           </div>
         </div>
 
+        {/* KPI Settings */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -130,42 +165,117 @@ const Settings = () => {
           </CardContent>
         </Card>
 
+        {/* Change Log Options */}
         <Card className="mt-6">
           <CardHeader>
-            <CardTitle className="text-lg">Default Campaign Options</CardTitle>
+            <CardTitle className="text-lg">Change Log Options</CardTitle>
             <CardDescription>
-              These options appear in the Change Log campaign dropdown for all client cards, in addition to campaigns from the data feed.
+              Organize campaigns and change types. Add main categories (e.g. CRM) and sub-options
+              (e.g. Automations, Landing Pages). These appear as a grouped dropdown when logging changes.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Add new category */}
             <div className="flex gap-2">
               <Input
-                placeholder="e.g. CRM, Retell Ai"
-                value={newCampaign}
-                onChange={(e) => setNewCampaign(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addCampaign()}
+                placeholder="New category (e.g. CRM, Retell AI, Ads)"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addCategory()}
                 className="flex-1"
               />
-              <Button size="sm" onClick={addCampaign} disabled={!newCampaign.trim()}>
+              <Button size="sm" onClick={addCategory} disabled={!newCategoryName.trim()}>
                 <Plus className="mr-1 h-4 w-4" /> Add
               </Button>
             </div>
-            {settings.default_campaigns.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">No default campaign options configured</p>
+
+            {changeLogOptions.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No categories configured yet. Add a category to get started.
+              </p>
             )}
-            <div className="flex flex-wrap gap-2">
-              {settings.default_campaigns.map((name) => (
-                <Badge key={name} variant="secondary" className="gap-1 pr-1 text-sm">
-                  {name}
-                  <button onClick={() => removeCampaign(name)} className="ml-1 rounded-full hover:bg-muted p-0.5">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
+
+            {/* Category list */}
+            <div className="space-y-2">
+              {changeLogOptions.map((opt) => {
+                const isExpanded = expandedCategories[opt.label] !== false;
+                return (
+                  <Collapsible key={opt.label} open={isExpanded} onOpenChange={() => toggleExpanded(opt.label)}>
+                    <div className="rounded-lg border border-border">
+                      {/* Category header */}
+                      <div className="flex items-center justify-between px-3 py-2.5">
+                        <CollapsibleTrigger asChild>
+                          <button className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors">
+                            {isExpanded
+                              ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                              : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                            }
+                            {opt.label}
+                            <span className="text-xs text-muted-foreground font-normal">
+                              ({opt.sub_options.length} sub-option{opt.sub_options.length !== 1 ? "s" : ""})
+                            </span>
+                          </button>
+                        </CollapsibleTrigger>
+                        <button
+                          onClick={() => removeCategory(opt.label)}
+                          className="text-muted-foreground hover:text-destructive transition-colors p-0.5"
+                          title="Remove category"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      <CollapsibleContent>
+                        <div className="border-t border-border px-3 pb-3 pt-2 space-y-2">
+                          {/* Existing sub-options */}
+                          {opt.sub_options.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {opt.sub_options.map((sub) => (
+                                <Badge key={sub} variant="secondary" className="gap-1 pr-1 text-xs">
+                                  {sub}
+                                  <button
+                                    onClick={() => removeSubOption(opt.label, sub)}
+                                    className="ml-0.5 rounded-full hover:bg-muted p-0.5"
+                                  >
+                                    <X className="h-2.5 w-2.5" />
+                                  </button>
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Add sub-option */}
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="Add sub-option (e.g. Automations, Landing Pages)"
+                              value={newSubOption[opt.label] ?? ""}
+                              onChange={(e) =>
+                                setNewSubOption((prev) => ({ ...prev, [opt.label]: e.target.value }))
+                              }
+                              onKeyDown={(e) => e.key === "Enter" && addSubOption(opt.label)}
+                              className="h-7 text-xs flex-1"
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2"
+                              onClick={() => addSubOption(opt.label)}
+                              disabled={!(newSubOption[opt.label] ?? "").trim()}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
 
+        {/* Account Visibility */}
         <Card className="mt-6">
           <CardHeader>
             <CardTitle className="text-lg">Account Visibility</CardTitle>

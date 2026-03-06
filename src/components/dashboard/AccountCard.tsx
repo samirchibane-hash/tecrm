@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import {
@@ -25,16 +25,20 @@ import {
   UserCheck,
   Target,
   PhoneCall,
-  Link,
   ImagePlus,
   ExternalLink,
   X,
   Image as ImageIcon,
   CalendarDays,
+  SquareArrowOutUpRight,
+  Trophy,
+  Zap,
 } from "lucide-react";
+import { Link as RouterLink } from "react-router-dom";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import type { AdRow } from "@/hooks/useCouplerData";
+import type { ChangeLogOption } from "@/hooks/useSettings";
 
 
 const CATEGORIES = [
@@ -59,7 +63,8 @@ export type KpiKey =
   | "totalSpend" | "totalClicks" | "totalImpressions" | "totalReach" | "avgCTR" | "avgCPC" | "avgCPM"
   | "webApptTotal" | "webApptCost" | "apptTotal" | "apptCost"
   | "leadsTotal" | "leadsCost" | "fbLeadsTotal" | "fbLeadsCost"
-  | "ghlLeads" | "ghlAppointments" | "ghlCostPerLead" | "ghlCostPerAppt";
+  | "ghlLeads" | "ghlAppointments" | "ghlCostPerLead" | "ghlCostPerAppt"
+  | "soldCount" | "totalRevenue" | "adRoi";
 
 export const ALL_KPIS: { key: KpiKey; label: string; icon: typeof DollarSign; format: (v: number) => string }[] = [
   { key: "totalSpend", label: "Spend", icon: DollarSign, format: (v) => `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
@@ -81,6 +86,9 @@ export const ALL_KPIS: { key: KpiKey; label: string; icon: typeof DollarSign; fo
   { key: "ghlAppointments", label: "GHL Appts", icon: CalendarCheck, format: (v) => v.toLocaleString() },
   { key: "ghlCostPerLead", label: "Cost/GHL Lead", icon: DollarSign, format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
   { key: "ghlCostPerAppt", label: "Cost/GHL Appt", icon: DollarSign, format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
+  { key: "soldCount", label: "Deals Sold", icon: Trophy, format: (v) => v.toLocaleString() },
+  { key: "totalRevenue", label: "Revenue", icon: DollarSign, format: (v) => v > 0 ? `$${v.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "–" },
+  { key: "adRoi", label: "ROAS", icon: Zap, format: (v) => v > 0 ? `${v.toFixed(1)}x` : "–" },
 ];
 
 interface AccountCardProps {
@@ -88,10 +96,10 @@ interface AccountCardProps {
   rows: AdRow[];
   visibleKpis: KpiKey[];
   dateRange?: { from?: Date; to?: Date };
-  defaultCampaigns?: string[];
+  changeLogOptions?: ChangeLogOption[];
 }
 
-export function AccountCard({ accountName, rows, visibleKpis, dateRange, defaultCampaigns = [] }: AccountCardProps) {
+export function AccountCard({ accountName, rows, visibleKpis, dateRange, changeLogOptions = [] }: AccountCardProps) {
   const queryClient = useQueryClient();
   const [logOpen, setLogOpen] = useState(false);
   const [activeAdChart, setActiveAdChart] = useState<"leads" | "appts" | null>(null);
@@ -146,8 +154,8 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
     });
   }, [ghlConversionsRaw, dateRange]);
   const [showForm, setShowForm] = useState(false);
-  const [selectedCampaign, setSelectedCampaign] = useState("");
-  const [category, setCategory] = useState<string>("other");
+  // selectedLogOption format: "ParentLabel||SubOption" or "CampaignName||" when no sub-option
+  const [selectedLogOption, setSelectedLogOption] = useState("");
   const [details, setDetails] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [imageFiles, setImageFiles] = useState<File[]>([]);
@@ -157,10 +165,8 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
   const campaigns = useMemo(() => {
     const set = new Set<string>();
     rows.forEach((r) => set.add(r["Campaign: Campaign name"]));
-    const sorted = Array.from(set).sort();
-    const defaults = defaultCampaigns.filter((c) => !set.has(c));
-    return [...sorted, ...defaults];
-  }, [rows, defaultCampaigns]);
+    return Array.from(set).sort();
+  }, [rows]);
 
   const kpis = useMemo(() => {
     const empty: Record<KpiKey, number> = {
@@ -169,6 +175,7 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
       webApptTotal: 0, webApptCost: 0, apptTotal: 0, apptCost: 0,
       leadsTotal: 0, leadsCost: 0, fbLeadsTotal: 0, fbLeadsCost: 0,
       ghlLeads: 0, ghlAppointments: 0, ghlCostPerLead: 0, ghlCostPerAppt: 0,
+      soldCount: 0, totalRevenue: 0, adRoi: 0,
     };
     if (rows.length === 0) return { ...empty, ghlLeads: ghlConversions.filter(c => c.type?.toLowerCase() === 'lead' || c.type?.toLowerCase() === 'water test').length, ghlAppointments: ghlConversions.filter(c => c.type?.toLowerCase() === 'appointment' || c.type?.toLowerCase() === 'water test').length, ghlCostPerLead: 0, ghlCostPerAppt: 0 };
 
@@ -192,6 +199,11 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
     const ghlLeads = ghlConversions.filter(c => c.type?.toLowerCase() === 'lead' || c.type?.toLowerCase() === 'water test').length;
     const ghlAppointments = ghlConversions.filter(c => c.type?.toLowerCase() === 'appointment' || c.type?.toLowerCase() === 'water test').length;
 
+    const soldCount = ghlConversions.filter(c => c.appointment_status === "sold").length;
+    const totalRevenue = ghlConversions
+      .filter(c => c.appointment_status === "sold")
+      .reduce((sum, c) => sum + (c.deal_value ?? 0), 0);
+
     return {
       totalSpend, totalClicks, totalImpressions, totalReach, avgCTR, avgCPC, avgCPM,
       webApptTotal, webApptCost: webApptTotal > 0 ? webApptCost / webApptTotal : 0,
@@ -201,6 +213,8 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
       ghlLeads, ghlAppointments,
       ghlCostPerLead: ghlLeads > 0 ? totalSpend / ghlLeads : 0,
       ghlCostPerAppt: ghlAppointments > 0 ? totalSpend / ghlAppointments : 0,
+      soldCount, totalRevenue,
+      adRoi: totalSpend > 0 ? totalRevenue / totalSpend : 0,
     };
   }, [rows, ghlConversions]);
 
@@ -322,11 +336,16 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
         uploadedUrls.push(urlData.publicUrl);
       }
 
+      // Parse "ParentLabel||SubOption" into campaign_name and title
+      const sepIdx = selectedLogOption.indexOf("||");
+      const campaignName = sepIdx >= 0 ? selectedLogOption.slice(0, sepIdx) : selectedLogOption;
+      const titleValue = sepIdx >= 0 ? selectedLogOption.slice(sepIdx + 2) : "";
+
       const { error } = await supabase.from("campaign_updates").insert({
         account_name: accountName,
-        campaign_name: selectedCampaign,
-        category: category as any,
-        title: "",
+        campaign_name: campaignName,
+        category: "other" as any,
+        title: titleValue,
         details: details || null,
         link_url: linkUrl || null,
         image_url: uploadedUrls.length > 0 ? uploadedUrls.join(",") : null,
@@ -335,8 +354,7 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["campaign-updates", accountName] });
-      setSelectedCampaign("");
-      setCategory("other");
+      setSelectedLogOption("");
       setDetails("");
       setLinkUrl("");
       setImageFiles([]);
@@ -366,8 +384,17 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
       <CardContent className="p-6 space-y-4">
         {/* Header + KPIs */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
+          <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold text-foreground">{accountName}</h2>
+            <RouterLink
+              to={`/report/${encodeURIComponent(accountName)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-primary transition-colors"
+              title="Open client report"
+            >
+              <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+            </RouterLink>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {/* Spend */}
@@ -493,24 +520,43 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
           <CollapsibleContent className="pt-3 space-y-3">
             {showForm && (
               <div className="space-y-3 rounded-xl border border-border p-4">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Select value={selectedCampaign} onValueChange={setSelectedCampaign}>
-                    <SelectTrigger><SelectValue placeholder="Select campaign" /></SelectTrigger>
-                    <SelectContent>
-                      {campaigns.map((c) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={category} onValueChange={setCategory}>
-                    <SelectTrigger><SelectValue placeholder="Category" /></SelectTrigger>
-                    <SelectContent>
-                      {CATEGORIES.map((c) => (
-                        <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* Single grouped dropdown: change log options from settings + raw ad campaigns as fallback */}
+                <Select value={selectedLogOption} onValueChange={setSelectedLogOption}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select campaign & change type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {changeLogOptions.map((opt) => (
+                      <SelectGroup key={opt.label}>
+                        <SelectLabel>{opt.label}</SelectLabel>
+                        {opt.sub_options.length > 0
+                          ? opt.sub_options.map((sub) => (
+                              <SelectItem key={`${opt.label}||${sub}`} value={`${opt.label}||${sub}`}>
+                                {sub}
+                              </SelectItem>
+                            ))
+                          : (
+                              <SelectItem value={`${opt.label}||`}>{opt.label}</SelectItem>
+                            )
+                        }
+                      </SelectGroup>
+                    ))}
+                    {/* Fallback: ad campaigns not already covered by change_log_options labels */}
+                    {(() => {
+                      const coveredLabels = new Set(changeLogOptions.map((o) => o.label));
+                      const extra = campaigns.filter((c) => !coveredLabels.has(c));
+                      if (extra.length === 0) return null;
+                      return (
+                        <SelectGroup>
+                          <SelectLabel>Ad Campaigns</SelectLabel>
+                          {extra.map((c) => (
+                            <SelectItem key={`${c}||`} value={`${c}||`}>{c}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      );
+                    })()}
+                  </SelectContent>
+                </Select>
                 <Textarea placeholder="What changed? (details)" value={details} onChange={(e) => setDetails(e.target.value)} rows={2} />
                 <div className="flex items-center gap-2">
                   <div className="relative">
@@ -538,7 +584,7 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
                 <Button
                   size="sm"
                   onClick={() => addUpdate.mutate()}
-                  disabled={!selectedCampaign || (!details.trim() && !imageFiles.length && !linkUrl.trim()) || addUpdate.isPending || uploading}
+                  disabled={!selectedLogOption || (!details.trim() && !imageFiles.length && !linkUrl.trim()) || addUpdate.isPending || uploading}
                 >
                   {uploading ? "Uploading…" : "Log Update"}
                 </Button>
@@ -558,7 +604,7 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, default
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <Badge variant="secondary" className={`text-xs ${categoryColors[update.category] ?? categoryColors.other}`}>
-                            {CATEGORIES.find((c) => c.value === update.category)?.label ?? update.category}
+                            {(update as any).title || CATEGORIES.find((c) => c.value === update.category)?.label || update.category}
                           </Badge>
                           <span className="text-xs text-muted-foreground">{update.campaign_name}</span>
                         </div>
