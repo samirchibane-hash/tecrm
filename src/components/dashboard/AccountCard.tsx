@@ -481,7 +481,7 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
     <Card className="border-border/60 transition-all">
       <CardContent className="p-6 space-y-4">
         {/* Header + KPIs */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold text-foreground">{accountName}</h2>
             <RouterLink
