@@ -43,6 +43,33 @@ const Index = () => {
     });
   }, [data, dateRange]);
 
+  // Previous period: same length, immediately before current range
+  const prevDateRange = useMemo(() => {
+    if (!dateRange?.from || !dateRange?.to) return undefined;
+    const periodMs = dateRange.to.getTime() - dateRange.from.getTime() + 86400000;
+    return {
+      from: new Date(dateRange.from.getTime() - periodMs),
+      to: new Date(dateRange.from.getTime() - 86400000),
+    };
+  }, [dateRange]);
+
+  const prevGroupMap = useMemo(() => {
+    if (!data || !prevDateRange?.from) return {} as Record<string, AdRow[]>;
+    const from = startOfDay(prevDateRange.from);
+    const to = startOfDay(prevDateRange.to!);
+    const map: Record<string, AdRow[]> = {};
+    data.filter((row) => {
+      const [y, m, d] = row["Report: Date"].split("-").map(Number);
+      const rowDate = new Date(y, m - 1, d);
+      return rowDate >= from && rowDate <= to;
+    }).forEach((row) => {
+      const name = row["Account: Account name"];
+      if (!map[name]) map[name] = [];
+      map[name].push(row);
+    });
+    return map;
+  }, [data, prevDateRange]);
+
   const accountGroups = useMemo(() => {
     // Build map from filtered ad data
     const map: Record<string, AdRow[]> = {};
@@ -219,6 +246,8 @@ const Index = () => {
                 key={name}
                 accountName={name}
                 rows={rows}
+                prevRows={prevGroupMap[name] ?? []}
+                prevDateRange={prevDateRange}
                 visibleKpis={visibleKpis}
                 dateRange={dateRange}
                 changeLogOptions={settings.change_log_options}

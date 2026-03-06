@@ -72,6 +72,24 @@ const STATUS_TEXT: Record<string, string> = {
   red: "text-red-700 dark:text-red-400",
 };
 
+const LOWER_IS_BETTER_KEYS = new Set<KpiKey>([
+  "ghlCostPerLead", "ghlCostPerAppt", "leadsCost", "fbLeadsCost",
+  "apptCost", "webApptCost", "avgCPC", "avgCPM",
+]);
+
+function getDelta(current: number, prev: number): { pct: string; isUp: boolean } | null {
+  if (prev <= 0 || current < 0) return null;
+  const pct = ((current - prev) / prev) * 100;
+  if (Math.abs(pct) < 0.5) return null;
+  const abs = Math.abs(pct);
+  return { pct: (abs < 10 ? abs.toFixed(1) : Math.round(abs).toString()) + "%", isUp: pct > 0 };
+}
+
+function deltaClass(isUp: boolean, key: KpiKey): string {
+  const good = LOWER_IS_BETTER_KEYS.has(key) ? !isUp : isUp;
+  return good ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400";
+}
+
 const CATEGORIES = [
   { value: "budget_change", label: "Budget Change" },
   { value: "creative_swap", label: "Creative Swap" },
@@ -125,12 +143,14 @@ export const ALL_KPIS: { key: KpiKey; label: string; icon: typeof DollarSign; fo
 interface AccountCardProps {
   accountName: string;
   rows: AdRow[];
+  prevRows?: AdRow[];
+  prevDateRange?: { from?: Date; to?: Date };
   visibleKpis: KpiKey[];
   dateRange?: { from?: Date; to?: Date };
   changeLogOptions?: ChangeLogOption[];
 }
 
-export function AccountCard({ accountName, rows, visibleKpis, dateRange, changeLogOptions = [] }: AccountCardProps) {
+export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, visibleKpis, dateRange, changeLogOptions = [] }: AccountCardProps) {
   const queryClient = useQueryClient();
   const [logOpen, setLogOpen] = useState(false);
   const [activeAdChart, setActiveAdChart] = useState<"leads" | "appts" | null>(null);
@@ -184,6 +204,53 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, changeL
       return true;
     });
   }, [ghlConversionsRaw, dateRange]);
+
+  const prevGhlConversions = useMemo(() => {
+    if (!prevDateRange?.from) return [];
+    return ghlConversionsRaw.filter((c) => {
+      const [y, m, d] = c.created_on.split("-").map(Number);
+      const dateVal = new Date(y, m - 1, d);
+      if (prevDateRange.from && dateVal < prevDateRange.from) return false;
+      if (prevDateRange.to && dateVal > new Date(prevDateRange.to.getTime() + 86400000 - 1)) return false;
+      return true;
+    });
+  }, [ghlConversionsRaw, prevDateRange]);
+
+  const prevKpis = useMemo((): Partial<Record<KpiKey, number>> | null => {
+    if (prevRows.length === 0 && prevGhlConversions.length === 0) return null;
+    const totalSpend = prevRows.reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
+    const totalClicks = prevRows.reduce((s, r) => s + (r["Performance: Clicks"] ?? 0), 0);
+    const totalImpressions = prevRows.reduce((s, r) => s + (r["Performance: Impressions"] ?? 0), 0);
+    const totalReach = prevRows.reduce((s, r) => s + (r["Performance: Reach"] ?? 0), 0);
+    const avgCTR = prevRows.length > 0 ? prevRows.reduce((s, r) => s + (r["Clicks: CTR"] ?? 0), 0) / prevRows.length : 0;
+    const avgCPC = prevRows.length > 0 ? prevRows.reduce((s, r) => s + (r["Cost: CPC"] ?? 0), 0) / prevRows.length : 0;
+    const avgCPM = prevRows.length > 0 ? prevRows.reduce((s, r) => s + (r["Cost: CPM"] ?? 0), 0) / prevRows.length : 0;
+    const webApptTotal = prevRows.reduce((s, r) => s + (r["Conversions: Website Appointments Scheduled - Total"] ?? 0), 0);
+    const webApptCostRaw = prevRows.reduce((s, r) => s + (r["Conversions: Website Appointments Scheduled - Cost"] ?? 0), 0);
+    const apptTotal = prevRows.reduce((s, r) => s + (r["Conversions: Appointments Scheduled - Total"] ?? 0), 0);
+    const apptCostRaw = prevRows.reduce((s, r) => s + (r["Conversions: Appointments Scheduled - Cost"] ?? 0), 0);
+    const leadsTotal = prevRows.reduce((s, r) => s + (r["Conversions: Leads - Total"] ?? 0), 0);
+    const leadsCostRaw = prevRows.reduce((s, r) => s + (r["Conversions: Leads - Cost"] ?? 0), 0);
+    const fbLeadsTotal = prevRows.reduce((s, r) => s + (r["Conversions: All On-Facebook Leads - Total"] ?? 0), 0);
+    const fbLeadsCostRaw = prevRows.reduce((s, r) => s + (r["Conversions: All On-Facebook Leads - Cost"] ?? 0), 0);
+    const ghlLeads = prevGhlConversions.filter(c => c.type?.toLowerCase() === 'lead' || c.type?.toLowerCase() === 'water test').length;
+    const ghlAppointments = prevGhlConversions.filter(c => c.type?.toLowerCase() === 'appointment' || c.type?.toLowerCase() === 'water test').length;
+    const soldCount = prevGhlConversions.filter(c => c.appointment_status === "sold").length;
+    const totalRevenue = prevGhlConversions.filter(c => c.appointment_status === "sold").reduce((sum, c) => sum + (c.deal_value ?? 0), 0);
+    return {
+      totalSpend, totalClicks, totalImpressions, totalReach, avgCTR, avgCPC, avgCPM,
+      webApptTotal, webApptCost: webApptTotal > 0 ? webApptCostRaw / webApptTotal : 0,
+      apptTotal, apptCost: apptTotal > 0 ? apptCostRaw / apptTotal : 0,
+      leadsTotal, leadsCost: leadsTotal > 0 ? leadsCostRaw / leadsTotal : 0,
+      fbLeadsTotal, fbLeadsCost: fbLeadsTotal > 0 ? fbLeadsCostRaw / fbLeadsTotal : 0,
+      ghlLeads, ghlAppointments,
+      ghlCostPerLead: ghlLeads > 0 ? totalSpend / ghlLeads : 0,
+      ghlCostPerAppt: ghlAppointments > 0 ? totalSpend / ghlAppointments : 0,
+      soldCount, totalRevenue,
+      adRoi: totalSpend > 0 ? totalRevenue / totalSpend : 0,
+    };
+  }, [prevRows, prevGhlConversions]);
+
   const [showForm, setShowForm] = useState(false);
   // selectedLogOption format: "ParentLabel||SubOption" or "CampaignName||" when no sub-option
   const [selectedLogOption, setSelectedLogOption] = useState("");
@@ -429,12 +496,16 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, changeL
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {/* Spend */}
-            {visibleKpis.includes("totalSpend") && (
-              <div className="flex items-center gap-1.5 text-sm">
-                <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="font-semibold text-foreground">{ALL_KPIS.find(k => k.key === "totalSpend")!.format(kpis.totalSpend)}</span>
-              </div>
-            )}
+            {visibleKpis.includes("totalSpend") && (() => {
+              const d = prevKpis ? getDelta(kpis.totalSpend, prevKpis.totalSpend ?? 0) : null;
+              return (
+                <div className="flex items-center gap-1.5 text-sm">
+                  <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="font-semibold text-foreground">{ALL_KPIS.find(k => k.key === "totalSpend")!.format(kpis.totalSpend)}</span>
+                  {d && <span className="text-xs text-muted-foreground">{d.isUp ? "↑" : "↓"}{d.pct}</span>}
+                </div>
+              );
+            })()}
 
             {/* GHL Leads group — clickable */}
             {(visibleKpis.includes("ghlLeads") || visibleKpis.includes("ghlCostPerLead")) && (
@@ -446,12 +517,24 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, changeL
                     className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors cursor-pointer ${activeAdChart === "leads" ? "border-primary/60 bg-primary/10" : leadsStatus ? STATUS_PILL[leadsStatus] : "border-border/60 bg-muted/30 hover:bg-muted/50"}`}
                   >
                     <UserCheck className="h-3.5 w-3.5 text-muted-foreground" />
-                    {visibleKpis.includes("ghlLeads") && (
-                      <span className="font-medium text-foreground">{kpis.ghlLeads} <span className="text-xs text-muted-foreground">leads</span></span>
-                    )}
-                    {visibleKpis.includes("ghlCostPerLead") && (
-                      <span className="text-xs text-muted-foreground">@ <span className={`font-medium ${leadsStatus ? STATUS_TEXT[leadsStatus] : "text-foreground"}`}>{kpis.ghlCostPerLead > 0 ? `$${kpis.ghlCostPerLead.toFixed(2)}` : "–"}</span></span>
-                    )}
+                    {visibleKpis.includes("ghlLeads") && (() => {
+                      const d = prevKpis ? getDelta(kpis.ghlLeads, prevKpis.ghlLeads ?? 0) : null;
+                      return (
+                        <span className="font-medium text-foreground">
+                          {kpis.ghlLeads} <span className="text-xs text-muted-foreground">leads</span>
+                          {d && <span className={`ml-1 text-xs ${deltaClass(d.isUp, "ghlLeads")}`}>{d.isUp ? "↑" : "↓"}{d.pct}</span>}
+                        </span>
+                      );
+                    })()}
+                    {visibleKpis.includes("ghlCostPerLead") && (() => {
+                      const d = prevKpis ? getDelta(kpis.ghlCostPerLead, prevKpis.ghlCostPerLead ?? 0) : null;
+                      return (
+                        <span className="text-xs text-muted-foreground">
+                          @ <span className={`font-medium ${leadsStatus ? STATUS_TEXT[leadsStatus] : "text-foreground"}`}>{kpis.ghlCostPerLead > 0 ? `$${kpis.ghlCostPerLead.toFixed(2)}` : "–"}</span>
+                          {d && <span className={`ml-1 ${deltaClass(d.isUp, "ghlCostPerLead")}`}>{d.isUp ? "↑" : "↓"}{d.pct}</span>}
+                        </span>
+                      );
+                    })()}
                   </button>
                 );
               })()
@@ -467,12 +550,24 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, changeL
                     className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors cursor-pointer ${activeAdChart === "appts" ? "border-primary/60 bg-primary/10" : apptsStatus ? STATUS_PILL[apptsStatus] : "border-border/60 bg-muted/30 hover:bg-muted/50"}`}
                   >
                     <CalendarCheck className="h-3.5 w-3.5 text-muted-foreground" />
-                    {visibleKpis.includes("ghlAppointments") && (
-                      <span className="font-medium text-foreground">{kpis.ghlAppointments} <span className="text-xs text-muted-foreground">appts</span></span>
-                    )}
-                    {visibleKpis.includes("ghlCostPerAppt") && (
-                      <span className="text-xs text-muted-foreground">@ <span className={`font-medium ${apptsStatus ? STATUS_TEXT[apptsStatus] : "text-foreground"}`}>{kpis.ghlCostPerAppt > 0 ? `$${kpis.ghlCostPerAppt.toFixed(2)}` : "–"}</span></span>
-                    )}
+                    {visibleKpis.includes("ghlAppointments") && (() => {
+                      const d = prevKpis ? getDelta(kpis.ghlAppointments, prevKpis.ghlAppointments ?? 0) : null;
+                      return (
+                        <span className="font-medium text-foreground">
+                          {kpis.ghlAppointments} <span className="text-xs text-muted-foreground">appts</span>
+                          {d && <span className={`ml-1 text-xs ${deltaClass(d.isUp, "ghlAppointments")}`}>{d.isUp ? "↑" : "↓"}{d.pct}</span>}
+                        </span>
+                      );
+                    })()}
+                    {visibleKpis.includes("ghlCostPerAppt") && (() => {
+                      const d = prevKpis ? getDelta(kpis.ghlCostPerAppt, prevKpis.ghlCostPerAppt ?? 0) : null;
+                      return (
+                        <span className="text-xs text-muted-foreground">
+                          @ <span className={`font-medium ${apptsStatus ? STATUS_TEXT[apptsStatus] : "text-foreground"}`}>{kpis.ghlCostPerAppt > 0 ? `$${kpis.ghlCostPerAppt.toFixed(2)}` : "–"}</span>
+                          {d && <span className={`ml-1 ${deltaClass(d.isUp, "ghlCostPerAppt")}`}>{d.isUp ? "↑" : "↓"}{d.pct}</span>}
+                        </span>
+                      );
+                    })()}
                   </button>
                 );
               })()
@@ -484,10 +579,12 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, changeL
               .map(({ key, label, icon: Icon, format }) => {
                 const target = COST_TARGETS[key];
                 const status = target ? getCostStatus(kpis[key], target) : null;
+                const d = prevKpis ? getDelta(kpis[key], prevKpis[key] ?? 0) : null;
                 return (
                   <div key={key} className="flex items-center gap-1.5 text-sm text-muted-foreground">
                     <Icon className="h-3.5 w-3.5" />
                     <span className={`font-medium ${status ? STATUS_TEXT[status] : "text-foreground"}`}>{format(kpis[key])}</span>
+                    {d && <span className={`text-xs ${deltaClass(d.isUp, key)}`}>{d.isUp ? "↑" : "↓"}{d.pct}</span>}
                     <span className="hidden sm:inline text-xs">{label}</span>
                   </div>
                 );
