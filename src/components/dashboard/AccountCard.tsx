@@ -494,7 +494,7 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
               <SquareArrowOutUpRight className="h-3.5 w-3.5" />
             </RouterLink>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-col gap-2 items-start">
             {/* Spend */}
             {visibleKpis.includes("totalSpend") && (() => {
               const d = prevKpis ? getDelta(kpis.totalSpend, prevKpis.totalSpend ?? 0) : null;
