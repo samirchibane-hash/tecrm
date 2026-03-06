@@ -273,6 +273,7 @@ export default function ClientReport() {
     from: max([startOfDay(subDays(new Date(), 29)), MIN_DATE]),
     to: startOfDay(subDays(new Date(), 1)),
   });
+  const [presetLabel, setPresetLabel] = useState<string>("Last 30 days");
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [showCustomCalendar, setShowCustomCalendar] = useState(false);
   const [pendingRange, setPendingRange] = useState<DateRange | undefined>(undefined);
@@ -570,11 +571,15 @@ export default function ClientReport() {
   }, [timeline, dateRange]);
 
   // ── Date label ────────────────────────────────────────────────────────────
-  const dateLabel = dateRange?.from
+  const dateRangeStr = dateRange?.from
     ? dateRange.to
-      ? `${format(dateRange.from, "MMM d")} – ${format(dateRange.to, "MMM d, yyyy")}`
-      : format(dateRange.from, "MMM d, yyyy")
-    : "All time";
+      ? `${format(dateRange.from, "MM/dd")} – ${format(dateRange.to, "MM/dd/yyyy")}`
+      : format(dateRange.from, "MM/dd/yyyy")
+    : null;
+
+  const dateLabel = presetLabel && dateRangeStr
+    ? `${presetLabel} (${dateRangeStr})`
+    : dateRangeStr ?? "All time";
 
   const isLoading = adLoading;
 
@@ -624,7 +629,7 @@ export default function ClientReport() {
                       variant="ghost"
                       size="sm"
                       className="justify-start text-xs h-8 rounded-sm"
-                      onClick={() => { setDateRange(preset.range); setDatePickerOpen(false); }}
+                      onClick={() => { setDateRange(preset.range); setPresetLabel(preset.label); setDatePickerOpen(false); }}
                     >
                       {preset.label}
                     </Button>
@@ -634,7 +639,7 @@ export default function ClientReport() {
                     variant="ghost"
                     size="sm"
                     className="justify-start text-xs h-8 rounded-sm"
-                    onClick={() => { setPendingRange(undefined); setShowCustomCalendar(true); }}
+                    onClick={() => { setPresetLabel(""); setPendingRange(undefined); setShowCustomCalendar(true); }}
                   >
                     Custom range…
                   </Button>
@@ -643,7 +648,7 @@ export default function ClientReport() {
                       variant="ghost"
                       size="sm"
                       className="justify-start text-xs h-8 rounded-sm text-muted-foreground"
-                      onClick={() => { setDateRange(undefined); setDatePickerOpen(false); }}
+                      onClick={() => { setDateRange(undefined); setPresetLabel(""); setDatePickerOpen(false); }}
                     >
                       Clear
                     </Button>
