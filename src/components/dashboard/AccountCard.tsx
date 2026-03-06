@@ -41,6 +41,37 @@ import type { AdRow } from "@/hooks/useCouplerData";
 import type { ChangeLogOption } from "@/hooks/useSettings";
 
 
+const CPL_TARGET = 40;
+const APPT_TARGET = 200;
+
+const COST_TARGETS: Partial<Record<KpiKey, number>> = {
+  leadsCost: CPL_TARGET,
+  fbLeadsCost: CPL_TARGET,
+  ghlCostPerLead: CPL_TARGET,
+  apptCost: APPT_TARGET,
+  webApptCost: APPT_TARGET,
+  ghlCostPerAppt: APPT_TARGET,
+};
+
+function getCostStatus(value: number, target: number): "green" | "orange" | "red" | null {
+  if (value <= 0) return null;
+  if (value <= target) return "green";
+  if (value <= target * 1.25) return "orange";
+  return "red";
+}
+
+const STATUS_PILL: Record<string, string> = {
+  green: "border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950/50",
+  orange: "border-orange-300 bg-orange-50 dark:border-orange-700 dark:bg-orange-950/50",
+  red: "border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950/50",
+};
+
+const STATUS_TEXT: Record<string, string> = {
+  green: "text-green-700 dark:text-green-400",
+  orange: "text-orange-700 dark:text-orange-400",
+  red: "text-red-700 dark:text-red-400",
+};
+
 const CATEGORIES = [
   { value: "budget_change", label: "Budget Change" },
   { value: "creative_swap", label: "Creative Swap" },
@@ -407,46 +438,60 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, changeL
 
             {/* GHL Leads group — clickable */}
             {(visibleKpis.includes("ghlLeads") || visibleKpis.includes("ghlCostPerLead")) && (
-              <button
-                onClick={() => setActiveAdChart(prev => prev === "leads" ? null : "leads")}
-                className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors cursor-pointer ${activeAdChart === "leads" ? "border-primary/60 bg-primary/10" : "border-border/60 bg-muted/30 hover:bg-muted/50"}`}
-              >
-                <UserCheck className="h-3.5 w-3.5 text-muted-foreground" />
-                {visibleKpis.includes("ghlLeads") && (
-                  <span className="font-medium text-foreground">{kpis.ghlLeads} <span className="text-xs text-muted-foreground">leads</span></span>
-                )}
-                {visibleKpis.includes("ghlCostPerLead") && (
-                  <span className="text-xs text-muted-foreground">@ <span className="font-medium text-foreground">{kpis.ghlCostPerLead > 0 ? `$${kpis.ghlCostPerLead.toFixed(2)}` : "–"}</span></span>
-                )}
-              </button>
+              (() => {
+                const leadsStatus = getCostStatus(kpis.ghlCostPerLead, CPL_TARGET);
+                return (
+                  <button
+                    onClick={() => setActiveAdChart(prev => prev === "leads" ? null : "leads")}
+                    className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors cursor-pointer ${activeAdChart === "leads" ? "border-primary/60 bg-primary/10" : leadsStatus ? STATUS_PILL[leadsStatus] : "border-border/60 bg-muted/30 hover:bg-muted/50"}`}
+                  >
+                    <UserCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                    {visibleKpis.includes("ghlLeads") && (
+                      <span className="font-medium text-foreground">{kpis.ghlLeads} <span className="text-xs text-muted-foreground">leads</span></span>
+                    )}
+                    {visibleKpis.includes("ghlCostPerLead") && (
+                      <span className="text-xs text-muted-foreground">@ <span className={`font-medium ${leadsStatus ? STATUS_TEXT[leadsStatus] : "text-foreground"}`}>{kpis.ghlCostPerLead > 0 ? `$${kpis.ghlCostPerLead.toFixed(2)}` : "–"}</span></span>
+                    )}
+                  </button>
+                );
+              })()
             )}
 
             {/* GHL Appts group — clickable */}
             {(visibleKpis.includes("ghlAppointments") || visibleKpis.includes("ghlCostPerAppt")) && (
-              <button
-                onClick={() => setActiveAdChart(prev => prev === "appts" ? null : "appts")}
-                className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors cursor-pointer ${activeAdChart === "appts" ? "border-primary/60 bg-primary/10" : "border-border/60 bg-muted/30 hover:bg-muted/50"}`}
-              >
-                <CalendarCheck className="h-3.5 w-3.5 text-muted-foreground" />
-                {visibleKpis.includes("ghlAppointments") && (
-                  <span className="font-medium text-foreground">{kpis.ghlAppointments} <span className="text-xs text-muted-foreground">appts</span></span>
-                )}
-                {visibleKpis.includes("ghlCostPerAppt") && (
-                  <span className="text-xs text-muted-foreground">@ <span className="font-medium text-foreground">{kpis.ghlCostPerAppt > 0 ? `$${kpis.ghlCostPerAppt.toFixed(2)}` : "–"}</span></span>
-                )}
-              </button>
+              (() => {
+                const apptsStatus = getCostStatus(kpis.ghlCostPerAppt, APPT_TARGET);
+                return (
+                  <button
+                    onClick={() => setActiveAdChart(prev => prev === "appts" ? null : "appts")}
+                    className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors cursor-pointer ${activeAdChart === "appts" ? "border-primary/60 bg-primary/10" : apptsStatus ? STATUS_PILL[apptsStatus] : "border-border/60 bg-muted/30 hover:bg-muted/50"}`}
+                  >
+                    <CalendarCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                    {visibleKpis.includes("ghlAppointments") && (
+                      <span className="font-medium text-foreground">{kpis.ghlAppointments} <span className="text-xs text-muted-foreground">appts</span></span>
+                    )}
+                    {visibleKpis.includes("ghlCostPerAppt") && (
+                      <span className="text-xs text-muted-foreground">@ <span className={`font-medium ${apptsStatus ? STATUS_TEXT[apptsStatus] : "text-foreground"}`}>{kpis.ghlCostPerAppt > 0 ? `$${kpis.ghlCostPerAppt.toFixed(2)}` : "–"}</span></span>
+                    )}
+                  </button>
+                );
+              })()
             )}
 
             {/* Remaining KPIs */}
             {displayedKpis
               .filter(({ key }) => !["totalSpend", "ghlLeads", "ghlCostPerLead", "ghlAppointments", "ghlCostPerAppt"].includes(key))
-              .map(({ key, label, icon: Icon, format }) => (
-                <div key={key} className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <Icon className="h-3.5 w-3.5" />
-                  <span className="font-medium text-foreground">{format(kpis[key])}</span>
-                  <span className="hidden sm:inline text-xs">{label}</span>
-                </div>
-              ))}
+              .map(({ key, label, icon: Icon, format }) => {
+                const target = COST_TARGETS[key];
+                const status = target ? getCostStatus(kpis[key], target) : null;
+                return (
+                  <div key={key} className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <Icon className="h-3.5 w-3.5" />
+                    <span className={`font-medium ${status ? STATUS_TEXT[status] : "text-foreground"}`}>{format(kpis[key])}</span>
+                    <span className="hidden sm:inline text-xs">{label}</span>
+                  </div>
+                );
+              })}
           </div>
         </div>
 
