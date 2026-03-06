@@ -700,7 +700,6 @@ export function AccountCard({ accountName, rows, visibleKpis, dateRange, changeL
                           <ImageIcon className="h-3 w-3 mr-1" /> Creative
                         </Badge>
                         <span className="text-xs font-medium text-foreground">{batchName}</span>
-                        <span className="text-xs text-muted-foreground">({batchItems.length})</span>
                       </div>
                       <div className="flex items-center gap-2">
                         {launchDate && (

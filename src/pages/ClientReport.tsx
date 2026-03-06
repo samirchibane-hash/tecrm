@@ -934,10 +934,9 @@ export default function ClientReport() {
                                   <ImageIcon className="h-3 w-3 mr-1" /> Creative
                                 </Badge>
                                 <span className="text-sm font-medium text-foreground">{batchName}</span>
-                                <span className="text-xs text-muted-foreground">({batchItems.length} asset{batchItems.length !== 1 ? "s" : ""})</span>
                                 {launchDate && (
                                   <span className="ml-auto text-xs text-muted-foreground">
-                                    Launch: {format(new Date(launchDate + "T00:00:00"), "MMM d, yyyy")}
+                                    {format(new Date(launchDate + "T00:00:00"), "MMM d, yyyy")}
                                   </span>
                                 )}
                               </div>
