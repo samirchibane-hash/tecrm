@@ -35,6 +35,7 @@ import {
   Zap,
   Sparkles,
   ChevronUp,
+  Link2,
 } from "lucide-react";
 import { Link as RouterLink } from "react-router-dom";
 import { format } from "date-fns";
@@ -511,6 +512,54 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
     },
   });
 
+  // Account Links
+  const [linksOpen, setLinksOpen] = useState(false);
+  const [showLinkForm, setShowLinkForm] = useState(false);
+  const [newLinkLabel, setNewLinkLabel] = useState("");
+  const [newLinkUrl, setNewLinkUrl] = useState("");
+
+  const { data: accountLinks = [] } = useQuery({
+    queryKey: ["account-links", accountName],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("account_links")
+        .select("*")
+        .eq("account_name", accountName)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const addLink = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("account_links").insert({
+        account_name: accountName,
+        label: newLinkLabel.trim(),
+        url: newLinkUrl.trim(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["account-links", accountName] });
+      setNewLinkLabel("");
+      setNewLinkUrl("");
+      setShowLinkForm(false);
+      toast.success("Link saved");
+    },
+    onError: () => toast.error("Failed to save link"),
+  });
+
+  const deleteLink = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("account_links").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["account-links", accountName] });
+    },
+  });
+
   const displayedKpis = ALL_KPIS.filter((k) => visibleKpis.includes(k.key));
 
   return (
@@ -720,6 +769,80 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
             </div>
           )}
         </div>
+
+        {/* Links */}
+        <Collapsible open={linksOpen} onOpenChange={setLinksOpen}>
+          <div className="flex items-center justify-between">
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-1.5 px-2 text-muted-foreground hover:text-foreground">
+                {linksOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                <Link2 className="h-4 w-4" />
+                Links {accountLinks.length > 0 && `(${accountLinks.length})`}
+              </Button>
+            </CollapsibleTrigger>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={(e) => { e.stopPropagation(); setLinksOpen(true); setShowLinkForm((v) => !v); }}
+            >
+              <Plus className="mr-1 h-4 w-4" /> Add
+            </Button>
+          </div>
+
+          <CollapsibleContent className="pt-2 space-y-2">
+            {showLinkForm && (
+              <div className="flex items-center gap-2 rounded-lg border border-border p-2">
+                <Input
+                  placeholder="Label (e.g. Facebook LP)"
+                  value={newLinkLabel}
+                  onChange={(e) => setNewLinkLabel(e.target.value)}
+                  className="h-7 text-xs flex-1"
+                />
+                <Input
+                  placeholder="https://..."
+                  value={newLinkUrl}
+                  onChange={(e) => setNewLinkUrl(e.target.value)}
+                  className="h-7 text-xs flex-1"
+                />
+                <Button
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={!newLinkLabel.trim() || !newLinkUrl.trim() || addLink.isPending}
+                  onClick={() => addLink.mutate()}
+                >
+                  Save
+                </Button>
+              </div>
+            )}
+
+            {accountLinks.length === 0 && !showLinkForm && (
+              <p className="text-xs text-muted-foreground text-center py-2">No links added yet</p>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              {accountLinks.map((link) => (
+                <div key={link.id} className="group flex items-center gap-1 rounded-md border border-border/60 bg-muted/30 px-2 py-1 text-xs">
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-foreground hover:text-primary transition-colors"
+                  >
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                    {link.label}
+                  </a>
+                  <button
+                    onClick={() => deleteLink.mutate(link.id)}
+                    className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
 
         {/* Expandable Change Log */}
         <Collapsible open={logOpen} onOpenChange={setLogOpen}>
