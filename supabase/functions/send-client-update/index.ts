@@ -14,14 +14,14 @@ serve(async (req) => {
   }
 
   try {
-    const { accountName, recipientEmail, kpis, recentUpdates, dateLabel, customNote } = await req.json();
+    const { accountName, recipientEmail, kpis, recentUpdates, dateLabel, customNote, draftOnly } = await req.json();
 
     if (!recipientEmail) throw new Error("recipientEmail is required");
 
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     const resendKey = Deno.env.get("RESEND_API_KEY");
     if (!anthropicKey) throw new Error("ANTHROPIC_API_KEY not configured");
-    if (!resendKey) throw new Error("RESEND_API_KEY not configured");
+    if (!draftOnly && !resendKey) throw new Error("RESEND_API_KEY not configured");
 
     const fmt = (v: number) => (v > 0 ? `$${v.toFixed(2)}` : "–");
 
@@ -77,6 +77,13 @@ The subject should be concise and specific (e.g. "Your campaign update — March
     const { subject, body } = jsonMatch ? JSON.parse(jsonMatch[0]) : { subject: "", body: "" };
 
     if (!subject || !body) throw new Error("AI did not return valid email content");
+
+    // If draft-only, return without sending
+    if (draftOnly) {
+      return new Response(JSON.stringify({ success: true, subject, body }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Send via Resend
     const sendRes = await fetch("https://api.resend.com/emails", {

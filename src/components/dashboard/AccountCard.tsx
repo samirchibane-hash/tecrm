@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -167,6 +167,7 @@ interface AccountCardProps {
 export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, visibleKpis, dateRange, changeLogOptions = [] }: AccountCardProps) {
   const queryClient = useQueryClient();
   const [logOpen, setLogOpen] = useState(false);
+  const [logPage, setLogPage] = useState(0);
   const [activeAdChart, setActiveAdChart] = useState<"leads" | "appts" | null>(null);
 
   // Auto-upsert account row to ensure a stable UUID exists
@@ -461,6 +462,9 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
 
   const totalLogCount = filteredTimeline.length;
 
+  // Reset page when date range or data changes
+  useEffect(() => { setLogPage(0); }, [dateRange, timeline]);
+
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
@@ -743,8 +747,10 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
   return (
     <Card className="border-border/60 transition-all">
       <CardContent className="p-6 space-y-4">
-        {/* Header + KPIs */}
-        <div className="flex flex-col gap-3">
+        {/* Two-column: KPIs left, Recent Changes right */}
+        <div className="flex gap-4">
+          {/* Left: Account name + KPIs */}
+          <div className="w-[42%] flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold text-foreground">{accountName}</h2>
             <RouterLink
@@ -853,7 +859,115 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
                 );
               })}
           </div>
-        </div>
+          </div>{/* end left column */}
+
+          {/* Right: Recent Changes */}
+          <div className="flex-1 border-l border-border/60 pl-4 min-w-0 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                <ClipboardList className="h-3.5 w-3.5" /> Recent Changes
+              </p>
+              {totalLogCount > 0 && (
+                <span className="text-[10px] text-muted-foreground">
+                  {logPage * 3 + 1}–{Math.min(logPage * 3 + 3, totalLogCount)} of {totalLogCount}
+                </span>
+              )}
+            </div>
+
+            {totalLogCount === 0 ? (
+              <p className="text-xs text-muted-foreground py-2">
+                {dateRange?.from ? "No changes in range" : "No changes logged"}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {filteredTimeline.slice(logPage * 3, logPage * 3 + 3).map((item) => {
+                  if (item.type === "update") {
+                    const update = item.data;
+                    return (
+                      <div key={update.id} className="rounded-md border border-border/50 p-2 space-y-1">
+                        <div className="flex items-center justify-between gap-1 flex-wrap">
+                          <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${categoryColors[update.category] ?? categoryColors.other}`}>
+                            {(update as any).title || CATEGORIES.find((c) => c.value === update.category)?.label || update.category}
+                          </Badge>
+                          <span className="text-[10px] text-muted-foreground shrink-0">
+                            {new Date(update.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                        {update.details && (
+                          <p className="text-[11px] text-foreground leading-snug line-clamp-2">{update.details}</p>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted-foreground truncate">{update.campaign_name}</span>
+                          {emailedIds.has(update.id) ? (
+                            <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 font-medium shrink-0">
+                              <CheckCircle2 className="h-3 w-3" /> Emailed
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => openEmailModal(update)}
+                              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary font-medium transition-colors shrink-0"
+                            >
+                              <Mail className="h-3 w-3" /> Email
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                  // Creative batch
+                  const { batchName, items: batchItems, date } = item;
+                  const images = batchItems.filter((c) => c.file_type !== "link");
+                  const links = batchItems.filter((c) => c.file_type === "link");
+                  return (
+                    <div key={`creative-${batchName}`} className="rounded-md border border-border/50 p-2 space-y-1">
+                      <div className="flex items-center justify-between gap-1 flex-wrap">
+                        <Badge variant="secondary" className="bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300 text-[10px] px-1.5 py-0">
+                          <ImageIcon className="h-3 w-3 mr-0.5" /> Creative
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground shrink-0">{new Date(date).toLocaleDateString()}</span>
+                      </div>
+                      <p className="text-[11px] text-foreground leading-snug truncate">{batchName}</p>
+                      {images.length > 0 && (
+                        <div className="flex gap-1 overflow-x-auto">
+                          {images.slice(0, 3).map((img) => (
+                            <a key={img.id} href={img.file_url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                              <img src={img.file_url} alt={img.file_name} className="h-10 w-10 object-cover rounded border border-border hover:opacity-80 transition-opacity" loading="lazy" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                      {links.length > 0 && links.slice(0, 2).map((l) => (
+                        <a key={l.id} href={l.file_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline">
+                          <ExternalLink className="h-3 w-3" /> {l.file_name}
+                        </a>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Pagination */}
+            {totalLogCount > 3 && (
+              <div className="flex items-center justify-between mt-auto pt-1">
+                <button
+                  disabled={logPage === 0}
+                  onClick={() => setLogPage((p) => p - 1)}
+                  className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronUp className="h-3 w-3" /> Prev
+                </button>
+                <button
+                  disabled={(logPage + 1) * 3 >= totalLogCount}
+                  onClick={() => setLogPage((p) => p + 1)}
+                  className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next <ChevronDown className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </div>{/* end right column */}
+        </div>{/* end two-column flex */}
 
         {/* Ad Breakdown Chart Panel */}
         {activeAdChart && (
