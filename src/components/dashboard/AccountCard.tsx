@@ -422,7 +422,7 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
       data: u,
     }));
 
-    // Group creatives by batch_name
+    // Group creatives by batch_name, sort by latest created_at in each batch
     const batchMap: Record<string, typeof creatives> = {};
     creatives.forEach((c) => {
       const key = c.batch_name || "Ungrouped";
@@ -430,8 +430,7 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
       batchMap[key].push(c);
     });
     Object.entries(batchMap).forEach(([batchName, batchItems]) => {
-      const launchDate = batchItems.find((c) => c.launch_date)?.launch_date;
-      const sortDate = launchDate ?? batchItems.reduce((latest, c) => c.created_at > latest ? c.created_at : latest, batchItems[0]?.created_at ?? "");
+      const sortDate = batchItems.reduce((latest, c) => c.created_at > latest ? c.created_at : latest, batchItems[0]?.created_at ?? "");
       items.push({ type: "creative-batch", date: sortDate, batchName, items: batchItems });
     });
 
@@ -439,7 +438,17 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
     return items;
   }, [updates, creatives]);
 
-  const totalLogCount = updates.length + (creatives.length > 0 ? Object.keys(creatives.reduce((acc, c) => { acc[c.batch_name || "Ungrouped"] = true; return acc; }, {} as Record<string, boolean>)).length : 0);
+  const filteredTimeline = useMemo(() => {
+    if (!dateRange?.from) return timeline;
+    const from = dateRange.from.getTime();
+    const to = dateRange.to ? dateRange.to.getTime() + 86400000 - 1 : Infinity;
+    return timeline.filter((item) => {
+      const t = new Date(item.date).getTime();
+      return t >= from && t <= to;
+    });
+  }, [timeline, dateRange]);
+
+  const totalLogCount = filteredTimeline.length;
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -942,12 +951,14 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
               </div>
             )}
 
-            {timeline.length === 0 && !showForm && (
-              <p className="text-sm text-muted-foreground text-center py-4">No updates logged</p>
+            {filteredTimeline.length === 0 && !showForm && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                {dateRange?.from ? "No updates in this date range" : "No updates logged"}
+              </p>
             )}
 
             <div className="space-y-2 max-h-[400px] overflow-y-auto">
-              {timeline.map((item) => {
+              {filteredTimeline.map((item) => {
                 if (item.type === "update") {
                   const update = item.data;
                   return (
@@ -994,7 +1005,6 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
 
                 // Creative batch entry
                 const { batchName, items: batchItems } = item;
-                const launchDate = batchItems.find((c) => c.launch_date)?.launch_date;
                 const links = batchItems.filter((c) => c.file_type === "link");
                 const images = batchItems.filter((c) => c.file_type !== "link");
 
@@ -1007,14 +1017,9 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
                         </Badge>
                         <span className="text-xs font-medium text-foreground">{batchName}</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {launchDate && (
-                          <span className="text-xs text-muted-foreground">
-                            <CalendarDays className="inline h-3 w-3 mr-0.5" />
-                            {format(new Date(launchDate + "T00:00:00"), "MMM d, yyyy")}
-                          </span>
-                        )}
-                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(item.date).toLocaleDateString()}
+                      </span>
                     </div>
                     {links.length > 0 && (
                       <div className="space-y-0.5">
