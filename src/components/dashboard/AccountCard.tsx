@@ -39,7 +39,15 @@ import {
   Mail,
   Send,
   Pencil,
+  CheckCircle2,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Link as RouterLink } from "react-router-dom";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -583,6 +591,13 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
 
   const contactEmail: string = (account as any)?.contact_email ?? "";
 
+  // Per-entry email modal state
+  const [emailedIds, setEmailedIds] = useState<Set<string>>(new Set());
+  const [modalUpdate, setModalUpdate] = useState<(typeof updates)[number] | null>(null);
+  const [modalDraft, setModalDraft] = useState<{ subject: string; body: string } | null>(null);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalSending, setModalSending] = useState(false);
+
   const saveContactEmail = useMutation({
     mutationFn: async (email: string) => {
       const { error } = await supabase
@@ -658,6 +673,68 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
       toast.error("Failed to send email");
     } finally {
       setEmailSending(false);
+    }
+  };
+
+  const openEmailModal = async (update: (typeof updates)[number]) => {
+    setModalUpdate(update);
+    setModalDraft(null);
+    setModalLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-client-update", {
+        body: {
+          accountName,
+          recipientEmail: contactEmail || "preview@example.com",
+          kpis,
+          recentUpdates: [{
+            date: new Date(update.created_at).toLocaleDateString(),
+            title: (update as any).title || update.category,
+            details: update.details,
+          }],
+          dateLabel: dateRange?.from
+            ? `${dateRange.from.toLocaleDateString()} – ${dateRange.to?.toLocaleDateString() ?? ""}`
+            : "All time",
+          draftOnly: true,
+        },
+      });
+      if (error) throw error;
+      setModalDraft({ subject: data.subject, body: data.body });
+    } catch {
+      toast.error("Failed to generate email");
+      setModalUpdate(null);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const sendModalEmail = async () => {
+    if (!modalUpdate || !modalDraft || !contactEmail) return;
+    setModalSending(true);
+    try {
+      const { error } = await supabase.functions.invoke("send-client-update", {
+        body: {
+          accountName,
+          recipientEmail: contactEmail,
+          kpis,
+          recentUpdates: [{
+            date: new Date(modalUpdate.created_at).toLocaleDateString(),
+            title: (modalUpdate as any).title || modalUpdate.category,
+            details: modalUpdate.details,
+          }],
+          dateLabel: dateRange?.from
+            ? `${dateRange.from.toLocaleDateString()} – ${dateRange.to?.toLocaleDateString() ?? ""}`
+            : "All time",
+        },
+      });
+      if (error) throw error;
+      setEmailedIds((prev) => new Set([...prev, modalUpdate.id]));
+      toast.success(`Email sent to ${contactEmail}`);
+      setModalUpdate(null);
+      setModalDraft(null);
+    } catch {
+      toast.error("Failed to send email");
+    } finally {
+      setModalSending(false);
     }
   };
 
@@ -871,128 +948,6 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
           )}
         </div>
 
-        {/* Email Client */}
-        <Collapsible open={emailOpen} onOpenChange={setEmailOpen}>
-          <div className="flex items-center justify-between">
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-1.5 px-2 text-muted-foreground hover:text-foreground">
-                {emailOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                <Mail className="h-4 w-4" />
-                Email Client
-              </Button>
-            </CollapsibleTrigger>
-          </div>
-
-          <CollapsibleContent className="pt-2 space-y-3">
-            {/* Contact email field */}
-            <div className="flex items-center gap-2">
-              {editingEmail ? (
-                <>
-                  <Input
-                    placeholder="client@email.com"
-                    value={contactEmailInput}
-                    onChange={(e) => setContactEmailInput(e.target.value)}
-                    className="h-7 text-xs flex-1"
-                    type="email"
-                  />
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs"
-                    disabled={!contactEmailInput.trim() || saveContactEmail.isPending}
-                    onClick={() => saveContactEmail.mutate(contactEmailInput.trim())}
-                  >
-                    Save
-                  </Button>
-                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingEmail(false)}>
-                    Cancel
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <span className="text-xs text-muted-foreground flex-1">
-                    {contactEmail ? contactEmail : <span className="italic">No email set</span>}
-                  </span>
-                  <button
-                    onClick={() => { setContactEmailInput(contactEmail); setEditingEmail(true); }}
-                    className="text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <Pencil className="h-3 w-3" />
-                  </button>
-                </>
-              )}
-            </div>
-
-            {/* Optional note */}
-            <Textarea
-              placeholder="Optional note to include (e.g. 'We're testing new creatives next week')"
-              value={customNote}
-              onChange={(e) => setCustomNote(e.target.value)}
-              rows={2}
-              className="text-xs"
-            />
-
-            {/* Generate button */}
-            {!emailDraft && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1.5 text-xs"
-                disabled={emailLoading}
-                onClick={generateEmail}
-              >
-                <Sparkles className="h-3.5 w-3.5 text-violet-500" />
-                {emailLoading ? "Drafting…" : "Draft with AI"}
-              </Button>
-            )}
-
-            {/* Email preview */}
-            {emailDraft && (
-              <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Preview</span>
-                  <button
-                    onClick={() => setEmailDraft(null)}
-                    className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Redraft
-                  </button>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-0.5">Subject</p>
-                  <Input
-                    value={emailDraft.subject}
-                    onChange={(e) => setEmailDraft({ ...emailDraft, subject: e.target.value })}
-                    className="h-7 text-xs"
-                  />
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-0.5">Body</p>
-                  <Textarea
-                    value={emailDraft.body}
-                    onChange={(e) => setEmailDraft({ ...emailDraft, body: e.target.value })}
-                    rows={6}
-                    className="text-xs"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    className="gap-1.5 text-xs"
-                    disabled={!contactEmail || emailSending}
-                    onClick={sendEmail}
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                    {emailSending ? "Sending…" : `Send to ${contactEmail || "no email set"}`}
-                  </Button>
-                  {!contactEmail && (
-                    <span className="text-[10px] text-muted-foreground">Set a contact email above first</span>
-                  )}
-                </div>
-              </div>
-            )}
-          </CollapsibleContent>
-        </Collapsible>
-
         {/* Links */}
         <Collapsible open={linksOpen} onOpenChange={setLinksOpen}>
           <div className="flex items-center justify-between">
@@ -1188,6 +1143,18 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
                           <span className="text-xs text-muted-foreground">
                             {new Date(update.created_at).toLocaleDateString()}
                           </span>
+                          {emailedIds.has(update.id) ? (
+                            <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 font-medium">
+                              <CheckCircle2 className="h-3 w-3" /> Client Emailed
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => openEmailModal(update)}
+                              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary font-medium transition-colors"
+                            >
+                              <Mail className="h-3 w-3" /> Email Client
+                            </button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"
@@ -1265,6 +1232,91 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
           </CollapsibleContent>
         </Collapsible>
       </CardContent>
+
+      {/* Per-entry Email Modal */}
+      <Dialog open={!!modalUpdate} onOpenChange={(open) => { if (!open) { setModalUpdate(null); setModalDraft(null); } }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-primary" />
+              Email Client
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Sender / Receiver info */}
+          <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-1.5 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground w-12 shrink-0">From</span>
+              <span className="font-medium text-foreground">Treat Engine &lt;updates@treatleads.com&gt;</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground w-12 shrink-0">Reply-to</span>
+              <span className="text-foreground">info@treatleads.com</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground w-12 shrink-0">To</span>
+              {contactEmail ? (
+                <span className="font-medium text-foreground">{contactEmail}</span>
+              ) : (
+                <span className="italic text-destructive">No contact email set — add one in Email Client section</span>
+              )}
+            </div>
+            {modalUpdate && (
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground w-12 shrink-0">Re</span>
+                <span className="text-foreground">{(modalUpdate as any).title || modalUpdate.category} — {modalUpdate.campaign_name}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Draft area */}
+          {modalLoading && (
+            <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+              <Sparkles className="h-4 w-4 animate-pulse text-violet-500" />
+              Drafting with AI…
+            </div>
+          )}
+
+          {modalDraft && !modalLoading && (
+            <div className="space-y-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Subject</p>
+                <Input
+                  value={modalDraft.subject}
+                  onChange={(e) => setModalDraft({ ...modalDraft, subject: e.target.value })}
+                  className="text-sm"
+                />
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Body</p>
+                <Textarea
+                  value={modalDraft.body}
+                  onChange={(e) => setModalDraft({ ...modalDraft, body: e.target.value })}
+                  rows={8}
+                  className="text-sm"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => { setModalUpdate(null); setModalDraft(null); }}>
+              Cancel
+            </Button>
+            {modalDraft && (
+              <Button
+                size="sm"
+                className="gap-1.5"
+                disabled={!contactEmail || modalSending}
+                onClick={sendModalEmail}
+              >
+                <Send className="h-3.5 w-3.5" />
+                {modalSending ? "Sending…" : "Send Email"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
