@@ -36,6 +36,9 @@ import {
   Sparkles,
   ChevronUp,
   Link2,
+  Mail,
+  Send,
+  Pencil,
 } from "lucide-react";
 import { Link as RouterLink } from "react-router-dom";
 import { format } from "date-fns";
@@ -569,6 +572,95 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
     },
   });
 
+  // Client Email
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [customNote, setCustomNote] = useState("");
+  const [emailDraft, setEmailDraft] = useState<{ subject: string; body: string } | null>(null);
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [contactEmailInput, setContactEmailInput] = useState("");
+
+  const contactEmail: string = (account as any)?.contact_email ?? "";
+
+  const saveContactEmail = useMutation({
+    mutationFn: async (email: string) => {
+      const { error } = await supabase
+        .from("accounts")
+        .update({ contact_email: email })
+        .eq("account_name", accountName);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["account", accountName] });
+      setEditingEmail(false);
+      toast.success("Email saved");
+    },
+    onError: () => toast.error("Failed to save email"),
+  });
+
+  const generateEmail = async () => {
+    setEmailLoading(true);
+    setEmailDraft(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-client-update", {
+        body: {
+          accountName,
+          recipientEmail: contactEmail || "preview@example.com",
+          kpis,
+          recentUpdates: updates.slice(0, 5).map((u) => ({
+            date: new Date(u.created_at).toLocaleDateString(),
+            title: (u as any).title || u.category,
+            details: u.details,
+          })),
+          dateLabel: dateRange?.from
+            ? `${dateRange.from.toLocaleDateString()} – ${dateRange.to?.toLocaleDateString() ?? ""}`
+            : "All time",
+          customNote: customNote.trim() || undefined,
+          draftOnly: true,
+        },
+      });
+      if (error) throw error;
+      setEmailDraft({ subject: data.subject, body: data.body });
+    } catch {
+      toast.error("Failed to generate email");
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const sendEmail = async () => {
+    if (!contactEmail || !emailDraft) return;
+    setEmailSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-client-update", {
+        body: {
+          accountName,
+          recipientEmail: contactEmail,
+          kpis,
+          recentUpdates: updates.slice(0, 5).map((u) => ({
+            date: new Date(u.created_at).toLocaleDateString(),
+            title: (u as any).title || u.category,
+            details: u.details,
+          })),
+          dateLabel: dateRange?.from
+            ? `${dateRange.from.toLocaleDateString()} – ${dateRange.to?.toLocaleDateString() ?? ""}`
+            : "All time",
+          customNote: customNote.trim() || undefined,
+        },
+      });
+      if (error) throw error;
+      toast.success(`Email sent to ${contactEmail}`);
+      setEmailOpen(false);
+      setEmailDraft(null);
+      setCustomNote("");
+    } catch {
+      toast.error("Failed to send email");
+    } finally {
+      setEmailSending(false);
+    }
+  };
+
   const displayedKpis = ALL_KPIS.filter((k) => visibleKpis.includes(k.key));
 
   return (
@@ -778,6 +870,128 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
             </div>
           )}
         </div>
+
+        {/* Email Client */}
+        <Collapsible open={emailOpen} onOpenChange={setEmailOpen}>
+          <div className="flex items-center justify-between">
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-1.5 px-2 text-muted-foreground hover:text-foreground">
+                {emailOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                <Mail className="h-4 w-4" />
+                Email Client
+              </Button>
+            </CollapsibleTrigger>
+          </div>
+
+          <CollapsibleContent className="pt-2 space-y-3">
+            {/* Contact email field */}
+            <div className="flex items-center gap-2">
+              {editingEmail ? (
+                <>
+                  <Input
+                    placeholder="client@email.com"
+                    value={contactEmailInput}
+                    onChange={(e) => setContactEmailInput(e.target.value)}
+                    className="h-7 text-xs flex-1"
+                    type="email"
+                  />
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={!contactEmailInput.trim() || saveContactEmail.isPending}
+                    onClick={() => saveContactEmail.mutate(contactEmailInput.trim())}
+                  >
+                    Save
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingEmail(false)}>
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <span className="text-xs text-muted-foreground flex-1">
+                    {contactEmail ? contactEmail : <span className="italic">No email set</span>}
+                  </span>
+                  <button
+                    onClick={() => { setContactEmailInput(contactEmail); setEditingEmail(true); }}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Optional note */}
+            <Textarea
+              placeholder="Optional note to include (e.g. 'We're testing new creatives next week')"
+              value={customNote}
+              onChange={(e) => setCustomNote(e.target.value)}
+              rows={2}
+              className="text-xs"
+            />
+
+            {/* Generate button */}
+            {!emailDraft && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 text-xs"
+                disabled={emailLoading}
+                onClick={generateEmail}
+              >
+                <Sparkles className="h-3.5 w-3.5 text-violet-500" />
+                {emailLoading ? "Drafting…" : "Draft with AI"}
+              </Button>
+            )}
+
+            {/* Email preview */}
+            {emailDraft && (
+              <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Preview</span>
+                  <button
+                    onClick={() => setEmailDraft(null)}
+                    className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Redraft
+                  </button>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-0.5">Subject</p>
+                  <Input
+                    value={emailDraft.subject}
+                    onChange={(e) => setEmailDraft({ ...emailDraft, subject: e.target.value })}
+                    className="h-7 text-xs"
+                  />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-0.5">Body</p>
+                  <Textarea
+                    value={emailDraft.body}
+                    onChange={(e) => setEmailDraft({ ...emailDraft, body: e.target.value })}
+                    rows={6}
+                    className="text-xs"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    className="gap-1.5 text-xs"
+                    disabled={!contactEmail || emailSending}
+                    onClick={sendEmail}
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    {emailSending ? "Sending…" : `Send to ${contactEmail || "no email set"}`}
+                  </Button>
+                  {!contactEmail && (
+                    <span className="text-[10px] text-muted-foreground">Set a contact email above first</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
 
         {/* Links */}
         <Collapsible open={linksOpen} onOpenChange={setLinksOpen}>
