@@ -166,7 +166,6 @@ interface AccountCardProps {
 
 export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, visibleKpis, dateRange, changeLogOptions = [] }: AccountCardProps) {
   const queryClient = useQueryClient();
-  const [logOpen, setLogOpen] = useState(false);
   const [logPage, setLogPage] = useState(0);
   const [activeAdChart, setActiveAdChart] = useState<"leads" | "appts" | null>(null);
 
@@ -859,6 +858,54 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
                 );
               })}
           </div>
+
+          {/* Links — compact, under KPIs */}
+          <Collapsible open={linksOpen} onOpenChange={setLinksOpen}>
+            <div className="flex items-center gap-1">
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                  {linksOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                  <Link2 className="h-3 w-3" />
+                  Links{accountLinks.length > 0 ? ` (${accountLinks.length})` : ""}
+                </button>
+              </CollapsibleTrigger>
+              {linksOpen && (
+                <button
+                  onClick={() => setShowLinkForm((v) => !v)}
+                  className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-primary transition-colors ml-1"
+                >
+                  <Plus className="h-3 w-3" /> Add
+                </button>
+              )}
+            </div>
+            <CollapsibleContent className="pt-1.5 space-y-1.5">
+              {showLinkForm && (
+                <div className="flex items-center gap-1.5 rounded-md border border-border p-1.5">
+                  <Input placeholder="Label" value={newLinkLabel} onChange={(e) => setNewLinkLabel(e.target.value)} className="h-6 text-xs flex-1" />
+                  <Input placeholder="https://..." value={newLinkUrl} onChange={(e) => setNewLinkUrl(e.target.value)} className="h-6 text-xs flex-1" />
+                  <Button size="sm" className="h-6 text-xs px-2" disabled={!newLinkLabel.trim() || !newLinkUrl.trim() || addLink.isPending} onClick={() => addLink.mutate()}>
+                    Save
+                  </Button>
+                </div>
+              )}
+              {accountLinks.length === 0 && !showLinkForm && (
+                <p className="text-[10px] text-muted-foreground">No links yet</p>
+              )}
+              <div className="flex flex-wrap gap-1">
+                {accountLinks.map((link) => (
+                  <div key={link.id} className="group flex items-center gap-1 rounded border border-border/60 bg-muted/30 px-1.5 py-0.5 text-[10px]">
+                    <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-foreground hover:text-primary transition-colors">
+                      <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                      {link.label}
+                    </a>
+                    <button onClick={() => deleteLink.mutate(link.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive ml-0.5">
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
           </div>{/* end left column */}
 
           {/* Right: Recent Changes */}
@@ -867,24 +914,108 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                 <ClipboardList className="h-3.5 w-3.5" /> Recent Changes
               </p>
-              {totalLogCount > 0 && (
-                <span className="text-[10px] text-muted-foreground">
-                  {logPage * 3 + 1}–{Math.min(logPage * 3 + 3, totalLogCount)} of {totalLogCount}
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {totalLogCount > 0 && (
+                  <span className="text-[10px] text-muted-foreground">
+                    {logPage * 3 + 1}–{Math.min(logPage * 3 + 3, totalLogCount)} of {totalLogCount}
+                  </span>
+                )}
+                <button
+                  onClick={() => setShowForm((v) => !v)}
+                  className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <Plus className="h-3 w-3" /> Add
+                </button>
+              </div>
             </div>
 
-            {totalLogCount === 0 ? (
+            {/* Inline add form */}
+            {showForm && (
+              <div className="space-y-2 rounded-lg border border-border p-3">
+                <Select value={selectedLogOption} onValueChange={setSelectedLogOption}>
+                  <SelectTrigger className="h-7 text-xs">
+                    <SelectValue placeholder="Select campaign & change type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {changeLogOptions.map((opt) => (
+                      <SelectGroup key={opt.label}>
+                        <SelectLabel>{opt.label}</SelectLabel>
+                        {opt.sub_options.length > 0
+                          ? opt.sub_options.map((sub) => (
+                              <SelectItem key={`${opt.label}||${sub}`} value={`${opt.label}||${sub}`}>
+                                {sub}
+                              </SelectItem>
+                            ))
+                          : (
+                              <SelectItem value={`${opt.label}||`}>{opt.label}</SelectItem>
+                            )
+                        }
+                      </SelectGroup>
+                    ))}
+                    {(() => {
+                      const coveredLabels = new Set(changeLogOptions.map((o) => o.label));
+                      const extra = campaigns.filter((c) => !coveredLabels.has(c));
+                      if (extra.length === 0) return null;
+                      return (
+                        <SelectGroup>
+                          <SelectLabel>Ad Campaigns</SelectLabel>
+                          {extra.map((c) => (
+                            <SelectItem key={`${c}||`} value={`${c}||`}>{c}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      );
+                    })()}
+                  </SelectContent>
+                </Select>
+                <Textarea placeholder="What changed? (details)" value={details} onChange={(e) => setDetails(e.target.value)} rows={2} className="text-xs" />
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <input type="file" accept="image/*" multiple className="absolute inset-0 opacity-0 w-full cursor-pointer" onChange={handleImageSelect} />
+                    <Button type="button" variant="outline" size="sm" className="gap-1 h-6 text-xs px-2">
+                      <ImagePlus className="h-3 w-3" /> Images
+                    </Button>
+                  </div>
+                  <Input placeholder="Link URL (optional)" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} className="h-6 text-xs flex-1" />
+                </div>
+                {imagePreviews.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {imagePreviews.map((src, i) => (
+                      <div key={i} className="relative w-12 h-12 rounded overflow-hidden border border-border">
+                        <img src={src} alt="Preview" className="w-full h-full object-cover" />
+                        <button className="absolute top-0.5 right-0.5 bg-background/80 rounded-full p-0.5" onClick={() => removeImage(i)}>
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="h-6 text-xs px-2"
+                    onClick={() => addUpdate.mutate()}
+                    disabled={!selectedLogOption || (!details.trim() && !imageFiles.length && !linkUrl.trim()) || addUpdate.isPending || uploading}
+                  >
+                    {uploading ? "Uploading…" : "Log Update"}
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => setShowForm(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {totalLogCount === 0 && !showForm ? (
               <p className="text-xs text-muted-foreground py-2">
                 {dateRange?.from ? "No changes in range" : "No changes logged"}
               </p>
-            ) : (
+            ) : totalLogCount > 0 ? (
               <div className="space-y-2">
                 {filteredTimeline.slice(logPage * 3, logPage * 3 + 3).map((item) => {
                   if (item.type === "update") {
                     const update = item.data;
                     return (
-                      <div key={update.id} className="rounded-md border border-border/50 p-2 space-y-1">
+                      <div key={update.id} className="group rounded-md border border-border/50 p-2 space-y-1">
                         <div className="flex items-center justify-between gap-1 flex-wrap">
                           <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${categoryColors[update.category] ?? categoryColors.other}`}>
                             {(update as any).title || CATEGORIES.find((c) => c.value === update.category)?.label || update.category}
@@ -898,18 +1029,26 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
                         )}
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] text-muted-foreground truncate">{update.campaign_name}</span>
-                          {emailedIds.has(update.id) ? (
-                            <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 font-medium shrink-0">
-                              <CheckCircle2 className="h-3 w-3" /> Emailed
-                            </span>
-                          ) : (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {emailedIds.has(update.id) ? (
+                              <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 font-medium">
+                                <CheckCircle2 className="h-3 w-3" /> Emailed
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => openEmailModal(update)}
+                                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary font-medium transition-colors"
+                              >
+                                <Mail className="h-3 w-3" /> Email
+                              </button>
+                            )}
                             <button
-                              onClick={() => openEmailModal(update)}
-                              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary font-medium transition-colors shrink-0"
+                              onClick={() => deleteUpdate.mutate(update.id)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
                             >
-                              <Mail className="h-3 w-3" /> Email
+                              <Trash2 className="h-3 w-3" />
                             </button>
-                          )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -945,7 +1084,7 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
                   );
                 })}
               </div>
-            )}
+            ) : null}
 
             {/* Pagination */}
             {totalLogCount > 3 && (
@@ -1062,289 +1201,6 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
           )}
         </div>
 
-        {/* Links */}
-        <Collapsible open={linksOpen} onOpenChange={setLinksOpen}>
-          <div className="flex items-center justify-between">
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-1.5 px-2 text-muted-foreground hover:text-foreground">
-                {linksOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                <Link2 className="h-4 w-4" />
-                Links {accountLinks.length > 0 && `(${accountLinks.length})`}
-              </Button>
-            </CollapsibleTrigger>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              onClick={(e) => { e.stopPropagation(); setLinksOpen(true); setShowLinkForm((v) => !v); }}
-            >
-              <Plus className="mr-1 h-4 w-4" /> Add
-            </Button>
-          </div>
-
-          <CollapsibleContent className="pt-2 space-y-2">
-            {showLinkForm && (
-              <div className="flex items-center gap-2 rounded-lg border border-border p-2">
-                <Input
-                  placeholder="Label (e.g. Facebook LP)"
-                  value={newLinkLabel}
-                  onChange={(e) => setNewLinkLabel(e.target.value)}
-                  className="h-7 text-xs flex-1"
-                />
-                <Input
-                  placeholder="https://..."
-                  value={newLinkUrl}
-                  onChange={(e) => setNewLinkUrl(e.target.value)}
-                  className="h-7 text-xs flex-1"
-                />
-                <Button
-                  size="sm"
-                  className="h-7 text-xs"
-                  disabled={!newLinkLabel.trim() || !newLinkUrl.trim() || addLink.isPending}
-                  onClick={() => addLink.mutate()}
-                >
-                  Save
-                </Button>
-              </div>
-            )}
-
-            {accountLinks.length === 0 && !showLinkForm && (
-              <p className="text-xs text-muted-foreground text-center py-2">No links added yet</p>
-            )}
-
-            <div className="flex flex-wrap gap-2">
-              {accountLinks.map((link) => (
-                <div key={link.id} className="group flex items-center gap-1 rounded-md border border-border/60 bg-muted/30 px-2 py-1 text-xs">
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-foreground hover:text-primary transition-colors"
-                  >
-                    <ExternalLink className="h-3 w-3 shrink-0" />
-                    {link.label}
-                  </a>
-                  <button
-                    onClick={() => deleteLink.mutate(link.id)}
-                    className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
-
-        {/* Expandable Change Log */}
-        <Collapsible open={logOpen} onOpenChange={setLogOpen}>
-          <div className="flex items-center justify-between">
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-1.5 px-2 text-muted-foreground hover:text-foreground">
-                {logOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                <ClipboardList className="h-4 w-4" />
-                Change Log ({totalLogCount})
-              </Button>
-            </CollapsibleTrigger>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              onClick={(e) => {
-                e.stopPropagation();
-                setLogOpen(true);
-                setShowForm(!showForm);
-              }}
-            >
-              <Plus className="mr-1 h-4 w-4" /> Add
-            </Button>
-          </div>
-
-          <CollapsibleContent className="pt-3 space-y-3">
-            {showForm && (
-              <div className="space-y-3 rounded-xl border border-border p-4">
-                {/* Single grouped dropdown: change log options from settings + raw ad campaigns as fallback */}
-                <Select value={selectedLogOption} onValueChange={setSelectedLogOption}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select campaign & change type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {changeLogOptions.map((opt) => (
-                      <SelectGroup key={opt.label}>
-                        <SelectLabel>{opt.label}</SelectLabel>
-                        {opt.sub_options.length > 0
-                          ? opt.sub_options.map((sub) => (
-                              <SelectItem key={`${opt.label}||${sub}`} value={`${opt.label}||${sub}`}>
-                                {sub}
-                              </SelectItem>
-                            ))
-                          : (
-                              <SelectItem value={`${opt.label}||`}>{opt.label}</SelectItem>
-                            )
-                        }
-                      </SelectGroup>
-                    ))}
-                    {/* Fallback: ad campaigns not already covered by change_log_options labels */}
-                    {(() => {
-                      const coveredLabels = new Set(changeLogOptions.map((o) => o.label));
-                      const extra = campaigns.filter((c) => !coveredLabels.has(c));
-                      if (extra.length === 0) return null;
-                      return (
-                        <SelectGroup>
-                          <SelectLabel>Ad Campaigns</SelectLabel>
-                          {extra.map((c) => (
-                            <SelectItem key={`${c}||`} value={`${c}||`}>{c}</SelectItem>
-                          ))}
-                        </SelectGroup>
-                      );
-                    })()}
-                  </SelectContent>
-                </Select>
-                <Textarea placeholder="What changed? (details)" value={details} onChange={(e) => setDetails(e.target.value)} rows={2} />
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <input type="file" accept="image/*" multiple className="absolute inset-0 opacity-0 w-full cursor-pointer" onChange={handleImageSelect} />
-                    <Button type="button" variant="outline" size="sm" className="gap-1.5">
-                      <ImagePlus className="h-3.5 w-3.5" /> Images
-                    </Button>
-                  </div>
-                  <div className="flex-1">
-                    <Input placeholder="Link URL (optional)" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} className="h-8 text-sm" />
-                  </div>
-                </div>
-                {imagePreviews.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {imagePreviews.map((src, i) => (
-                      <div key={i} className="relative w-16 h-16 rounded-md overflow-hidden border border-border">
-                        <img src={src} alt="Preview" className="w-full h-full object-cover" />
-                        <button className="absolute top-0.5 right-0.5 bg-background/80 rounded-full p-0.5" onClick={() => removeImage(i)}>
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <Button
-                  size="sm"
-                  onClick={() => addUpdate.mutate()}
-                  disabled={!selectedLogOption || (!details.trim() && !imageFiles.length && !linkUrl.trim()) || addUpdate.isPending || uploading}
-                >
-                  {uploading ? "Uploading…" : "Log Update"}
-                </Button>
-              </div>
-            )}
-
-            {filteredTimeline.length === 0 && !showForm && (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                {dateRange?.from ? "No updates in this date range" : "No updates logged"}
-              </p>
-            )}
-
-            <div className="space-y-2 max-h-[400px] overflow-y-auto">
-              {filteredTimeline.map((item) => {
-                if (item.type === "update") {
-                  const update = item.data;
-                  return (
-                    <div key={update.id} className="group rounded-lg border border-border/60 p-3 space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className={`text-xs ${categoryColors[update.category] ?? categoryColors.other}`}>
-                            {(update as any).title || CATEGORIES.find((c) => c.value === update.category)?.label || update.category}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">{update.campaign_name}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(update.created_at).toLocaleDateString()}
-                          </span>
-                          {emailedIds.has(update.id) ? (
-                            <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 font-medium">
-                              <CheckCircle2 className="h-3 w-3" /> Client Emailed
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => openEmailModal(update)}
-                              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary font-medium transition-colors"
-                            >
-                              <Mail className="h-3 w-3" /> Email Client
-                            </button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => deleteUpdate.mutate(update.id)}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-                      {update.details && <p className="text-sm text-foreground">{update.details}</p>}
-                      {(update as any).image_url && (
-                        <div className="flex flex-wrap gap-2 mt-1">
-                          {((update as any).image_url as string).split(",").map((url: string, i: number) => (
-                            <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                              <img src={url} alt="Attachment" className="max-w-[120px] rounded-md border border-border hover:opacity-80 transition-opacity" />
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                      {(update as any).link_url && (
-                        <a href={(update as any).link_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1">
-                          <ExternalLink className="h-3 w-3" /> {(update as any).link_url}
-                        </a>
-                      )}
-                    </div>
-                  );
-                }
-
-                // Creative batch entry
-                const { batchName, items: batchItems } = item;
-                const links = batchItems.filter((c) => c.file_type === "link");
-                const images = batchItems.filter((c) => c.file_type !== "link");
-
-                return (
-                  <div key={`creative-${batchName}`} className="rounded-lg border border-border/60 p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300 text-xs">
-                          <ImageIcon className="h-3 w-3 mr-1" /> Creative
-                        </Badge>
-                        <span className="text-xs font-medium text-foreground">{batchName}</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(item.date).toLocaleDateString()}
-                      </span>
-                    </div>
-                    {links.length > 0 && (
-                      <div className="space-y-0.5">
-                        {links.map((l) => (
-                          <a key={l.id} href={l.file_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                            <ExternalLink className="h-3 w-3" /> {l.file_name}
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                    {images.length > 0 && (
-                      <div className="flex gap-2 overflow-x-auto pb-1">
-                        {images.map((img) => (
-                          <a key={img.id} href={img.file_url} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                            <img
-                              src={img.file_url}
-                              alt={img.file_name}
-                              className="h-16 rounded-md border border-border hover:opacity-80 transition-opacity"
-                              loading="lazy"
-                            />
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
       </CardContent>
 
       {/* Per-entry Email Modal */}

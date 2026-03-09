@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCouplerData } from "@/hooks/useCouplerData";
@@ -270,13 +270,18 @@ export default function ClientReport() {
   const decodedName = decodeURIComponent(accountName ?? "");
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: max([startOfDay(subDays(new Date(), 29)), MIN_DATE]),
+    from: max([startOfMonth(new Date()), MIN_DATE]),
     to: startOfDay(subDays(new Date(), 1)),
   });
-  const [presetLabel, setPresetLabel] = useState<string>("Last 30 days");
+  const [presetLabel, setPresetLabel] = useState<string>("This month");
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [showCustomCalendar, setShowCustomCalendar] = useState(false);
   const [pendingRange, setPendingRange] = useState<DateRange | undefined>(undefined);
+
+  // Hover-to-open date picker in sidebar
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const handleDateHoverEnter = () => { clearTimeout(hoverTimeout.current); setDatePickerOpen(true); };
+  const handleDateHoverLeave = () => { hoverTimeout.current = setTimeout(() => setDatePickerOpen(false), 300); };
 
   // ── Ad data ──────────────────────────────────────────────────────────────
   const { data: allData, isLoading: adLoading } = useCouplerData();
@@ -554,6 +559,17 @@ export default function ClientReport() {
     return items;
   }, [updates, creatives]);
 
+  // ── Timeline filtered by active date range ────────────────────────────────
+  const filteredTimeline = useMemo(() => {
+    if (!dateRange?.from) return timeline;
+    const from = startOfDay(dateRange.from);
+    const to = dateRange.to ? startOfDay(dateRange.to) : from;
+    return timeline.filter((item) => {
+      const d = startOfDay(new Date(item.date));
+      return d >= from && d <= to;
+    });
+  }, [timeline, dateRange]);
+
   // ── Chart annotations from change log (updates + creative batches) ────────
   const chartAnnotations = useMemo<ChartAnnotation[]>(() => {
     const grouped: Record<string, ChartAnnotation["updates"]> = {};
@@ -589,126 +605,153 @@ export default function ClientReport() {
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
       <div className="border-b border-border/50 bg-white px-6 py-5 shadow-sm">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-primary">Performance Report</p>
-            <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-foreground">{decodedName}</h1>
-          </div>
-
-          {/* Date picker */}
-          <Popover
-            open={datePickerOpen}
-            onOpenChange={(open) => {
-              setDatePickerOpen(open);
-              if (!open) { setShowCustomCalendar(false); setPendingRange(undefined); }
-            }}
-          >
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2 text-sm">
-                <CalendarDays className="h-4 w-4" />
-                {dateLabel}
-              </Button>
-            </PopoverTrigger>
-
-            {/* Single PopoverContent — inner content swaps based on showCustomCalendar */}
-            <PopoverContent
-              className={cn("p-0 overflow-hidden", showCustomCalendar ? "w-auto" : "w-48")}
-              align="end"
-            >
-              {!showCustomCalendar ? (
-                /* ── Presets view ── */
-                <div className="flex flex-col gap-0.5 p-1.5">
-                  {[
-                    { label: "Last 7 days", range: { from: max([startOfDay(subDays(new Date(), 7)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
-                    { label: "Last 14 days", range: { from: max([startOfDay(subDays(new Date(), 14)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
-                    { label: "Last 30 days", range: { from: max([startOfDay(subDays(new Date(), 29)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
-                    { label: "Last month", range: { from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) } },
-                    { label: "This month", range: { from: max([startOfMonth(new Date()), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
-                  ].filter((p) => p.range.to >= MIN_DATE).map((preset) => (
-                    <Button
-                      key={preset.label}
-                      variant="ghost"
-                      size="sm"
-                      className="justify-start text-xs h-8 rounded-sm"
-                      onClick={() => { setDateRange(preset.range); setPresetLabel(preset.label); setDatePickerOpen(false); }}
-                    >
-                      {preset.label}
-                    </Button>
-                  ))}
-                  <div className="my-1 h-px bg-border" />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="justify-start text-xs h-8 rounded-sm"
-                    onClick={() => { setPresetLabel(""); setPendingRange(undefined); setShowCustomCalendar(true); }}
-                  >
-                    Custom range…
-                  </Button>
-                  {dateRange?.from && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="justify-start text-xs h-8 rounded-sm text-muted-foreground"
-                      onClick={() => { setDateRange(undefined); setPresetLabel(""); setDatePickerOpen(false); }}
-                    >
-                      Clear
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                /* ── Calendar view ── */
-                <div>
-                  {/* Header */}
-                  <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-                    <button
-                      onClick={() => setShowCustomCalendar(false)}
-                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <ChevronLeft className="h-3.5 w-3.5" /> Presets
-                    </button>
-                    <div className="ml-auto flex items-center gap-1.5 text-sm font-medium">
-                      <span className={cn(
-                        "rounded-md px-2 py-0.5 text-xs",
-                        pendingRange?.from ? "bg-primary/10 text-primary" : "text-muted-foreground"
-                      )}>
-                        {pendingRange?.from ? format(pendingRange.from, "MMM d, yyyy") : "Start date"}
-                      </span>
-                      <span className="text-muted-foreground">→</span>
-                      <span className={cn(
-                        "rounded-md px-2 py-0.5 text-xs",
-                        pendingRange?.to ? "bg-primary/10 text-primary" : "text-muted-foreground"
-                      )}>
-                        {pendingRange?.to ? format(pendingRange.to, "MMM d, yyyy") : "End date"}
-                      </span>
-                    </div>
-                  </div>
-                  {/* Two-month calendar */}
-                  <Calendar
-                    mode="range"
-                    fromDate={MIN_DATE}
-                    selected={pendingRange}
-                    onSelect={(range) => {
-                      setPendingRange(range);
-                      if (range?.from && range?.to) {
-                        setDateRange(range);
-                        setTimeout(() => {
-                          setDatePickerOpen(false);
-                          setShowCustomCalendar(false);
-                        }, 400);
-                      }
-                    }}
-                    numberOfMonths={2}
-                    className="p-3"
-                  />
-                </div>
-              )}
-            </PopoverContent>
-          </Popover>
+        <div className="mx-auto max-w-6xl">
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary">Performance Report</p>
+          <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-foreground">{decodedName}</h1>
         </div>
       </div>
 
       {/* Body */}
-      <div className="mx-auto max-w-5xl space-y-8 px-6 py-8">
+      <div className="mx-auto max-w-6xl px-6 py-8">
+        <div className="flex gap-6 items-start">
+
+          {/* Sidebar nav */}
+          <aside className="w-48 shrink-0 hidden md:block self-start sticky top-8">
+            <div>
+              <nav className="rounded-xl border border-border/50 bg-white shadow-sm overflow-hidden">
+
+                {/* Date range — hover to open */}
+                <div className="border-b border-border/50">
+                  <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Date Range</p>
+                  <div
+                    className="p-1.5"
+                    onMouseEnter={handleDateHoverEnter}
+                    onMouseLeave={handleDateHoverLeave}
+                  >
+                    <Popover
+                      open={datePickerOpen}
+                      onOpenChange={(open) => {
+                        setDatePickerOpen(open);
+                        if (!open) { setShowCustomCalendar(false); setPendingRange(undefined); }
+                      }}
+                    >
+                      <PopoverTrigger asChild>
+                        <button className="w-full flex items-center gap-1.5 rounded-md px-2.5 py-2 text-xs text-left text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors">
+                          <CalendarDays className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          <span className="truncate leading-tight">{dateLabel}</span>
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        side="right"
+                        align="start"
+                        sideOffset={-1}
+                        className={cn("p-0 overflow-hidden", showCustomCalendar ? "w-auto" : "w-48")}
+                        onMouseEnter={handleDateHoverEnter}
+                        onMouseLeave={handleDateHoverLeave}
+                      >
+                        {!showCustomCalendar ? (
+                          <div className="flex flex-col gap-0.5 p-1.5">
+                            {[
+                              { label: "Last 7 days", range: { from: max([startOfDay(subDays(new Date(), 7)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
+                              { label: "Last 14 days", range: { from: max([startOfDay(subDays(new Date(), 14)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
+                              { label: "Last 30 days", range: { from: max([startOfDay(subDays(new Date(), 29)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
+                              { label: "Last month", range: { from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) } },
+                              { label: "This month", range: { from: max([startOfMonth(new Date()), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
+                            ].filter((p) => p.range.to >= MIN_DATE).map((preset) => (
+                              <Button
+                                key={preset.label}
+                                variant={presetLabel === preset.label ? "secondary" : "ghost"}
+                                size="sm"
+                                className="justify-start text-xs h-8 rounded-sm"
+                                onClick={() => { setDateRange(preset.range); setPresetLabel(preset.label); setDatePickerOpen(false); }}
+                              >
+                                {preset.label}
+                              </Button>
+                            ))}
+                            <div className="my-1 h-px bg-border" />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="justify-start text-xs h-8 rounded-sm"
+                              onClick={() => { setPresetLabel(""); setPendingRange(undefined); setShowCustomCalendar(true); }}
+                            >
+                              Custom range…
+                            </Button>
+                            {dateRange?.from && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="justify-start text-xs h-8 rounded-sm text-muted-foreground"
+                                onClick={() => { setDateRange(undefined); setPresetLabel(""); setDatePickerOpen(false); }}
+                              >
+                                Clear
+                              </Button>
+                            )}
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+                              <button
+                                onClick={() => setShowCustomCalendar(false)}
+                                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                              >
+                                <ChevronLeft className="h-3.5 w-3.5" /> Presets
+                              </button>
+                              <div className="ml-auto flex items-center gap-1.5 text-sm font-medium">
+                                <span className={cn("rounded-md px-2 py-0.5 text-xs", pendingRange?.from ? "bg-primary/10 text-primary" : "text-muted-foreground")}>
+                                  {pendingRange?.from ? format(pendingRange.from, "MMM d, yyyy") : "Start date"}
+                                </span>
+                                <span className="text-muted-foreground">→</span>
+                                <span className={cn("rounded-md px-2 py-0.5 text-xs", pendingRange?.to ? "bg-primary/10 text-primary" : "text-muted-foreground")}>
+                                  {pendingRange?.to ? format(pendingRange.to, "MMM d, yyyy") : "End date"}
+                                </span>
+                              </div>
+                            </div>
+                            <Calendar
+                              mode="range"
+                              fromDate={MIN_DATE}
+                              selected={pendingRange}
+                              onSelect={(range) => {
+                                setPendingRange(range);
+                                if (range?.from && range?.to) {
+                                  setDateRange(range);
+                                  setTimeout(() => { setDatePickerOpen(false); setShowCustomCalendar(false); }, 400);
+                                }
+                              }}
+                              numberOfMonths={2}
+                              className="p-3"
+                            />
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+
+                {/* Section links */}
+                <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">On this page</p>
+                <div className="flex flex-col p-1.5 pt-0 gap-0.5 pb-2">
+                  {[
+                    { href: "#kpi-metrics", label: "KPI Metrics" },
+                    { href: "#appointments", label: "Appointments" },
+                    { href: "#change-log", label: "Change Log" },
+                  ].map(({ href, label }) => (
+                    <a
+                      key={href}
+                      href={href}
+                      className="rounded-md px-2.5 py-2 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+                    >
+                      {label}
+                    </a>
+                  ))}
+                </div>
+
+              </nav>
+            </div>
+          </aside>
+
+          {/* Main content */}
+          <div className="flex-1 min-w-0 space-y-8">
         {isLoading ? (
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
@@ -722,7 +765,7 @@ export default function ClientReport() {
           <>
             {/* ── KPI Grid + inline chart ── */}
             {enabledKpis.length > 0 && (
-              <section>
+              <section id="kpi-metrics">
                 <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Key Metrics</h2>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                   {enabledKpis.map(({ key, label, icon, format: fmt }) => (
@@ -752,7 +795,7 @@ export default function ClientReport() {
 
             {/* ── Appointments ── */}
             {appointments.length > 0 && (
-              <section>
+              <section id="appointments">
                 <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                   Appointments{" "}
                   <span className="ml-1 text-xs font-normal text-muted-foreground/70">({appointments.length})</span>
@@ -865,16 +908,16 @@ export default function ClientReport() {
             )}
 
             {/* ── Change Log ── */}
-            {timeline.length > 0 && (
-              <section>
+            {filteredTimeline.length > 0 && (
+              <section id="change-log">
                 <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Change Log <span className="ml-1 text-xs font-normal text-muted-foreground/70">({timeline.length})</span>
+                  Change Log <span className="ml-1 text-xs font-normal text-muted-foreground/70">({filteredTimeline.length})</span>
                 </h2>
                 <div className="relative space-y-0">
                   {/* vertical line */}
                   <div className="absolute left-[11px] top-2 bottom-2 w-px bg-border" />
                   <div className="space-y-4 pl-7">
-                    {timeline.map((item) => {
+                    {filteredTimeline.map((item) => {
                       if (item.type === "update") {
                         const u = item.data;
                         const categoryLabel = CATEGORIES.find((c) => c.value === u.category)?.label ?? u.category;
@@ -969,12 +1012,14 @@ export default function ClientReport() {
               </section>
             )}
 
-            {filteredAdData.length === 0 && timeline.length === 0 && (
+            {filteredAdData.length === 0 && filteredTimeline.length === 0 && (
               <div className="py-20 text-center text-muted-foreground">No data found for the selected period.</div>
             )}
           </>
         )}
-      </div>
+          </div>{/* end main content */}
+        </div>{/* end flex */}
+      </div>{/* end body container */}
 
       {/* Footer */}
       <div className="mt-8 border-t border-border/40 bg-white px-6 py-4 text-center">
