@@ -740,7 +740,7 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
     if (!modalUpdate || !modalDraft || !selectedRecipient) return;
     setModalSending(true);
     try {
-      const { error } = await supabase.functions.invoke("send-client-update", {
+      const { data: sendData, error } = await supabase.functions.invoke("send-client-update", {
         body: {
           accountName,
           recipientEmail: selectedRecipient,
@@ -755,7 +755,7 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
             : "All time",
         },
       });
-      if (error) throw error;
+      if (error || sendData?.error) throw new Error(sendData?.error || error?.message);
       setEmailedIds((prev) => new Set([...prev, modalUpdate.id]));
       toast.success(`Email sent to ${selectedRecipient}`);
       setModalUpdate(null);
