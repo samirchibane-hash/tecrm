@@ -40,6 +40,7 @@ import {
   Send,
   Pencil,
   CheckCircle2,
+  Settings2,
 } from "lucide-react";
 import {
   Dialog,
@@ -49,6 +50,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Link as RouterLink } from "react-router-dom";
+import { CustomerPOCPanel } from "./CustomerPOCPanel";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import type { AdRow } from "@/hooks/useCouplerData";
@@ -594,6 +596,9 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
 
   const contactEmail: string = (account as any)?.contact_email ?? "";
 
+  // POC panel
+  const [pocOpen, setPocOpen] = useState(false);
+
   // Per-entry email modal state
   const [emailedIds, setEmailedIds] = useState<Set<string>>(new Set());
   const [modalUpdate, setModalUpdate] = useState<(typeof updates)[number] | null>(null);
@@ -752,6 +757,13 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
           <div className="w-[42%] flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold text-foreground">{accountName}</h2>
+            <button
+              onClick={() => setPocOpen(true)}
+              title="Customer POC"
+              className="text-muted-foreground hover:text-primary transition-colors"
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+            </button>
             <RouterLink
               to={`/report/${encodeURIComponent(accountName)}`}
               target="_blank"
@@ -1287,6 +1299,13 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CustomerPOCPanel
+        open={pocOpen}
+        onOpenChange={setPocOpen}
+        accountId={accountId}
+        accountName={accountName}
+      />
     </Card>
   );
 }
