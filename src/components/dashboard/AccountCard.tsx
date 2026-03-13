@@ -1252,11 +1252,11 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
           <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-1.5 text-xs">
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground w-12 shrink-0">From</span>
-              <span className="font-medium text-foreground">Treat Engine &lt;updates@treatleads.com&gt;</span>
+              <span className="font-medium text-foreground">Treat Engine &lt;info@treatengine.com&gt;</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground w-12 shrink-0">Reply-to</span>
-              <span className="text-foreground">info@treatleads.com</span>
+              <span className="text-foreground">info@treatengine.com</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground w-12 shrink-0">To</span>

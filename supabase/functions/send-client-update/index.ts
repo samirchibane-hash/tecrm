@@ -5,8 +5,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const FROM = "Treat Engine <updates@treatleads.com>";
-const REPLY_TO = "info@treatleads.com";
+const FROM = "Treat Engine <info@treatengine.com>";
+const REPLY_TO = "info@treatengine.com";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
