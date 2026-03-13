@@ -599,6 +599,24 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
   // POC panel
   const [pocOpen, setPocOpen] = useState(false);
 
+  // Fetch POCs for email recipient selection
+  const { data: pocs = [] } = useQuery({
+    queryKey: ["account-poc", accountId],
+    queryFn: async () => {
+      if (!accountId) return [];
+      const { data, error } = await (supabase as any)
+        .from("account_poc")
+        .select("id, name, email")
+        .eq("account_id", accountId)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data as { id: string; name: string; email: string }[];
+    },
+    enabled: !!accountId,
+  });
+
+  const [selectedRecipient, setSelectedRecipient] = useState<string>("");
+
   // Per-entry email modal state
   const [emailedIds, setEmailedIds] = useState<Set<string>>(new Set());
   const [modalUpdate, setModalUpdate] = useState<(typeof updates)[number] | null>(null);
@@ -688,6 +706,9 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
     setModalUpdate(update);
     setModalDraft(null);
     setModalLoading(true);
+    // Pre-select first available recipient
+    const firstEmail = contactEmail || pocs[0]?.email || "";
+    setSelectedRecipient(firstEmail);
     try {
       const { data, error } = await supabase.functions.invoke("send-client-update", {
         body: {
@@ -716,13 +737,13 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
   };
 
   const sendModalEmail = async () => {
-    if (!modalUpdate || !modalDraft || !contactEmail) return;
+    if (!modalUpdate || !modalDraft || !selectedRecipient) return;
     setModalSending(true);
     try {
       const { error } = await supabase.functions.invoke("send-client-update", {
         body: {
           accountName,
-          recipientEmail: contactEmail,
+          recipientEmail: selectedRecipient,
           kpis,
           recentUpdates: [{
             date: new Date(modalUpdate.created_at).toLocaleDateString(),
@@ -736,7 +757,7 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
       });
       if (error) throw error;
       setEmailedIds((prev) => new Set([...prev, modalUpdate.id]));
-      toast.success(`Email sent to ${contactEmail}`);
+      toast.success(`Email sent to ${selectedRecipient}`);
       setModalUpdate(null);
       setModalDraft(null);
     } catch {
@@ -1237,10 +1258,19 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
             </div>
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground w-12 shrink-0">To</span>
-              {contactEmail ? (
-                <span className="font-medium text-foreground">{contactEmail}</span>
+              {pocs.length > 0 || contactEmail ? (
+                <select
+                  value={selectedRecipient}
+                  onChange={(e) => setSelectedRecipient(e.target.value)}
+                  className="flex-1 bg-transparent text-foreground font-medium text-xs border-none outline-none cursor-pointer"
+                >
+                  {contactEmail && <option value={contactEmail}>{contactEmail}</option>}
+                  {pocs.map((poc) => (
+                    <option key={poc.id} value={poc.email}>{poc.name} — {poc.email}</option>
+                  ))}
+                </select>
               ) : (
-                <span className="italic text-destructive">No contact email set — add one in Email Client section</span>
+                <span className="italic text-destructive">No contact email set — add one via the gear icon</span>
               )}
             </div>
             {modalUpdate && (
@@ -1289,7 +1319,7 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
               <Button
                 size="sm"
                 className="gap-1.5"
-                disabled={!contactEmail || modalSending}
+                disabled={!selectedRecipient || modalSending}
                 onClick={sendModalEmail}
               >
                 <Send className="h-3.5 w-3.5" />
