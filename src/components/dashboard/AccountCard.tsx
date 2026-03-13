@@ -760,8 +760,10 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
       toast.success(`Email sent to ${selectedRecipient}`);
       setModalUpdate(null);
       setModalDraft(null);
-    } catch {
-      toast.error("Failed to send email");
+    } catch (err: any) {
+      const msg = err?.message || err?.error_description || JSON.stringify(err) || "Unknown error";
+      toast.error(`Failed to send email: ${msg}`);
+      console.error("sendModalEmail error", err);
     } finally {
       setModalSending(false);
     }
