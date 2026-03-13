@@ -1256,7 +1256,7 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
             </div>
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground w-12 shrink-0">Reply-to</span>
-              <span className="text-foreground">info@treatengine.com</span>
+              <span className="text-foreground">info@treatleads.com</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground w-12 shrink-0">To</span>

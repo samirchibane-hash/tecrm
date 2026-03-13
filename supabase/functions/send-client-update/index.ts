@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 const FROM = "Treat Engine <info@treatengine.com>";
-const REPLY_TO = "info@treatengine.com";
+const REPLY_TO = "info@treatleads.com";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
