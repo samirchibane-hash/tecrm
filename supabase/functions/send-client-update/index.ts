@@ -32,27 +32,20 @@ serve(async (req) => {
       )
       .join("\n") || "No recent changes logged.";
 
-    const prompt = `You are writing a brief, professional client update email on behalf of Treat Engine, a digital marketing agency.
+    const prompt = `You are writing a short, direct client notification email on behalf of Treat Engine, a digital marketing agency.
 
-Write a short email (3–5 sentences max for the body) updating the client on their campaign performance. Be warm, confident, and results-focused. Do not use bullet points in the email body — write in natural prose. End with a short closing line and sign off as "The Treat Engine Team".
+Write 2–3 sentences maximum. Focus only on the specific campaign update below — do not mention general metrics or performance summaries. Be clear and professional. Sign off as "The Treat Engine Team".
 
 Account: ${accountName}
-Period: ${dateLabel}
+${customNote ? `Note: ${customNote}` : ""}
 
-Key metrics this period:
-- Ad Spend: ${fmt(kpis.totalSpend)}
-- GHL Leads: ${kpis.ghlLeads ?? 0} @ ${fmt(kpis.ghlCostPerLead)}/lead (target $40)
-- GHL Appointments: ${kpis.ghlAppointments ?? 0} @ ${fmt(kpis.ghlCostPerAppt)}/appt (target $200)
-${kpis.soldCount > 0 ? `- Deals Sold: ${kpis.soldCount}, Revenue: $${(kpis.totalRevenue ?? 0).toLocaleString()}` : ""}
-
-Recent campaign changes:
+Campaign update:
 ${updatesText}
-${customNote ? `\nAdditional note from the team: ${customNote}` : ""}
 
 Respond with a JSON object only — no markdown, no extra text:
 {"subject": "...", "body": "..."}
 
-The subject should be concise and specific (e.g. "Your campaign update — March 7"). The body should be plain text, no HTML.`;
+The subject should reference the specific update (e.g. "Campaign update — budget adjustment on March 7"). The body should be plain text, no HTML.`;
 
     // Generate email with Claude
     const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
