@@ -14,7 +14,7 @@ serve(async (req) => {
   }
 
   try {
-    const { accountName, recipientEmail, kpis, recentUpdates, dateLabel, customNote, draftOnly } = await req.json();
+    const { accountName, recipientEmail, recipientName, reportUrl, kpis, recentUpdates, dateLabel, customNote, draftOnly } = await req.json();
 
     if (!recipientEmail) throw new Error("recipientEmail is required");
 
@@ -34,7 +34,14 @@ serve(async (req) => {
 
     const prompt = `You are writing a short, direct client notification email on behalf of Treat Engine, a digital marketing agency.
 
-Write 2–3 sentences maximum. Focus only on the specific campaign update below — do not mention general metrics or performance summaries. Be clear and professional. Sign off as "The Treat Engine Team".
+Write 2–3 sentences maximum. Focus only on the specific campaign update below — do not mention general metrics or performance summaries. Be clear and professional.
+
+${recipientName ? `Address the recipient by first name: ${recipientName.split(" ")[0]}.` : "Do not use a name greeting."}
+
+End the email with this exact line on its own paragraph:
+"You can view your full performance report and update your appointment statuses here: ${reportUrl}"
+
+Sign off as "The Treat Engine Team".
 
 Account: ${accountName}
 ${customNote ? `Note: ${customNote}` : ""}

@@ -702,6 +702,11 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
     }
   };
 
+  const reportUrl = `https://reports.treatengine.com/report/${encodeURIComponent(accountName)}`;
+
+  const getRecipientName = (email: string) =>
+    pocs.find((p) => p.email === email)?.name || "";
+
   const openEmailModal = async (update: (typeof updates)[number]) => {
     setModalUpdate(update);
     setModalDraft(null);
@@ -713,8 +718,9 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
       const { data, error } = await supabase.functions.invoke("send-client-update", {
         body: {
           accountName,
-          recipientEmail: contactEmail || "preview@example.com",
-          kpis,
+          recipientEmail: firstEmail || "preview@example.com",
+          recipientName: getRecipientName(firstEmail),
+          reportUrl,
           recentUpdates: [{
             date: new Date(update.created_at).toLocaleDateString(),
             title: (update as any).title || update.category,
@@ -744,7 +750,8 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
         body: {
           accountName,
           recipientEmail: selectedRecipient,
-          kpis,
+          recipientName: getRecipientName(selectedRecipient),
+          reportUrl,
           recentUpdates: [{
             date: new Date(modalUpdate.created_at).toLocaleDateString(),
             title: (modalUpdate as any).title || modalUpdate.category,
