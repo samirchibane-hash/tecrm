@@ -618,7 +618,6 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
   const [selectedRecipient, setSelectedRecipient] = useState<string>("");
 
   // Per-entry email modal state
-  const [emailedIds, setEmailedIds] = useState<Set<string>>(new Set());
   const [modalUpdate, setModalUpdate] = useState<(typeof updates)[number] | null>(null);
   const [modalDraft, setModalDraft] = useState<{ subject: string; body: string } | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
@@ -767,7 +766,11 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
         throw new Error(body?.error || error?.message);
       }
       if (sendData?.error) throw new Error(sendData.error);
-      setEmailedIds((prev) => new Set([...prev, modalUpdate.id]));
+      await supabase
+        .from("campaign_updates")
+        .update({ emailed_at: new Date().toISOString() } as any)
+        .eq("id", modalUpdate.id);
+      queryClient.invalidateQueries({ queryKey: ["campaign-updates", accountName] });
       toast.success(`Email sent to ${selectedRecipient}`);
       setModalUpdate(null);
       setModalDraft(null);
@@ -1076,7 +1079,7 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] text-muted-foreground truncate">{update.campaign_name}</span>
                           <div className="flex items-center gap-1.5 shrink-0">
-                            {emailedIds.has(update.id) ? (
+                            {(update as any).emailed_at ? (
                               <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 font-medium">
                                 <CheckCircle2 className="h-3 w-3" /> Emailed
                               </span>
