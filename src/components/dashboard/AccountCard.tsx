@@ -762,7 +762,11 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
             : "All time",
         },
       });
-      if (error || sendData?.error) throw new Error(sendData?.error || error?.message);
+      if (error) {
+        const body = await (error as any)?.context?.json?.().catch(() => null);
+        throw new Error(body?.error || error?.message);
+      }
+      if (sendData?.error) throw new Error(sendData.error);
       setEmailedIds((prev) => new Set([...prev, modalUpdate.id]));
       toast.success(`Email sent to ${selectedRecipient}`);
       setModalUpdate(null);
