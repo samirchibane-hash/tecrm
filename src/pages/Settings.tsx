@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ALL_KPIS, type KpiKey } from "@/components/dashboard/AccountCard";
+import { ALL_KPIS, getPalette, type KpiKey } from "@/components/dashboard/AccountCard";
 import { useSettings, type ChangeLogOption } from "@/hooks/useSettings";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -199,16 +199,18 @@ const Settings = () => {
             <div className="space-y-2">
               {changeLogOptions.map((opt) => {
                 const isExpanded = expandedCategories[opt.label] !== false;
+                const pal = getPalette(opt.label, changeLogOptions);
                 return (
                   <Collapsible key={opt.label} open={isExpanded} onOpenChange={() => toggleExpanded(opt.label)}>
                     <div className="rounded-lg border border-border">
                       {/* Category header */}
                       <div className="flex items-center justify-between px-3 py-2.5">
                         <CollapsibleTrigger asChild>
-                          <button className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors">
+                          <button className={`flex items-center gap-2 text-sm font-medium hover:opacity-80 transition-opacity ${pal.label}`}>
+                            <span className={`inline-block h-2.5 w-2.5 rounded-full ${pal.dot}`} />
                             {isExpanded
-                              ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                              : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                              ? <ChevronDown className="h-3.5 w-3.5" />
+                              : <ChevronRight className="h-3.5 w-3.5" />
                             }
                             {opt.label}
                             <span className="text-xs text-muted-foreground font-normal">
@@ -231,11 +233,12 @@ const Settings = () => {
                           {opt.sub_options.length > 0 && (
                             <div className="flex flex-wrap gap-1.5">
                               {opt.sub_options.map((sub) => (
-                                <Badge key={sub} variant="secondary" className="gap-1 pr-1 text-xs">
+                                <Badge key={sub} variant="secondary" className={`gap-1 pr-1 text-xs ${pal.badge}`}>
+                                  <span className={`inline-block h-1.5 w-1.5 rounded-full ${pal.dot}`} />
                                   {sub}
                                   <button
                                     onClick={() => removeSubOption(opt.label, sub)}
-                                    className="ml-0.5 rounded-full hover:bg-muted p-0.5"
+                                    className="ml-0.5 rounded-full hover:bg-black/10 p-0.5"
                                   >
                                     <X className="h-2.5 w-2.5" />
                                   </button>

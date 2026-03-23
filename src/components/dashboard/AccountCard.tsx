@@ -124,6 +124,24 @@ const categoryColors: Record<string, string> = {
   other: "bg-muted text-muted-foreground",
 };
 
+const PALETTE: { badge: string; dot: string; label: string }[] = [
+  { badge: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",     dot: "bg-blue-500",    label: "text-blue-700 dark:text-blue-400" },
+  { badge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300", dot: "bg-emerald-500", label: "text-emerald-700 dark:text-emerald-400" },
+  { badge: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300", dot: "bg-purple-500",  label: "text-purple-700 dark:text-purple-400" },
+  { badge: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",  dot: "bg-amber-500",   label: "text-amber-700 dark:text-amber-400" },
+  { badge: "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300",      dot: "bg-rose-500",    label: "text-rose-700 dark:text-rose-400" },
+  { badge: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300",      dot: "bg-cyan-500",    label: "text-cyan-700 dark:text-cyan-400" },
+  { badge: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300", dot: "bg-orange-500", label: "text-orange-700 dark:text-orange-400" },
+  { badge: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300", dot: "bg-indigo-500", label: "text-indigo-700 dark:text-indigo-400" },
+  { badge: "bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300",      dot: "bg-teal-500",    label: "text-teal-700 dark:text-teal-400" },
+  { badge: "bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-300",      dot: "bg-pink-500",    label: "text-pink-700 dark:text-pink-400" },
+];
+
+export function getPalette(label: string, options: ChangeLogOption[]) {
+  const idx = options.findIndex((o) => o.label === label);
+  return PALETTE[(idx >= 0 ? idx : 0) % PALETTE.length];
+}
+
 export type KpiKey =
   | "totalSpend" | "totalClicks" | "totalImpressions" | "totalReach" | "avgCTR" | "avgCPC" | "avgCPM"
   | "webApptTotal" | "webApptCost" | "apptTotal" | "apptCost"
@@ -986,21 +1004,30 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
                     <SelectValue placeholder="Select campaign & change type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {changeLogOptions.map((opt) => (
-                      <SelectGroup key={opt.label}>
-                        <SelectLabel>{opt.label}</SelectLabel>
-                        {opt.sub_options.length > 0
-                          ? opt.sub_options.map((sub) => (
-                              <SelectItem key={`${opt.label}||${sub}`} value={`${opt.label}||${sub}`}>
-                                {sub}
-                              </SelectItem>
-                            ))
-                          : (
-                              <SelectItem value={`${opt.label}||`}>{opt.label}</SelectItem>
-                            )
-                        }
-                      </SelectGroup>
-                    ))}
+                    {changeLogOptions.map((opt) => {
+                      const pal = getPalette(opt.label, changeLogOptions);
+                      return (
+                        <SelectGroup key={opt.label}>
+                          <SelectLabel className={`flex items-center gap-1.5 ${pal.label}`}>
+                            <span className={`inline-block h-2 w-2 rounded-full ${pal.dot}`} />
+                            {opt.label}
+                          </SelectLabel>
+                          {opt.sub_options.length > 0
+                            ? opt.sub_options.map((sub) => (
+                                <SelectItem key={`${opt.label}||${sub}`} value={`${opt.label}||${sub}`}>
+                                  <span className="flex items-center gap-1.5">
+                                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${pal.dot} opacity-70`} />
+                                    {sub}
+                                  </span>
+                                </SelectItem>
+                              ))
+                            : (
+                                <SelectItem value={`${opt.label}||`}>{opt.label}</SelectItem>
+                              )
+                          }
+                        </SelectGroup>
+                      );
+                    })}
                     {(() => {
                       const coveredLabels = new Set(changeLogOptions.map((o) => o.label));
                       const extra = campaigns.filter((c) => !coveredLabels.has(c));
@@ -1066,8 +1093,9 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
                     return (
                       <div key={update.id} className="group rounded-md border border-border/50 p-2 space-y-1">
                         <div className="flex items-center justify-between gap-1 flex-wrap">
-                          <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${categoryColors[update.category] ?? categoryColors.other}`}>
-                            {(update as any).title || CATEGORIES.find((c) => c.value === update.category)?.label || update.category}
+                          <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${getPalette(update.campaign_name, changeLogOptions).badge}`}>
+                            <span className={`inline-block h-1.5 w-1.5 rounded-full mr-1 ${getPalette(update.campaign_name, changeLogOptions).dot}`} />
+                            {(update as any).title || update.campaign_name || update.category}
                           </Badge>
                           <span className="text-[10px] text-muted-foreground shrink-0">
                             {new Date(update.created_at).toLocaleDateString()}
