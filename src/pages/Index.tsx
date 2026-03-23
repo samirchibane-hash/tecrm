@@ -24,10 +24,10 @@ const Index = () => {
   const visibleKpis = settings.visible_kpis.filter((k) => enabledKpis.includes(k));
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: startOfDay(subDays(new Date(), 7)),
-    to: startOfDay(subDays(new Date(), 1)),
+    from: startOfMonth(new Date()),
+    to: startOfDay(new Date()),
   });
-  const [presetLabel, setPresetLabel] = useState<string>("Last 7 days");
+  const [presetLabel, setPresetLabel] = useState<string>("Month to Date");
   const [showCustomCalendar, setShowCustomCalendar] = useState(false);
 
   const filteredData = useMemo(() => {
@@ -136,6 +136,7 @@ const Index = () => {
                   {[
                     { label: "Today", range: { from: startOfDay(new Date()), to: startOfDay(new Date()) } },
                     { label: "Yesterday", range: { from: startOfDay(subDays(new Date(), 1)), to: startOfDay(subDays(new Date(), 1)) } },
+                    { label: "Month to Date", range: { from: startOfMonth(new Date()), to: startOfDay(new Date()) } },
                     { label: "Last 7 days", range: { from: startOfDay(subDays(new Date(), 7)), to: startOfDay(subDays(new Date(), 1)) } },
                     { label: "Last 14 days", range: { from: startOfDay(subDays(new Date(), 14)), to: startOfDay(subDays(new Date(), 1)) } },
                     { label: "Last 28 days", range: { from: startOfDay(subDays(new Date(), 28)), to: startOfDay(subDays(new Date(), 1)) } },
