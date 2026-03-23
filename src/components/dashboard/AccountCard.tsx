@@ -41,6 +41,7 @@ import {
   Pencil,
   CheckCircle2,
   Settings2,
+  Clock,
 } from "lucide-react";
 import {
   Dialog,
@@ -553,6 +554,14 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
       queryClient.invalidateQueries({ queryKey: ["campaign-updates", accountName] });
       toast.success("Update deleted");
     },
+  });
+
+  const updateStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: "assigned" | "published" }) => {
+      const { error } = await supabase.from("campaign_updates").update({ status }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["campaign-updates", accountName] }),
   });
 
   // Account Links
@@ -1107,18 +1116,37 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] text-muted-foreground truncate">{update.campaign_name}</span>
                           <div className="flex items-center gap-1.5 shrink-0">
+                            {/* Status toggle */}
+                            {(update as any).status === "published" ? (
+                              <button
+                                onClick={() => updateStatus.mutate({ id: update.id, status: "assigned" })}
+                                className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium hover:opacity-70 transition-opacity"
+                                title="Click to mark as Assigned"
+                              >
+                                <CheckCircle2 className="h-3 w-3" /> Published
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => updateStatus.mutate({ id: update.id, status: "published" })}
+                                className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-medium hover:opacity-70 transition-opacity"
+                                title="Click to mark as Published"
+                              >
+                                <Clock className="h-3 w-3" /> Assigned
+                              </button>
+                            )}
+                            {/* Email — only available when Published */}
                             {(update as any).emailed_at ? (
                               <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 font-medium">
                                 <CheckCircle2 className="h-3 w-3" /> Emailed
                               </span>
-                            ) : (
+                            ) : (update as any).status === "published" ? (
                               <button
                                 onClick={() => openEmailModal(update)}
                                 className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary font-medium transition-colors"
                               >
                                 <Mail className="h-3 w-3" /> Email
                               </button>
-                            )}
+                            ) : null}
                             <button
                               onClick={() => deleteUpdate.mutate(update.id)}
                               className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
