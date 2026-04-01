@@ -54,12 +54,33 @@ const CompetitorAnalysis = () => {
     setSearched(true);
     setAds([]);
     try {
-      const { data, error } = await supabase.functions.invoke("apify-competitor", {
-        body: { searchTerms: searchTerm.trim(), country, adType, limit: parseInt(limit) },
+      // Start the run
+      const { data: startData, error: startError } = await supabase.functions.invoke("apify-competitor", {
+        body: { action: "start", searchTerms: searchTerm.trim(), country, adType, limit: parseInt(limit) },
       });
-      if (error || data?.error) throw new Error(data?.error || error?.message);
-      setAds(data.ads ?? []);
-      if (data.ads?.length === 0) toast.info("No ads found for that search.");
+      if (startError || startData?.error) throw new Error(startData?.error || startError?.message);
+
+      const { runId, datasetId } = startData;
+
+      // Poll until done
+      let attempts = 0;
+      while (attempts < 40) {
+        await new Promise((r) => setTimeout(r, 5000));
+        attempts++;
+
+        const { data: pollData, error: pollError } = await supabase.functions.invoke("apify-competitor", {
+          body: { action: "poll", runId, datasetId, limit: parseInt(limit) },
+        });
+        if (pollError || pollData?.error) throw new Error(pollData?.error || pollError?.message);
+
+        if (pollData.status === "SUCCEEDED") {
+          setAds(pollData.ads ?? []);
+          if (!pollData.ads?.length) toast.info("No ads found for that search.");
+          return;
+        }
+        // Still running — keep polling
+      }
+      throw new Error("Search timed out. The actor is taking too long.");
     } catch (err: any) {
       toast.error(`Search failed: ${err.message}`);
     } finally {

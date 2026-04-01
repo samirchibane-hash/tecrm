@@ -14,21 +14,44 @@ serve(async (req) => {
     const apifyToken = Deno.env.get("APIFY_API_TOKEN");
     if (!apifyToken) throw new Error("APIFY_API_TOKEN not configured");
 
-    const { searchTerms, country = "US", adType = "ALL", limit = 20 } = await req.json();
-    if (!searchTerms) throw new Error("searchTerms is required");
+    const { action, searchTerms, country = "US", adType = "ALL", limit = 20, runId, datasetId } = await req.json();
 
-    // Start actor run
+    // ACTION: poll — check run status and return results if done
+    if (action === "poll") {
+      if (!runId) throw new Error("runId is required for poll");
+      const statusRes = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${apifyToken}`);
+      const statusData = await statusRes.json();
+      const status = statusData.data?.status;
+
+      if (status === "RUNNING" || status === "READY" || status === "ABORTING") {
+        return new Response(JSON.stringify({ status }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (status !== "SUCCEEDED") throw new Error(`Apify run ended with status: ${status}`);
+
+      const resultsRes = await fetch(
+        `https://api.apify.com/v2/datasets/${datasetId}/items?token=${apifyToken}&limit=${limit}`
+      );
+      if (!resultsRes.ok) throw new Error(`Apify results error ${resultsRes.status}`);
+      const ads = await resultsRes.json();
+
+      return new Response(JSON.stringify({ status: "SUCCEEDED", ads }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ACTION: start — kick off the actor run
+    if (!searchTerms) throw new Error("searchTerms is required");
+    const fbUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=${adType === "ALL" ? "all" : adType.toLowerCase()}&country=${country}&q=${encodeURIComponent(searchTerms)}`;
+
     const runRes = await fetch(
-      "https://api.apify.com/v2/acts/apify~facebook-ads-library-scraper/runs?token=" + apifyToken,
+      "https://api.apify.com/v2/acts/apify~facebook-ads-scraper/runs?token=" + apifyToken,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          searchTerms: [searchTerms],
-          country,
-          adType,
-          maxResults: limit,
-        }),
+        body: JSON.stringify({ startUrls: [{ url: fbUrl }], maxResults: limit }),
       }
     );
 
@@ -38,44 +61,19 @@ serve(async (req) => {
     }
 
     const runData = await runRes.json();
-    const runId = runData.data?.id;
-    if (!runId) throw new Error("No run ID returned from Apify");
+    const newRunId = runData.data?.id;
+    const newDatasetId = runData.data?.defaultDatasetId;
+    if (!newRunId) throw new Error("No run ID returned from Apify");
 
-    // Poll for completion (max 60s)
-    let status = "RUNNING";
-    let attempts = 0;
-    while (status === "RUNNING" || status === "READY") {
-      await new Promise((r) => setTimeout(r, 3000));
-      attempts++;
-      if (attempts > 20) throw new Error("Apify run timed out");
-
-      const statusRes = await fetch(
-        `https://api.apify.com/v2/actor-runs/${runId}?token=${apifyToken}`
-      );
-      const statusData = await statusRes.json();
-      status = statusData.data?.status;
-    }
-
-    if (status !== "SUCCEEDED") throw new Error(`Apify run ended with status: ${status}`);
-
-    // Fetch results
-    const datasetId = runData.data?.defaultDatasetId;
-    const resultsRes = await fetch(
-      `https://api.apify.com/v2/datasets/${datasetId}/items?token=${apifyToken}&limit=${limit}`
-    );
-
-    if (!resultsRes.ok) throw new Error(`Apify results error ${resultsRes.status}`);
-
-    const results = await resultsRes.json();
-
-    return new Response(JSON.stringify({ success: true, ads: results }), {
+    return new Response(JSON.stringify({ status: "RUNNING", runId: newRunId, datasetId: newDatasetId }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     console.error("apify-competitor error:", msg);
+    // Return 200 so the client can read the error body
     return new Response(JSON.stringify({ error: msg }), {
-      status: 500,
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
