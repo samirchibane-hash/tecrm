@@ -74,6 +74,7 @@ const CompetitorAnalysis = () => {
         if (pollError || pollData?.error) throw new Error(pollData?.error || pollError?.message);
 
         if (pollData.status === "SUCCEEDED") {
+          console.log("Raw Apify ads:", JSON.stringify(pollData.ads?.[0], null, 2));
           setAds(pollData.ads ?? []);
           if (!pollData.ads?.length) toast.info("No ads found for that search.");
           return;
