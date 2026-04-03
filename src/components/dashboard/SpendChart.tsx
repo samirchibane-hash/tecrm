@@ -37,7 +37,7 @@ export function SpendChart({ data }: SpendChartProps) {
         <CardTitle className="text-base font-semibold">Spend Over Time</CardTitle>
       </CardHeader>
       <CardContent>
-        <ChartContainer config={chartConfig} className="h-[300px] w-full">
+        <ChartContainer config={chartConfig} className="h-[200px] sm:h-[300px] w-full">
           <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="spendGradient" x1="0" y1="0" x2="0" y2="1">

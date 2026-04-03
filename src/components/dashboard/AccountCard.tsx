@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -187,6 +188,7 @@ interface AccountCardProps {
 
 export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, visibleKpis, dateRange, changeLogOptions = [] }: AccountCardProps) {
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [logPage, setLogPage] = useState(0);
   const [activeAdChart, setActiveAdChart] = useState<"leads" | "appts" | null>(null);
 
@@ -816,9 +818,9 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
     <Card className="border-border/60 transition-all">
       <CardContent className="p-6 space-y-4">
         {/* Two-column: KPIs left, Recent Changes right */}
-        <div className="flex gap-4">
+        <div className="flex flex-col gap-4 md:flex-row">
           {/* Left: Account name + KPIs */}
-          <div className="w-[42%] flex flex-col gap-3">
+          <div className="w-full md:w-[42%] flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold text-foreground">{accountName}</h2>
             <button
@@ -985,7 +987,7 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
           </div>{/* end left column */}
 
           {/* Right: Recent Changes */}
-          <div className="flex-1 border-l border-border/60 pl-4 min-w-0 flex flex-col gap-2">
+          <div className="flex-1 border-t md:border-t-0 md:border-l border-border/60 pt-4 md:pt-0 md:pl-4 min-w-0 flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                 <ClipboardList className="h-3.5 w-3.5" /> Recent Changes
@@ -1149,7 +1151,7 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
                             ) : null}
                             <button
                               onClick={() => deleteUpdate.mutate(update.id)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                              className="opacity-50 md:opacity-0 md:group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
                             >
                               <Trash2 className="h-3 w-3" />
                             </button>
@@ -1238,8 +1240,8 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
                     <YAxis
                       type="category"
                       dataKey="name"
-                      width={160}
-                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                      width={isMobile ? 90 : 160}
+                      tick={{ fontSize: isMobile ? 10 : 11, fill: "hsl(var(--muted-foreground))" }}
                       tickLine={false}
                       axisLine={false}
                     />

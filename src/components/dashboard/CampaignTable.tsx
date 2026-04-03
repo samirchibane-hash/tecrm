@@ -72,10 +72,10 @@ export function CampaignTable({ data }: CampaignTableProps) {
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead>Campaign</TableHead>
-                <TableHead>Account</TableHead>
+                <TableHead className="hidden md:table-cell">Account</TableHead>
                 <TableHead className="text-right">Spend</TableHead>
-                <TableHead className="text-right">Clicks</TableHead>
-                <TableHead className="text-right">Impressions</TableHead>
+                <TableHead className="text-right hidden sm:table-cell">Clicks</TableHead>
+                <TableHead className="text-right hidden md:table-cell">Impressions</TableHead>
                 <TableHead className="text-right">CTR</TableHead>
                 <TableHead className="text-right">CPC</TableHead>
               </TableRow>
@@ -83,13 +83,13 @@ export function CampaignTable({ data }: CampaignTableProps) {
             <TableBody>
               {campaigns.map((c, i) => (
                 <TableRow key={i}>
-                  <TableCell className="font-medium">{c.campaign}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.account}</TableCell>
+                  <TableCell className="font-medium max-w-[140px] truncate">{c.campaign}</TableCell>
+                  <TableCell className="text-muted-foreground hidden md:table-cell">{c.account}</TableCell>
                   <TableCell className="text-right font-mono">
                     ${c.totalSpend.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </TableCell>
-                  <TableCell className="text-right">{c.totalClicks.toLocaleString()}</TableCell>
-                  <TableCell className="text-right">{c.totalImpressions.toLocaleString()}</TableCell>
+                  <TableCell className="text-right hidden sm:table-cell">{c.totalClicks.toLocaleString()}</TableCell>
+                  <TableCell className="text-right hidden md:table-cell">{c.totalImpressions.toLocaleString()}</TableCell>
                   <TableCell className="text-right">{c.avgCTR.toFixed(2)}%</TableCell>
                   <TableCell className="text-right font-mono">${c.avgCPC.toFixed(2)}</TableCell>
                 </TableRow>

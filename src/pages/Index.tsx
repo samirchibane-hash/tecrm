@@ -115,20 +115,20 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:py-10 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">Ad Accounts</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Ad Accounts</h1>
             <p className="mt-1 text-sm text-muted-foreground">Campaign performance &amp; change logs</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {/* Date Range Picker */}
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <CalendarDays className="h-4 w-4" />
-                  <span className="text-xs">{dateLabel}</span>
+                <Button variant="outline" size="sm" className="gap-2 max-w-[180px] sm:max-w-none">
+                  <CalendarDays className="h-4 w-4 shrink-0" />
+                  <span className="text-xs truncate">{dateLabel}</span>
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-48 p-1.5" align="end">
@@ -206,8 +206,8 @@ const Index = () => {
             </Popover>
 
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-              <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
-              Refresh
+              <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline ml-2">Refresh</span>
             </Button>
 
             <Button variant="ghost" size="sm" asChild>

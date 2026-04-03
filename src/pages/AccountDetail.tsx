@@ -50,7 +50,7 @@ const AccountDetail = () => {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight text-foreground">{decodedName}</h1>
+              <h1 className="text-xl sm:text-3xl font-bold tracking-tight text-foreground">{decodedName}</h1>
               <p className="mt-1 text-sm text-muted-foreground">{campaigns.length} campaigns</p>
             </div>
           </div>
