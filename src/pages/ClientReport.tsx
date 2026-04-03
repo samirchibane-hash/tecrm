@@ -8,6 +8,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -20,7 +21,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ReferenceLine } from "recharts";
-import { CalendarDays, Image as ImageIcon, ExternalLink, ChevronLeft } from "lucide-react";
+import { CalendarDays, Image as ImageIcon, ExternalLink, ChevronLeft, Phone, Mail, MapPin, Clock } from "lucide-react";
 import { format, startOfDay, subDays, startOfMonth, endOfMonth, subMonths, max } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
@@ -392,6 +393,7 @@ export default function ClientReport() {
   });
 
   const [dealValueDraft, setDealValueDraft] = useState<Record<string, string>>({});
+  const [selectedAppt, setSelectedAppt] = useState<(typeof appointments)[0] | null>(null);
 
   const { mutate: saveDealValue } = useMutation({
     mutationFn: async ({ ghl_contact_id, deal_value }: { ghl_contact_id: string; deal_value: number | null }) => {
@@ -842,66 +844,80 @@ export default function ClientReport() {
                   Appointments{" "}
                   <span className="ml-1 text-xs font-normal text-muted-foreground/70">({appointments.length})</span>
                 </h2>
-                <Card className="border-border/50 bg-white shadow-sm overflow-hidden">
-                  <div className="overflow-x-auto">
-                  <div className="min-w-[560px] divide-y divide-border/60">
-                    {/* Header row */}
-                    <div className="grid grid-cols-[1fr_140px_1fr_180px] gap-4 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-slate-50">
-                      <span>Contact</span>
-                      <span>Created On</span>
-                      <span>Ad Source</span>
-                      <span>Outcome</span>
-                    </div>
 
-                    {appointments.map((appt) => {
-                      const statusVal = ((appt as any).appointment_status ?? "") as ApptStatus | "";
-                      const statusMeta = APPT_STATUSES.find((s) => s.value === statusVal);
-                      const savedDealValue = (appt as any).deal_value as number | null ?? null;
-                      const dealValueInput = dealValueDraft[appt.ghl_contact_id] ?? (savedDealValue != null ? String(savedDealValue) : "");
-
-                      return (
-                        <div
-                          key={appt.ghl_contact_id}
-                          className="grid grid-cols-[1fr_140px_1fr_180px] gap-4 px-4 py-3 items-start text-sm"
-                        >
-                          {/* Contact */}
-                          <div className="pt-1">
-                            <p className="font-medium text-foreground leading-tight">
-                              {appt.contact_name ?? "—"}
-                            </p>
-                            {appt.contact_phone && (
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {String(appt.contact_phone)}
-                              </p>
+                {/* Contact detail dialog */}
+                {selectedAppt && (() => {
+                  const statusVal = ((selectedAppt as any).appointment_status ?? "") as ApptStatus | "";
+                  const statusMeta = APPT_STATUSES.find((s) => s.value === statusVal);
+                  const savedDealValue = (selectedAppt as any).deal_value as number | null ?? null;
+                  const dialogDealValueInput = dealValueDraft[selectedAppt.ghl_contact_id] ?? (savedDealValue != null ? String(savedDealValue) : "");
+                  return (
+                    <Dialog open onOpenChange={(open) => { if (!open) setSelectedAppt(null); }}>
+                      <DialogContent className="max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>{selectedAppt.contact_name ?? "Contact"}</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-5 pt-1">
+                          {/* Contact info */}
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contact Info</p>
+                            {selectedAppt.contact_phone && (
+                              <div className="flex items-center gap-2 text-sm">
+                                <Phone className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                <a href={`tel:${selectedAppt.contact_phone}`} className="text-primary hover:underline">{String(selectedAppt.contact_phone)}</a>
+                              </div>
+                            )}
+                            {(selectedAppt as any).contact_email && (
+                              <div className="flex items-center gap-2 text-sm">
+                                <Mail className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                <a href={`mailto:${(selectedAppt as any).contact_email}`} className="text-primary hover:underline truncate">{(selectedAppt as any).contact_email}</a>
+                              </div>
+                            )}
+                            {(selectedAppt as any).contact_address && (
+                              <div className="flex items-start gap-2 text-sm">
+                                <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground mt-0.5" />
+                                <span className="text-foreground">{(selectedAppt as any).contact_address}</span>
+                              </div>
                             )}
                           </div>
 
-                          {/* Created On */}
-                          <span className="text-xs text-muted-foreground whitespace-nowrap pt-1.5">
-                            {appt.created_on
-                              ? format(new Date(appt.created_on + "T00:00:00"), "MMM d, yyyy")
-                              : "—"}
-                          </span>
+                          {/* Appointment info */}
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Appointment</p>
+                            <div className="flex items-center gap-2 text-sm">
+                              <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                              <span>{selectedAppt.created_on ? format(new Date(selectedAppt.created_on + "T00:00:00"), "MMM d, yyyy") : "—"}</span>
+                            </div>
+                            {(selectedAppt as any).appointment_time && (
+                              <div className="flex items-center gap-2 text-sm">
+                                <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                <span>{(selectedAppt as any).appointment_time}</span>
+                              </div>
+                            )}
+                            {selectedAppt.type && (
+                              <Badge variant="secondary" className="text-xs capitalize">{selectedAppt.type}</Badge>
+                            )}
+                          </div>
 
                           {/* Ad source */}
-                          <span className="text-xs text-muted-foreground truncate pt-1.5">
-                            {appt["Ad Name"] ?? "—"}
-                          </span>
+                          {selectedAppt["Ad Name"] && (
+                            <div className="space-y-1.5">
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Ad Source</p>
+                              <p className="text-sm text-foreground">{selectedAppt["Ad Name"]}</p>
+                            </div>
+                          )}
 
-                          {/* Outcome cell: status select + optional deal value input */}
-                          <div className="flex flex-col gap-1.5">
+                          {/* Outcome */}
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Outcome</p>
                             <Select
                               value={statusVal}
-                              onValueChange={(val) =>
-                                saveOutcome({ ghl_contact_id: appt.ghl_contact_id, status: val as ApptStatus | "" })
-                              }
+                              onValueChange={(val) => saveOutcome({ ghl_contact_id: selectedAppt.ghl_contact_id, status: val as ApptStatus | "" })}
                             >
-                              <SelectTrigger className="h-8 text-xs">
+                              <SelectTrigger className="h-9 text-sm">
                                 <SelectValue placeholder="Set outcome…">
                                   {statusMeta ? (
-                                    <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", statusMeta.color)}>
-                                      {statusMeta.label}
-                                    </span>
+                                    <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", statusMeta.color)}>{statusMeta.label}</span>
                                   ) : (
                                     <span className="text-muted-foreground">Set outcome…</span>
                                   )}
@@ -910,33 +926,146 @@ export default function ClientReport() {
                               <SelectContent>
                                 {APPT_STATUSES.map((s) => (
                                   <SelectItem key={s.value} value={s.value}>
-                                    <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", s.color)}>
-                                      {s.label}
-                                    </span>
+                                    <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", s.color)}>{s.label}</span>
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
+                            {statusVal === "sold" && (
+                              <div className="relative flex items-center">
+                                <span className="absolute left-2.5 text-sm text-muted-foreground pointer-events-none">$</span>
+                                <input
+                                  type="number" min="0" step="0.01"
+                                  className="h-9 w-full rounded-md border border-input bg-background pl-6 pr-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                  placeholder="Deal value"
+                                  value={dialogDealValueInput}
+                                  onChange={(e) => setDealValueDraft((prev) => ({ ...prev, [selectedAppt.ghl_contact_id]: e.target.value }))}
+                                  onBlur={(e) => {
+                                    const raw = e.target.value.trim();
+                                    const newVal = raw === "" ? null : parseFloat(raw);
+                                    if (newVal === null || !isNaN(newVal)) saveDealValue({ ghl_contact_id: selectedAppt.ghl_contact_id, deal_value: newVal });
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  );
+                })()}
 
+                {/* Mobile view: 2 columns — Contact (tap to open) + Outcome */}
+                <Card className="md:hidden border-border/50 bg-white shadow-sm overflow-hidden">
+                  <div className="divide-y divide-border/60">
+                    <div className="grid grid-cols-[1fr_160px] gap-3 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-slate-50">
+                      <span>Contact</span>
+                      <span>Outcome</span>
+                    </div>
+                    {appointments.map((appt) => {
+                      const statusVal = ((appt as any).appointment_status ?? "") as ApptStatus | "";
+                      const statusMeta = APPT_STATUSES.find((s) => s.value === statusVal);
+                      return (
+                        <div key={appt.ghl_contact_id} className="grid grid-cols-[1fr_160px] gap-3 px-4 py-3 items-center">
+                          <button
+                            onClick={() => setSelectedAppt(appt)}
+                            className="text-left"
+                          >
+                            <p className="font-medium text-primary hover:underline leading-tight text-sm">{appt.contact_name ?? "—"}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {appt.created_on ? format(new Date(appt.created_on + "T00:00:00"), "MMM d") : ""}
+                            </p>
+                          </button>
+                          <Select
+                            value={statusVal}
+                            onValueChange={(val) => saveOutcome({ ghl_contact_id: appt.ghl_contact_id, status: val as ApptStatus | "" })}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Set outcome…">
+                                {statusMeta ? (
+                                  <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", statusMeta.color)}>{statusMeta.label}</span>
+                                ) : (
+                                  <span className="text-muted-foreground">Set outcome…</span>
+                                )}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {APPT_STATUSES.map((s) => (
+                                <SelectItem key={s.value} value={s.value}>
+                                  <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", s.color)}>{s.label}</span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+
+                {/* Desktop view: full 4-column grid */}
+                <Card className="hidden md:block border-border/50 bg-white shadow-sm overflow-hidden">
+                  <div className="divide-y divide-border/60">
+                    <div className="grid grid-cols-[1fr_140px_1fr_180px] gap-4 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-slate-50">
+                      <span>Contact</span>
+                      <span>Created On</span>
+                      <span>Ad Source</span>
+                      <span>Outcome</span>
+                    </div>
+                    {appointments.map((appt) => {
+                      const statusVal = ((appt as any).appointment_status ?? "") as ApptStatus | "";
+                      const statusMeta = APPT_STATUSES.find((s) => s.value === statusVal);
+                      const savedDealValue = (appt as any).deal_value as number | null ?? null;
+                      const dealValueInput = dealValueDraft[appt.ghl_contact_id] ?? (savedDealValue != null ? String(savedDealValue) : "");
+                      return (
+                        <div key={appt.ghl_contact_id} className="grid grid-cols-[1fr_140px_1fr_180px] gap-4 px-4 py-3 items-start text-sm">
+                          <div className="pt-1">
+                            <button onClick={() => setSelectedAppt(appt)} className="text-left">
+                              <p className="font-medium text-primary hover:underline leading-tight">{appt.contact_name ?? "—"}</p>
+                            </button>
+                            {appt.contact_phone && (
+                              <p className="text-xs text-muted-foreground mt-0.5">{String(appt.contact_phone)}</p>
+                            )}
+                          </div>
+                          <span className="text-xs text-muted-foreground whitespace-nowrap pt-1.5">
+                            {appt.created_on ? format(new Date(appt.created_on + "T00:00:00"), "MMM d, yyyy") : "—"}
+                          </span>
+                          <span className="text-xs text-muted-foreground truncate pt-1.5">{appt["Ad Name"] ?? "—"}</span>
+                          <div className="flex flex-col gap-1.5">
+                            <Select
+                              value={statusVal}
+                              onValueChange={(val) => saveOutcome({ ghl_contact_id: appt.ghl_contact_id, status: val as ApptStatus | "" })}
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="Set outcome…">
+                                  {statusMeta ? (
+                                    <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", statusMeta.color)}>{statusMeta.label}</span>
+                                  ) : (
+                                    <span className="text-muted-foreground">Set outcome…</span>
+                                  )}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {APPT_STATUSES.map((s) => (
+                                  <SelectItem key={s.value} value={s.value}>
+                                    <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", s.color)}>{s.label}</span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                             {statusVal === "sold" && (
                               <div className="relative flex items-center">
                                 <span className="absolute left-2 text-xs text-muted-foreground pointer-events-none">$</span>
                                 <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
+                                  type="number" min="0" step="0.01"
                                   className="h-7 w-full rounded-md border border-input bg-background pl-5 pr-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                                   placeholder="Deal value"
                                   value={dealValueInput}
-                                  onChange={(e) =>
-                                    setDealValueDraft((prev) => ({ ...prev, [appt.ghl_contact_id]: e.target.value }))
-                                  }
+                                  onChange={(e) => setDealValueDraft((prev) => ({ ...prev, [appt.ghl_contact_id]: e.target.value }))}
                                   onBlur={(e) => {
                                     const raw = e.target.value.trim();
                                     const newVal = raw === "" ? null : parseFloat(raw);
-                                    if (newVal === null || !isNaN(newVal)) {
-                                      saveDealValue({ ghl_contact_id: appt.ghl_contact_id, deal_value: newVal });
-                                    }
+                                    if (newVal === null || !isNaN(newVal)) saveDealValue({ ghl_contact_id: appt.ghl_contact_id, deal_value: newVal });
                                   }}
                                 />
                               </div>
@@ -945,7 +1074,6 @@ export default function ClientReport() {
                         </div>
                       );
                     })}
-                  </div>
                   </div>
                 </Card>
               </section>
