@@ -861,6 +861,10 @@ export default function ClientReport() {
                           {/* Contact info */}
                           <div className="space-y-2">
                             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contact Info</p>
+                            <div className="flex items-center gap-2 text-sm">
+                              <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                              <span className="text-muted-foreground">Lead created {selectedAppt.created_on ? format(new Date(selectedAppt.created_on + "T00:00:00"), "MMM d, yyyy") : "—"}</span>
+                            </div>
                             {selectedAppt.contact_phone && (
                               <div className="flex items-center gap-2 text-sm">
                                 <Phone className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -884,10 +888,6 @@ export default function ClientReport() {
                           {/* Appointment info */}
                           <div className="space-y-2">
                             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Appointment</p>
-                            <div className="flex items-center gap-2 text-sm">
-                              <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                              <span>{selectedAppt.created_on ? format(new Date(selectedAppt.created_on + "T00:00:00"), "MMM d, yyyy") : "—"}</span>
-                            </div>
                             {(selectedAppt as any).appointment_time && (
                               <div className="flex items-center gap-2 text-sm">
                                 <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -972,9 +972,6 @@ export default function ClientReport() {
                             className="text-left"
                           >
                             <p className="font-medium text-primary hover:underline leading-tight text-sm">{appt.contact_name ?? "—"}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {appt.created_on ? format(new Date(appt.created_on + "T00:00:00"), "MMM d") : ""}
-                            </p>
                           </button>
                           <Select
                             value={statusVal}
