@@ -604,15 +604,57 @@ export default function ClientReport() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <div className="border-b border-border/50 bg-white px-6 py-5 shadow-sm">
+      <div className="border-b border-border/50 bg-white px-4 py-4 sm:px-6 sm:py-5 shadow-sm">
         <div className="mx-auto max-w-6xl">
           <p className="text-xs font-semibold uppercase tracking-widest text-primary">Performance Report</p>
-          <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-foreground">{decodedName}</h1>
+          <h1 className="mt-0.5 text-xl sm:text-2xl font-bold tracking-tight text-foreground">{decodedName}</h1>
+        </div>
+      </div>
+
+      {/* Mobile toolbar — date picker + section nav (hidden on md+) */}
+      <div className="md:hidden sticky top-0 z-10 border-b border-border/50 bg-white px-4 py-2 shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1 overflow-x-auto">
+            {[{ href: "#kpi-metrics", label: "Metrics" }, { href: "#appointments", label: "Appts" }, { href: "#change-log", label: "Changes" }].map(({ href, label }) => (
+              <a key={href} href={href} className="shrink-0 rounded-md px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors">
+                {label}
+              </a>
+            ))}
+          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="shrink-0 flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted/60 transition-colors">
+                <CalendarDays className="h-3.5 w-3.5 shrink-0 text-primary" />
+                <span className="truncate max-w-[100px]">{presetLabel || dateRangeStr || "All time"}</span>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-48 p-1.5" align="end">
+              <div className="flex flex-col gap-0.5">
+                {[
+                  { label: "Last 7 days", range: { from: max([startOfDay(subDays(new Date(), 7)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
+                  { label: "Last 14 days", range: { from: max([startOfDay(subDays(new Date(), 14)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
+                  { label: "Last 30 days", range: { from: max([startOfDay(subDays(new Date(), 29)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
+                  { label: "Last month", range: { from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) } },
+                  { label: "This month", range: { from: max([startOfMonth(new Date()), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
+                ].map((preset) => (
+                  <Button
+                    key={preset.label}
+                    variant={presetLabel === preset.label ? "secondary" : "ghost"}
+                    size="sm"
+                    className="justify-start text-xs h-10 rounded-sm"
+                    onClick={() => { setDateRange(preset.range); setPresetLabel(preset.label); }}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
       {/* Body */}
-      <div className="mx-auto max-w-6xl px-6 py-8">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
         <div className="flex gap-6 items-start">
 
           {/* Sidebar nav */}
@@ -801,7 +843,8 @@ export default function ClientReport() {
                   <span className="ml-1 text-xs font-normal text-muted-foreground/70">({appointments.length})</span>
                 </h2>
                 <Card className="border-border/50 bg-white shadow-sm overflow-hidden">
-                  <div className="divide-y divide-border/60">
+                  <div className="overflow-x-auto">
+                  <div className="min-w-[560px] divide-y divide-border/60">
                     {/* Header row */}
                     <div className="grid grid-cols-[1fr_140px_1fr_180px] gap-4 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-slate-50">
                       <span>Contact</span>
@@ -902,6 +945,7 @@ export default function ClientReport() {
                         </div>
                       );
                     })}
+                  </div>
                   </div>
                 </Card>
               </section>
