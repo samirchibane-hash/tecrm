@@ -10,6 +10,7 @@ import CompetitorAnalysis from "./pages/CompetitorAnalysis";
 import Settings from "./pages/Settings";
 import ClientReport from "./pages/ClientReport";
 import NotFound from "./pages/NotFound";
+import { PasscodeGate } from "./components/PasscodeGate";
 
 const queryClient = new QueryClient();
 
@@ -20,12 +21,16 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/account/:accountName" element={<AccountDetail />} />
-          <Route path="/creatives" element={<Creatives />} />
-          <Route path="/competitor-analysis" element={<CompetitorAnalysis />} />
-          <Route path="/settings" element={<Settings />} />
+          {/* Public — client-facing report links */}
           <Route path="/report/:accountName" element={<ClientReport />} />
+
+          {/* Admin — passcode protected */}
+          <Route path="/" element={<PasscodeGate><Index /></PasscodeGate>} />
+          <Route path="/account/:accountName" element={<PasscodeGate><AccountDetail /></PasscodeGate>} />
+          <Route path="/creatives" element={<PasscodeGate><Creatives /></PasscodeGate>} />
+          <Route path="/competitor-analysis" element={<PasscodeGate><CompetitorAnalysis /></PasscodeGate>} />
+          <Route path="/settings" element={<PasscodeGate><Settings /></PasscodeGate>} />
+
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
