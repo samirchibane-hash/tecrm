@@ -408,6 +408,17 @@ export default function ClientReport() {
   const [addBookingOpen, setAddBookingOpen] = useState(false);
   const [bookingSearch, setBookingSearch] = useState("");
   const [bookingForm, setBookingForm] = useState(emptyBookingForm);
+  const [tableSearchOpen, setTableSearchOpen] = useState(false);
+  const [tableSearch, setTableSearch] = useState("");
+
+  const filteredAppointments = useMemo(() => {
+    const q = tableSearch.trim().toLowerCase();
+    if (!q) return appointments;
+    return appointments.filter((a) =>
+      a.contact_name?.toLowerCase().includes(q) ||
+      String(a.contact_phone ?? "").includes(q)
+    );
+  }, [appointments, tableSearch]);
 
   const bookingSearchResults = useMemo(() => {
     const q = bookingSearch.trim().toLowerCase();
@@ -887,14 +898,44 @@ export default function ClientReport() {
 
             {/* ── Appointments ── */}
             <section id="appointments">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Appointments
-                  {appointments.length > 0 && <span className="ml-1 text-xs font-normal text-muted-foreground/70">({appointments.length})</span>}
-                </h2>
-                <Button size="sm" className="gap-1.5 shrink-0" onClick={() => setAddBookingOpen(true)}>
-                  <Plus className="h-3.5 w-3.5" /> Add Booking
-                </Button>
+              <div className="mb-4 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                    Appointments
+                    {appointments.length > 0 && (
+                      <span className="ml-1 text-xs font-normal text-muted-foreground/70">
+                        {tableSearch ? `${filteredAppointments.length} of ${appointments.length}` : `(${appointments.length})`}
+                      </span>
+                    )}
+                  </h2>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      variant={tableSearchOpen ? "secondary" : "outline"}
+                      className="gap-1.5"
+                      onClick={() => { setTableSearchOpen((v) => !v); setTableSearch(""); }}
+                    >
+                      <Search className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Search</span>
+                    </Button>
+                    <Button size="sm" className="gap-1.5" onClick={() => setAddBookingOpen(true)}>
+                      <Plus className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Add Booking</span>
+                    </Button>
+                  </div>
+                </div>
+                {tableSearchOpen && (
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    <Input
+                      autoFocus
+                      placeholder="Search by name or phone…"
+                      value={tableSearch}
+                      onChange={(e) => setTableSearch(e.target.value)}
+                      className="pl-8"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Add Booking dialog */}
@@ -1003,6 +1044,9 @@ export default function ClientReport() {
               </Dialog>
 
               {appointments.length > 0 ? (<>
+                {filteredAppointments.length === 0 && (
+                  <p className="py-6 text-center text-sm text-muted-foreground">No appointments match your search.</p>
+                )}
 
                 {/* Contact detail dialog */}
                 {selectedAppt && (() => {
@@ -1117,7 +1161,7 @@ export default function ClientReport() {
                       <span>Contact</span>
                       <span>Outcome</span>
                     </div>
-                    {appointments.map((appt) => {
+                    {filteredAppointments.map((appt) => {
                       const statusVal = ((appt as any).appointment_status ?? "") as ApptStatus | "";
                       const statusMeta = APPT_STATUSES.find((s) => s.value === statusVal);
                       return (
