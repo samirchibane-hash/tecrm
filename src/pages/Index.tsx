@@ -131,7 +131,7 @@ const Index = () => {
                   <span className="text-xs truncate">{dateLabel}</span>
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-48 p-1.5" align="end">
+              <PopoverContent className={cn("p-1.5", showCustomCalendar ? "w-auto" : "w-48")} align="end">
                 <div className="flex flex-col gap-0.5">
                   {[
                     { label: "Today", range: { from: startOfDay(new Date()), to: startOfDay(new Date()) } },
@@ -146,7 +146,7 @@ const Index = () => {
                       key={preset.label}
                       variant="ghost"
                       size="sm"
-                      className="justify-start text-xs h-8 rounded-sm"
+                      className="justify-start text-xs h-10 rounded-sm"
                       onClick={() => { setDateRange(preset.range); setPresetLabel(preset.label); setShowCustomCalendar(false); }}
                     >
                       {preset.label}
@@ -155,13 +155,13 @@ const Index = () => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="justify-start text-xs h-8 rounded-sm"
+                    className="justify-start text-xs h-10 rounded-sm"
                     onClick={() => { setPresetLabel(""); setShowCustomCalendar((v) => !v); }}
                   >
                     Custom…
                   </Button>
                   {dateRange?.from && (
-                    <Button variant="ghost" size="sm" className="justify-start text-xs h-8 rounded-sm text-muted-foreground" onClick={() => { setDateRange(undefined); setPresetLabel(""); setShowCustomCalendar(false); }}>
+                    <Button variant="ghost" size="sm" className="justify-start text-xs h-10 rounded-sm text-muted-foreground" onClick={() => { setDateRange(undefined); setPresetLabel(""); setShowCustomCalendar(false); }}>
                       Clear
                     </Button>
                   )}
