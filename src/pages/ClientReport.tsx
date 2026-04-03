@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -21,7 +22,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ReferenceLine } from "recharts";
-import { CalendarDays, Image as ImageIcon, ExternalLink, ChevronLeft, Phone, Mail, MapPin, Clock } from "lucide-react";
+import { CalendarDays, Image as ImageIcon, ExternalLink, ChevronLeft, Phone, Mail, MapPin, Clock, Plus, Search } from "lucide-react";
 import { format, startOfDay, subDays, startOfMonth, endOfMonth, subMonths, max } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
@@ -397,6 +398,50 @@ export default function ClientReport() {
 
   const [dealValueDraft, setDealValueDraft] = useState<Record<string, string>>({});
   const [selectedAppt, setSelectedAppt] = useState<(typeof appointments)[0] | null>(null);
+
+  // ── Add Booking ───────────────────────────────────────────────────────────
+  const emptyBookingForm = {
+    contact_name: "", contact_phone: "", contact_email: "",
+    contact_address: "", created_on: format(new Date(), "yyyy-MM-dd"),
+    appointment_time: "", type: "appointment" as "appointment" | "water test",
+  };
+  const [addBookingOpen, setAddBookingOpen] = useState(false);
+  const [bookingSearch, setBookingSearch] = useState("");
+  const [bookingForm, setBookingForm] = useState(emptyBookingForm);
+
+  const bookingSearchResults = useMemo(() => {
+    const q = bookingSearch.trim().toLowerCase();
+    if (!q) return [];
+    return ghlRaw.filter((c) =>
+      c.contact_name?.toLowerCase().includes(q) ||
+      String(c.contact_phone ?? "").includes(q)
+    ).slice(0, 6);
+  }, [bookingSearch, ghlRaw]);
+
+  const addBooking = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("ghl_conversions").insert({
+        ghl_contact_id: crypto.randomUUID(),
+        tecrm_id: accountId || null,
+        contact_name: bookingForm.contact_name.trim(),
+        contact_phone: bookingForm.contact_phone ? Number(bookingForm.contact_phone.replace(/\D/g, "")) : null,
+        contact_email: bookingForm.contact_email.trim() || null,
+        contact_address: bookingForm.contact_address.trim() || null,
+        created_on: bookingForm.created_on,
+        appointment_time: bookingForm.appointment_time || null,
+        type: bookingForm.type,
+      } as any);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ghl-conversions", accountId] });
+      toast.success("Booking added");
+      setAddBookingOpen(false);
+      setBookingForm(emptyBookingForm);
+      setBookingSearch("");
+    },
+    onError: () => toast.error("Failed to add booking"),
+  });
 
   const { mutate: saveDealValue } = useMutation({
     mutationFn: async ({ ghl_contact_id, deal_value }: { ghl_contact_id: string; deal_value: number | null }) => {
@@ -841,12 +886,132 @@ export default function ClientReport() {
             )}
 
             {/* ── Appointments ── */}
-            {appointments.length > 0 && (
-              <section id="appointments">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Appointments{" "}
-                  <span className="ml-1 text-xs font-normal text-muted-foreground/70">({appointments.length})</span>
+            <section id="appointments">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Appointments
+                  {appointments.length > 0 && <span className="ml-1 text-xs font-normal text-muted-foreground/70">({appointments.length})</span>}
                 </h2>
+                <Button size="sm" className="gap-1.5 shrink-0" onClick={() => setAddBookingOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" /> Add Booking
+                </Button>
+              </div>
+
+              {/* Add Booking dialog */}
+              <Dialog open={addBookingOpen} onOpenChange={(open) => { setAddBookingOpen(open); if (!open) { setBookingForm(emptyBookingForm); setBookingSearch(""); } }}>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Add Booking</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 pt-1">
+                    {/* Search existing leads */}
+                    <div className="space-y-1.5">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+                        <Input
+                          placeholder="Search existing leads by name or phone…"
+                          value={bookingSearch}
+                          onChange={(e) => setBookingSearch(e.target.value)}
+                          className="pl-8"
+                        />
+                      </div>
+                      {bookingSearch.trim() && bookingSearchResults.length > 0 && (
+                        <div className="rounded-md border border-border divide-y divide-border/60 max-h-40 overflow-y-auto">
+                          {bookingSearchResults.map((lead) => (
+                            <button
+                              key={lead.ghl_contact_id}
+                              className="w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors"
+                              onClick={() => {
+                                setBookingForm((prev) => ({
+                                  ...prev,
+                                  contact_name: lead.contact_name ?? "",
+                                  contact_phone: lead.contact_phone ? String(lead.contact_phone) : "",
+                                  contact_email: (lead as any).contact_email ?? "",
+                                  contact_address: (lead as any).contact_address ?? "",
+                                }));
+                                setBookingSearch("");
+                              }}
+                            >
+                              <p className="text-sm font-medium text-foreground">{lead.contact_name ?? "—"}</p>
+                              {lead.contact_phone && <p className="text-xs text-muted-foreground">{String(lead.contact_phone)}</p>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {bookingSearch.trim() && bookingSearchResults.length === 0 && (
+                        <p className="text-xs text-muted-foreground px-1">No existing leads found — fill in the details below.</p>
+                      )}
+                    </div>
+
+                    <div className="h-px bg-border" />
+
+                    {/* Contact details */}
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contact Details</p>
+                      <Input
+                        placeholder="Full name *"
+                        value={bookingForm.contact_name}
+                        onChange={(e) => setBookingForm((prev) => ({ ...prev, contact_name: e.target.value }))}
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input
+                          placeholder="Phone"
+                          type="tel"
+                          value={bookingForm.contact_phone}
+                          onChange={(e) => setBookingForm((prev) => ({ ...prev, contact_phone: e.target.value }))}
+                        />
+                        <Input
+                          placeholder="Email"
+                          type="email"
+                          value={bookingForm.contact_email}
+                          onChange={(e) => setBookingForm((prev) => ({ ...prev, contact_email: e.target.value }))}
+                        />
+                      </div>
+                      <Input
+                        placeholder="Address"
+                        value={bookingForm.contact_address}
+                        onChange={(e) => setBookingForm((prev) => ({ ...prev, contact_address: e.target.value }))}
+                      />
+                    </div>
+
+                    {/* Appointment details */}
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Appointment</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input
+                          type="date"
+                          value={bookingForm.created_on}
+                          onChange={(e) => setBookingForm((prev) => ({ ...prev, created_on: e.target.value }))}
+                        />
+                        <Input
+                          type="time"
+                          value={bookingForm.appointment_time}
+                          onChange={(e) => setBookingForm((prev) => ({ ...prev, appointment_time: e.target.value }))}
+                        />
+                      </div>
+                      <Select value={bookingForm.type} onValueChange={(val) => setBookingForm((prev) => ({ ...prev, type: val as "appointment" | "water test" }))}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="appointment">Appointment</SelectItem>
+                          <SelectItem value="water test">Water Test</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <Button
+                      className="w-full"
+                      disabled={!bookingForm.contact_name.trim() || !bookingForm.created_on || addBooking.isPending}
+                      onClick={() => addBooking.mutate()}
+                    >
+                      {addBooking.isPending ? "Adding…" : "Add Booking"}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              {appointments.length > 0 ? (<>
 
                 {/* Contact detail dialog */}
                 {selectedAppt && (() => {
@@ -1075,8 +1240,11 @@ export default function ClientReport() {
                     })}
                   </div>
                 </Card>
-              </section>
-            )}
+
+              </>) : (
+                <p className="py-8 text-center text-sm text-muted-foreground">No appointments yet.</p>
+              )}
+            </section>
 
             {/* ── Change Log ── */}
             {filteredTimeline.length > 0 && (
