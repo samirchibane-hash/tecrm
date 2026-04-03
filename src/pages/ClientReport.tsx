@@ -248,16 +248,19 @@ function StatCard({
         isActive && "ring-2 ring-primary border-primary/30",
       )}
     >
-      <CardContent className="p-5">
-        <div className={cn(
-          "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-          isActive ? "bg-primary" : "bg-primary/10",
-        )}>
-          <Icon className={cn("h-5 w-5", isActive ? "text-primary-foreground" : "text-primary")} />
-        </div>
-        <div className="mt-3">
-          <p className="text-2xl font-bold tracking-tight text-foreground">{value}</p>
-          <p className="mt-0.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+      {/* Mobile: horizontal compact layout */}
+      <CardContent className="p-3 sm:p-5">
+        <div className="flex items-center gap-2.5 sm:block">
+          <div className={cn(
+            "flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg",
+            isActive ? "bg-primary" : "bg-primary/10",
+          )}>
+            <Icon className={cn("h-4 w-4 sm:h-5 sm:w-5", isActive ? "text-primary-foreground" : "text-primary")} />
+          </div>
+          <div className="min-w-0 sm:mt-3">
+            <p className="text-base sm:text-2xl font-bold tracking-tight text-foreground leading-tight">{value}</p>
+            <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-muted-foreground truncate">{label}</p>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -811,7 +814,7 @@ export default function ClientReport() {
             {enabledKpis.length > 0 && (
               <section id="kpi-metrics">
                 <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Key Metrics</h2>
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                   {enabledKpis.map(({ key, label, icon, format: fmt }) => (
                     <StatCard
                       key={key}
