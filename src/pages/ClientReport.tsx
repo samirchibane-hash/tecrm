@@ -1211,7 +1211,7 @@ export default function ClientReport() {
                       <span>Ad Source</span>
                       <span>Outcome</span>
                     </div>
-                    {appointments.map((appt) => {
+                    {filteredAppointments.map((appt) => {
                       const statusVal = ((appt as any).appointment_status ?? "") as ApptStatus | "";
                       const statusMeta = APPT_STATUSES.find((s) => s.value === statusVal);
                       const savedDealValue = (appt as any).deal_value as number | null ?? null;
