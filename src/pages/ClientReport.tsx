@@ -403,7 +403,7 @@ export default function ClientReport() {
   const emptyBookingForm = {
     contact_name: "", contact_phone: "", contact_email: "",
     contact_address: "", created_on: format(new Date(), "yyyy-MM-dd"),
-    appointment_time: "", type: "appointment" as "appointment" | "water test",
+    appointment_time: "",
   };
   const [addBookingOpen, setAddBookingOpen] = useState(false);
   const [bookingSearch, setBookingSearch] = useState("");
@@ -429,7 +429,7 @@ export default function ClientReport() {
         contact_address: bookingForm.contact_address.trim() || null,
         created_on: bookingForm.created_on,
         appointment_time: bookingForm.appointment_time || null,
-        type: bookingForm.type,
+        type: "water test",
       } as any);
       if (error) throw error;
     },
@@ -989,15 +989,6 @@ export default function ClientReport() {
                           onChange={(e) => setBookingForm((prev) => ({ ...prev, appointment_time: e.target.value }))}
                         />
                       </div>
-                      <Select value={bookingForm.type} onValueChange={(val) => setBookingForm((prev) => ({ ...prev, type: val as "appointment" | "water test" }))}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="appointment">Appointment</SelectItem>
-                          <SelectItem value="water test">Water Test</SelectItem>
-                        </SelectContent>
-                      </Select>
                     </div>
 
                     <Button
