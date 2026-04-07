@@ -276,9 +276,9 @@ export default function ClientReport() {
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: max([startOfMonth(new Date()), MIN_DATE]),
-    to: startOfDay(subDays(new Date(), 1)),
+    to: startOfDay(new Date()),
   });
-  const [presetLabel, setPresetLabel] = useState<string>("This month");
+  const [presetLabel, setPresetLabel] = useState<string>("Month to Date");
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [showCustomCalendar, setShowCustomCalendar] = useState(false);
   const [pendingRange, setPendingRange] = useState<DateRange | undefined>(undefined);
@@ -696,7 +696,7 @@ export default function ClientReport() {
                   { label: "Last 14 days", range: { from: max([startOfDay(subDays(new Date(), 14)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
                   { label: "Last 30 days", range: { from: max([startOfDay(subDays(new Date(), 29)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
                   { label: "Last month", range: { from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) } },
-                  { label: "This month", range: { from: max([startOfMonth(new Date()), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
+                  { label: "Month to Date", range: { from: max([startOfMonth(new Date()), MIN_DATE]), to: startOfDay(new Date()) } },
                 ].map((preset) => (
                   <Button
                     key={preset.label}
@@ -759,7 +759,7 @@ export default function ClientReport() {
                               { label: "Last 14 days", range: { from: max([startOfDay(subDays(new Date(), 14)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
                               { label: "Last 30 days", range: { from: max([startOfDay(subDays(new Date(), 29)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
                               { label: "Last month", range: { from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) } },
-                              { label: "This month", range: { from: max([startOfMonth(new Date()), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
+                              { label: "Month to Date", range: { from: max([startOfMonth(new Date()), MIN_DATE]), to: startOfDay(new Date()) } },
                             ].filter((p) => p.range.to >= MIN_DATE).map((preset) => (
                               <Button
                                 key={preset.label}
