@@ -89,6 +89,34 @@ type ChartAnnotation = {
   updates: { category: string; campaign_name: string; details: string | null }[];
 };
 
+// ─── Linkify text — converts URLs in a string into clickable <a> tags ────────
+
+function linkifyText(text: string): React.ReactNode[] {
+  const urlRegex = /https?:\/\/[^\s]+/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = urlRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+    const url = match[0];
+    parts.push(
+      <a
+        key={match.index}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary hover:underline inline-flex items-center gap-0.5 break-all"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {url}<ExternalLink className="h-3 w-3 inline shrink-0 ml-0.5" />
+      </a>
+    );
+    lastIndex = match.index + url.length;
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return parts;
+}
+
 // ─── Generic KPI area chart ────────────────────────────────────────────────────
 
 function KpiAreaChart({
@@ -1310,7 +1338,14 @@ export default function ClientReport() {
                                     {format(new Date(u.created_at), "MMM d, yyyy")}
                                   </span>
                                 </div>
-                                {u.details && <p className="text-sm text-foreground">{u.details}</p>}
+                                {(u as any).title && (
+                                  <p className="text-sm font-medium text-foreground">{(u as any).title}</p>
+                                )}
+                                {u.details && (
+                                  <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                                    {linkifyText(u.details)}
+                                  </p>
+                                )}
                                 {(u as any).image_url && (
                                   <div className="flex flex-wrap gap-2 pt-1">
                                     {((u as any).image_url as string).split(",").map((url: string, i: number) => (
@@ -1320,16 +1355,20 @@ export default function ClientReport() {
                                     ))}
                                   </div>
                                 )}
-                                {(u as any).link_url && (
-                                  <a
-                                    href={(u as any).link_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                                  >
-                                    <ExternalLink className="h-3 w-3" /> {(u as any).link_url}
-                                  </a>
-                                )}
+                                {(u as any).link_url && (() => {
+                                  let label = "View link";
+                                  try { label = new URL((u as any).link_url).hostname.replace(/^www\./, ""); } catch {}
+                                  return (
+                                    <a
+                                      href={(u as any).link_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                                    >
+                                      <ExternalLink className="h-3 w-3" /> {label}
+                                    </a>
+                                  );
+                                })()}
                               </CardContent>
                             </Card>
                           </div>
