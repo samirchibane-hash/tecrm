@@ -1344,9 +1344,6 @@ export default function ClientReport() {
                                     {format(new Date(u.created_at), "MMM d, yyyy")}
                                   </span>
                                 </div>
-                                {(u as any).title && (
-                                  <p className="text-sm font-medium text-foreground">{(u as any).title}</p>
-                                )}
                                 {u.details && (
                                   <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
                                     {linkifyText(u.details)}
