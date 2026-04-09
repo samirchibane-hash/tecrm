@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCouplerData } from "@/hooks/useCouplerData";
 import { supabase } from "@/integrations/supabase/client";
-import { ALL_KPIS, type KpiKey } from "@/components/dashboard/AccountCard";
+import { ALL_KPIS, getPalette, type KpiKey } from "@/components/dashboard/AccountCard";
 import { useSettings } from "@/hooks/useSettings";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -1330,9 +1330,15 @@ export default function ClientReport() {
                             <Card className="border-border/50 bg-white shadow-sm">
                               <CardContent className="p-4 space-y-2">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant="secondary" className={`text-xs ${CATEGORY_COLORS[u.category] ?? CATEGORY_COLORS.other}`}>
-                                    {categoryLabel}
-                                  </Badge>
+                                  {(() => {
+                                    const pal = getPalette(u.campaign_name, settings.change_log_options);
+                                    return (
+                                      <Badge variant="secondary" className={`text-xs ${pal.badge}`}>
+                                        <span className={`inline-block h-1.5 w-1.5 rounded-full mr-1 ${pal.dot}`} />
+                                        {(u as any).title || categoryLabel}
+                                      </Badge>
+                                    );
+                                  })()}
                                   <span className="text-xs text-muted-foreground">{u.campaign_name}</span>
                                   <span className="ml-auto text-xs text-muted-foreground">
                                     {format(new Date(u.created_at), "MMM d, yyyy")}
