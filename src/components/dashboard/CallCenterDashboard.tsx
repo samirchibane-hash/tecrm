@@ -26,6 +26,7 @@ import { format, differenceInCalendarDays, parseISO } from "date-fns";
 interface Props {
   accountId: string;
   accountName: string;
+  isAdmin?: boolean;
 }
 
 type MetricType = "calls_made" | "appointments_set" | "installs_generated" | "unique_leads";
@@ -56,7 +57,7 @@ function progressPct(current: number, target: number) {
 // ────────────────────────────────────────────────────────────
 // Main component
 // ────────────────────────────────────────────────────────────
-export function CallCenterDashboard({ accountId, accountName }: Props) {
+export function CallCenterDashboard({ accountId, accountName, isAdmin = false }: Props) {
   const queryClient = useQueryClient();
 
   // ── UI state ───────────────────────────────────────────────
@@ -428,22 +429,24 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
                         <p className="text-[11px] text-muted-foreground mt-0.5">{incentive.description}</p>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() =>
-                          toggleIncentiveActive.mutate({ id: incentive.id, is_active: false })
-                        }
-                        className="text-muted-foreground hover:text-foreground transition-colors text-[10px] underline"
-                      >
-                        Archive
-                      </button>
-                      <button
-                        onClick={() => deleteIncentive.mutate(incentive.id)}
-                        className="text-muted-foreground hover:text-destructive transition-colors"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
+                    {isAdmin && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() =>
+                            toggleIncentiveActive.mutate({ id: incentive.id, is_active: false })
+                          }
+                          className="text-muted-foreground hover:text-foreground transition-colors text-[10px] underline"
+                        >
+                          Archive
+                        </button>
+                        <button
+                          onClick={() => deleteIncentive.mutate(incentive.id)}
+                          className="text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Team target */}
@@ -513,8 +516,8 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
               </p>
             )}
 
-            {/* Add incentive form */}
-            {showIncentiveForm ? (
+            {/* Add incentive form — admin only */}
+            {isAdmin && showIncentiveForm ? (
               <div className="rounded-lg border border-border/60 bg-background/80 p-3 space-y-2">
                 <p className="text-xs font-semibold text-foreground">New Incentive</p>
 
@@ -689,7 +692,7 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
                   </Button>
                 </div>
               </div>
-            ) : (
+            ) : isAdmin ? (
               <button
                 onClick={() => setShowIncentiveForm(true)}
                 className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -697,7 +700,7 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
                 <Plus className="h-3.5 w-3.5" />
                 Add incentive or bonus target
               </button>
-            )}
+            ) : null}
           </div>
         )}
       </div>
@@ -729,29 +732,31 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
             Today — {format(new Date(), "MMM d")}
           </p>
-          {/* Add setter inline */}
-          <div className="flex items-center gap-1.5">
-            <Input
-              placeholder="Setter name"
-              value={newSetterName}
-              onChange={(e) => setNewSetterName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newSetterName.trim()) {
-                  addSetter.mutate(newSetterName.trim());
-                }
-              }}
-              className="h-6 text-xs w-28 px-2"
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-6 px-2"
-              disabled={!newSetterName.trim()}
-              onClick={() => addSetter.mutate(newSetterName.trim())}
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
-          </div>
+          {/* Add setter inline — admin only */}
+          {isAdmin && (
+            <div className="flex items-center gap-1.5">
+              <Input
+                placeholder="Setter name"
+                value={newSetterName}
+                onChange={(e) => setNewSetterName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newSetterName.trim()) {
+                    addSetter.mutate(newSetterName.trim());
+                  }
+                }}
+                className="h-6 text-xs w-28 px-2"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 px-2"
+                disabled={!newSetterName.trim()}
+                onClick={() => addSetter.mutate(newSetterName.trim())}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
         </div>
 
         {setters.length === 0 && (
@@ -791,7 +796,7 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
 
                     return (
                       <div key={field} className="text-center">
-                        {isEditing ? (
+                        {isAdmin && isEditing ? (
                           <div className="flex items-center justify-center gap-0.5">
                             <Input
                               type="number"
@@ -820,7 +825,7 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
                               <X className="h-3 w-3" />
                             </button>
                           </div>
-                        ) : (
+                        ) : isAdmin ? (
                           <button
                             className="group flex items-center justify-center gap-0.5 w-full"
                             onClick={() =>
@@ -835,17 +840,22 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
                             <span className="text-xs font-semibold text-foreground">{currentVal}</span>
                             <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                           </button>
+                        ) : (
+                          <span className="text-xs font-semibold text-foreground">{currentVal}</span>
                         )}
                       </div>
                     );
                   })}
 
-                  <button
-                    onClick={() => deleteSetter.mutate(setter.id)}
-                    className="text-muted-foreground hover:text-destructive transition-colors flex items-center justify-center"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => deleteSetter.mutate(setter.id)}
+                      className="text-muted-foreground hover:text-destructive transition-colors flex items-center justify-center"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
+                  {!isAdmin && <span />}
                 </div>
               );
             })}

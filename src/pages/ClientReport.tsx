@@ -24,6 +24,7 @@ import {
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ReferenceLine } from "recharts";
 import { CalendarDays, Image as ImageIcon, ExternalLink, ChevronLeft, Phone, Mail, MapPin, Clock, Plus, Search, BarChart2 } from "lucide-react";
 import { CallCenterDashboard } from "@/components/dashboard/CallCenterDashboard";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { format, startOfDay, subDays, startOfMonth, endOfMonth, subMonths, max } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
@@ -303,6 +304,7 @@ export default function ClientReport() {
   const { accountName } = useParams<{ accountName: string }>();
   const decodedName = decodeURIComponent(accountName ?? "");
 
+  const isAdmin = useIsAdmin();
   const [activeTab, setActiveTab] = useState<"campaign" | "call-center">("campaign");
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: max([startOfMonth(new Date()), MIN_DATE]),
@@ -988,7 +990,7 @@ export default function ClientReport() {
 
         {/* ── Call Center Tab ── */}
         {activeTab === "call-center" && accountId && (
-          <CallCenterDashboard accountId={accountId} accountName={decodedName} />
+          <CallCenterDashboard accountId={accountId} accountName={decodedName} isAdmin={isAdmin} />
         )}
 
         {/* ── Campaign Tab ── */}
