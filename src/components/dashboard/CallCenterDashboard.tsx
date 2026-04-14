@@ -864,7 +864,7 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
               );
               return (
                 <div className="grid grid-cols-[1fr_70px_80px_70px_70px_28px] gap-0 border-t border-border bg-muted/40 px-3 py-1.5 items-center">
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Day Total</span>
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Total</span>
                   <span className="text-center text-xs font-bold text-foreground">{dayTotals.calls}</span>
                   <span className="text-center text-xs font-bold text-foreground">{dayTotals.leads}</span>
                   <span className="text-center text-xs font-bold text-foreground">{dayTotals.appts}</span>
