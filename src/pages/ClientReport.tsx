@@ -461,7 +461,6 @@ export default function ClientReport() {
   const APPTS_PER_PAGE = 10;
 
   const filteredAppointments = useMemo(() => {
-    setApptPage(0);
     const q = tableSearch.trim().toLowerCase();
     if (!q) return appointments;
     return appointments.filter((a) =>
@@ -469,6 +468,14 @@ export default function ClientReport() {
       String(a.contact_phone ?? "").includes(q)
     );
   }, [appointments, tableSearch]);
+
+  // Reset to first page when filter changes
+  const prevFilterKey = useRef("");
+  const filterKey = tableSearch + "|" + filteredAppointments.length;
+  if (filterKey !== prevFilterKey.current) {
+    prevFilterKey.current = filterKey;
+    if (apptPage !== 0) setApptPage(0);
+  }
 
   const pagedAppointments = useMemo(() => {
     const start = apptPage * APPTS_PER_PAGE;
