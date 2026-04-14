@@ -706,7 +706,7 @@ export function CallCenterDashboard({ accountId, accountName, isAdmin = false }:
       </div>
 
       {/* ── Summary KPI row ──────────────────────────────────── */}
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {(
           [
             { label: "Total Calls", value: totals.calls, icon: Phone, color: "text-sky-600 dark:text-sky-400" },
@@ -765,46 +765,135 @@ export function CallCenterDashboard({ accountId, accountName, isAdmin = false }:
           </p>
         )}
 
-        {setters.length > 0 && (
-          <div className="rounded-lg border border-border/60 overflow-hidden">
-            {/* Table header */}
-            <div className="grid grid-cols-[1fr_70px_80px_70px_70px_28px] gap-0 bg-muted/40 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              <span>Setter</span>
-              <span className="text-center">Calls</span>
-              <span className="text-center">Uniq. Leads</span>
-              <span className="text-center">Appts</span>
-              <span className="text-center">Installs</span>
-              <span />
-            </div>
+        {setters.length > 0 && (() => {
+          const todayMetrics = metrics.filter((m) => m.metric_date === today);
+          const dayTotals = todayMetrics.reduce(
+            (acc, m) => ({
+              calls: acc.calls + m.calls_made,
+              leads: acc.leads + m.unique_leads,
+              appts: acc.appts + m.appointments_set,
+              installs: acc.installs + m.installs_generated,
+            }),
+            { calls: 0, leads: 0, appts: 0, installs: 0 }
+          );
 
-            {/* Setter rows */}
-            {setters.map((setter) => {
-              const m = getTodayMetric(setter.id);
-              return (
-                <div
-                  key={setter.id}
-                  className="grid grid-cols-[1fr_70px_80px_70px_70px_28px] gap-0 border-t border-border/40 px-3 py-2 items-center hover:bg-muted/20 transition-colors"
-                >
-                  <span className="text-xs font-medium text-foreground truncate">{setter.name}</span>
+          const metricCells = (setter: typeof setters[0]) => {
+            const m = getTodayMetric(setter.id);
+            return (["calls_made", "unique_leads", "appointments_set", "installs_generated"] as MetricType[]).map((field) => {
+              const isEditing =
+                editingMetric?.setterId === setter.id &&
+                editingMetric.date === today &&
+                editingMetric.field === field;
+              const currentVal = m[field as keyof typeof m] as number;
+              return { field, isEditing, currentVal };
+            });
+          };
 
-                  {(["calls_made", "unique_leads", "appointments_set", "installs_generated"] as MetricType[]).map((field) => {
-                    const isEditing =
-                      editingMetric?.setterId === setter.id &&
-                      editingMetric.date === today &&
-                      editingMetric.field === field;
-                    const currentVal = m[field as keyof typeof m] as number;
+          return (
+            <>
+              {/* ── Mobile: card per setter ── */}
+              <div className="sm:hidden space-y-2">
+                {setters.map((setter) => (
+                  <div key={setter.id} className="rounded-lg border border-border/60 bg-background/80 p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-semibold text-foreground">{setter.name}</span>
+                      {isAdmin && (
+                        <button
+                          onClick={() => deleteSetter.mutate(setter.id)}
+                          className="text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {metricCells(setter).map(({ field, isEditing, currentVal }) => {
+                        const Icon = METRIC_ICONS[field];
+                        return (
+                          <div key={field} className="rounded-md bg-muted/40 px-2.5 py-2">
+                            <div className="flex items-center gap-1 mb-0.5">
+                              <Icon className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{METRIC_LABELS[field]}</span>
+                            </div>
+                            {isAdmin && isEditing ? (
+                              <div className="flex items-center gap-1 mt-1">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={editingMetric!.value}
+                                  onChange={(e) => setEditingMetric({ ...editingMetric!, value: e.target.value })}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") commitMetricEdit();
+                                    if (e.key === "Escape") setEditingMetric(null);
+                                  }}
+                                  className="h-6 w-16 text-center text-xs px-1"
+                                  autoFocus
+                                />
+                                <button onClick={commitMetricEdit} className="text-green-600"><Check className="h-3.5 w-3.5" /></button>
+                                <button onClick={() => setEditingMetric(null)} className="text-muted-foreground"><X className="h-3.5 w-3.5" /></button>
+                              </div>
+                            ) : isAdmin ? (
+                              <button
+                                className="group flex items-center gap-1"
+                                onClick={() => setEditingMetric({ setterId: setter.id, date: today, field, value: String(currentVal) })}
+                              >
+                                <span className="text-base font-bold text-foreground">{currentVal}</span>
+                                <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </button>
+                            ) : (
+                              <span className="text-base font-bold text-foreground">{currentVal}</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+                {setters.length > 1 && (
+                  <div className="rounded-lg border border-border bg-muted/40 p-3">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Total</p>
+                    <div className="grid grid-cols-2 gap-2 text-center">
+                      {[
+                        { label: "Calls", value: dayTotals.calls, Icon: Phone },
+                        { label: "Uniq. Leads", value: dayTotals.leads, Icon: UserCheck },
+                        { label: "Appts", value: dayTotals.appts, Icon: CalendarCheck },
+                        { label: "Installs", value: dayTotals.installs, Icon: Wrench },
+                      ].map(({ label, value, Icon }) => (
+                        <div key={label} className="rounded-md bg-background px-2 py-1.5">
+                          <p className="text-[10px] text-muted-foreground">{label}</p>
+                          <p className="text-sm font-bold text-foreground">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
 
-                    return (
+              {/* ── Desktop: table grid ── */}
+              <div className="hidden sm:block rounded-lg border border-border/60 overflow-hidden">
+                <div className="grid grid-cols-[1fr_70px_80px_70px_70px_28px] gap-0 bg-muted/40 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <span>Setter</span>
+                  <span className="text-center">Calls</span>
+                  <span className="text-center">Uniq. Leads</span>
+                  <span className="text-center">Appts</span>
+                  <span className="text-center">Installs</span>
+                  <span />
+                </div>
+                {setters.map((setter) => (
+                  <div
+                    key={setter.id}
+                    className="grid grid-cols-[1fr_70px_80px_70px_70px_28px] gap-0 border-t border-border/40 px-3 py-2 items-center hover:bg-muted/20 transition-colors"
+                  >
+                    <span className="text-xs font-medium text-foreground truncate">{setter.name}</span>
+                    {metricCells(setter).map(({ field, isEditing, currentVal }) => (
                       <div key={field} className="text-center">
                         {isAdmin && isEditing ? (
                           <div className="flex items-center justify-center gap-0.5">
                             <Input
                               type="number"
                               min={0}
-                              value={editingMetric.value}
-                              onChange={(e) =>
-                                setEditingMetric({ ...editingMetric, value: e.target.value })
-                              }
+                              value={editingMetric!.value}
+                              onChange={(e) => setEditingMetric({ ...editingMetric!, value: e.target.value })}
                               onKeyDown={(e) => {
                                 if (e.key === "Enter") commitMetricEdit();
                                 if (e.key === "Escape") setEditingMetric(null);
@@ -812,30 +901,13 @@ export function CallCenterDashboard({ accountId, accountName, isAdmin = false }:
                               className="h-5 w-12 text-center text-xs px-1"
                               autoFocus
                             />
-                            <button
-                              onClick={commitMetricEdit}
-                              className="text-green-600 hover:text-green-700"
-                            >
-                              <Check className="h-3 w-3" />
-                            </button>
-                            <button
-                              onClick={() => setEditingMetric(null)}
-                              className="text-muted-foreground hover:text-destructive"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
+                            <button onClick={commitMetricEdit} className="text-green-600 hover:text-green-700"><Check className="h-3 w-3" /></button>
+                            <button onClick={() => setEditingMetric(null)} className="text-muted-foreground hover:text-destructive"><X className="h-3 w-3" /></button>
                           </div>
                         ) : isAdmin ? (
                           <button
                             className="group flex items-center justify-center gap-0.5 w-full"
-                            onClick={() =>
-                              setEditingMetric({
-                                setterId: setter.id,
-                                date: today,
-                                field,
-                                value: String(currentVal),
-                              })
-                            }
+                            onClick={() => setEditingMetric({ setterId: setter.id, date: today, field, value: String(currentVal) })}
                           >
                             <span className="text-xs font-semibold text-foreground">{currentVal}</span>
                             <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -844,47 +916,32 @@ export function CallCenterDashboard({ accountId, accountName, isAdmin = false }:
                           <span className="text-xs font-semibold text-foreground">{currentVal}</span>
                         )}
                       </div>
-                    );
-                  })}
-
-                  {isAdmin && (
-                    <button
-                      onClick={() => deleteSetter.mutate(setter.id)}
-                      className="text-muted-foreground hover:text-destructive transition-colors flex items-center justify-center"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  )}
-                  {!isAdmin && <span />}
-                </div>
-              );
-            })}
-
-            {/* Totals row */}
-            {setters.length > 1 && (() => {
-              const todayMetrics = metrics.filter((m) => m.metric_date === today);
-              const dayTotals = todayMetrics.reduce(
-                (acc, m) => ({
-                  calls: acc.calls + m.calls_made,
-                  leads: acc.leads + m.unique_leads,
-                  appts: acc.appts + m.appointments_set,
-                  installs: acc.installs + m.installs_generated,
-                }),
-                { calls: 0, leads: 0, appts: 0, installs: 0 }
-              );
-              return (
-                <div className="grid grid-cols-[1fr_70px_80px_70px_70px_28px] gap-0 border-t border-border bg-muted/40 px-3 py-1.5 items-center">
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Total</span>
-                  <span className="text-center text-xs font-bold text-foreground">{dayTotals.calls}</span>
-                  <span className="text-center text-xs font-bold text-foreground">{dayTotals.leads}</span>
-                  <span className="text-center text-xs font-bold text-foreground">{dayTotals.appts}</span>
-                  <span className="text-center text-xs font-bold text-foreground">{dayTotals.installs}</span>
-                  <span />
-                </div>
-              );
-            })()}
-          </div>
-        )}
+                    ))}
+                    {isAdmin && (
+                      <button
+                        onClick={() => deleteSetter.mutate(setter.id)}
+                        className="text-muted-foreground hover:text-destructive transition-colors flex items-center justify-center"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                    {!isAdmin && <span />}
+                  </div>
+                ))}
+                {setters.length > 1 && (
+                  <div className="grid grid-cols-[1fr_70px_80px_70px_70px_28px] gap-0 border-t border-border bg-muted/40 px-3 py-1.5 items-center">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Total</span>
+                    <span className="text-center text-xs font-bold text-foreground">{dayTotals.calls}</span>
+                    <span className="text-center text-xs font-bold text-foreground">{dayTotals.leads}</span>
+                    <span className="text-center text-xs font-bold text-foreground">{dayTotals.appts}</span>
+                    <span className="text-center text-xs font-bold text-foreground">{dayTotals.installs}</span>
+                    <span />
+                  </div>
+                )}
+              </div>
+            </>
+          );
+        })()}
       </div>
 
     </div>
