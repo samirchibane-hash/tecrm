@@ -464,43 +464,24 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
                     </div>
                   )}
 
-                  {/* Individual: leaderboard (with or without target) */}
-                  {isIndividual && (
-                    <div className="space-y-1.5">
-                      {hasTarget && (
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                          First to {incentive.target_value} {METRIC_LABELS[metric]}
-                        </p>
-                      )}
-                      {setterRows.map((row, idx) => {
-                        const rowPct = hasTarget ? progressPct(row.value, incentive.target_value!) : 0;
-                        const rowAchieved = hasTarget && row.value >= incentive.target_value!;
-                        const isLeader = idx === 0 && row.value > 0;
-                        return (
-                          <div key={row.id}>
-                            <div className="flex items-center justify-between text-[10px] mb-0.5">
-                              <span className={`font-medium ${rowAchieved ? "text-emerald-600 dark:text-emerald-400" : isLeader ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>
-                                {isLeader && !rowAchieved ? "🏆 " : ""}{row.name}{rowAchieved ? " ✓" : ""}
-                              </span>
-                              <span className="text-muted-foreground">
-                                {hasTarget ? `${row.value} / ${incentive.target_value}` : row.value}
-                              </span>
-                            </div>
-                            {hasTarget && (
-                              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all ${
-                                    rowAchieved ? "bg-emerald-500" : isExpired ? "bg-red-400" : isLeader ? "bg-amber-400" : "bg-sky-400"
-                                  }`}
-                                  style={{ width: `${rowPct}%` }}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                  {/* Individual: show leader only */}
+                  {isIndividual && (() => {
+                    const leader = setterRows[0];
+                    if (!leader) return null;
+                    const leaderAchieved = hasTarget && leader.value >= incentive.target_value!;
+                    const leaderPct = hasTarget ? progressPct(leader.value, incentive.target_value!) : 0;
+                    return (
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs font-semibold ${leaderAchieved ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+                          🏆 {leader.name}{leaderAchieved ? " ✓" : ""}
+                        </span>
+                        <span className="text-xs font-bold text-foreground">
+                          {hasTarget ? `${leader.value} / ${incentive.target_value}` : leader.value} {METRIC_LABELS[metric]}
+                          {hasTarget ? ` (${leaderPct}%)` : ""}
+                        </span>
+                      </div>
+                    );
+                  })()}
 
                   {/* Meta row */}
                   <div className="flex items-center gap-3 text-[10px] text-muted-foreground flex-wrap">
