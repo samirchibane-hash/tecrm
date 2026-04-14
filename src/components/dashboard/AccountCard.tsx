@@ -43,6 +43,7 @@ import {
   CheckCircle2,
   Settings2,
   Clock,
+  Phone,
 } from "lucide-react";
 import {
   Dialog,
@@ -839,6 +840,15 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
               title="Open client report"
             >
               <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+            </RouterLink>
+            <RouterLink
+              to={`/cc-report/${encodeURIComponent(accountName)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-sky-600 transition-colors"
+              title="Open call center report"
+            >
+              <Phone className="h-3.5 w-3.5" />
             </RouterLink>
           </div>
           <div className="flex flex-col gap-2 items-start">

@@ -9,6 +9,7 @@ import Creatives from "./pages/Creatives";
 import CompetitorAnalysis from "./pages/CompetitorAnalysis";
 import Settings from "./pages/Settings";
 import ClientReport from "./pages/ClientReport";
+import CallCenterReport from "./pages/CallCenterReport";
 import NotFound from "./pages/NotFound";
 import { PasscodeGate } from "./components/PasscodeGate";
 
@@ -23,6 +24,7 @@ const App = () => (
         <Routes>
           {/* Public — client-facing report links */}
           <Route path="/report/:accountName" element={<ClientReport />} />
+          <Route path="/cc-report/:accountName" element={<CallCenterReport />} />
 
           {/* Admin — passcode protected */}
           <Route path="/" element={<PasscodeGate><Index /></PasscodeGate>} />
