@@ -212,6 +212,165 @@ export type Database = {
         }
         Relationships: []
       }
+      account_features: {
+        Row: {
+          id: string
+          account_id: string
+          call_center_enabled: boolean
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          account_id: string
+          call_center_enabled?: boolean
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          account_id?: string
+          call_center_enabled?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_features_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: true
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      call_center_setters: {
+        Row: {
+          id: string
+          account_id: string
+          name: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          account_id: string
+          name: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          account_id?: string
+          name?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_center_setters_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      call_center_metrics: {
+        Row: {
+          id: string
+          setter_id: string
+          account_id: string
+          metric_date: string
+          calls_made: number
+          appointments_set: number
+          installs_generated: number
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          setter_id: string
+          account_id: string
+          metric_date: string
+          calls_made?: number
+          appointments_set?: number
+          installs_generated?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          setter_id?: string
+          account_id?: string
+          metric_date?: string
+          calls_made?: number
+          appointments_set?: number
+          installs_generated?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_center_metrics_setter_id_fkey"
+            columns: ["setter_id"]
+            isOneToOne: false
+            referencedRelation: "call_center_setters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_center_metrics_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      call_center_incentives: {
+        Row: {
+          id: string
+          account_id: string
+          title: string
+          description: string | null
+          metric_type: string
+          target_value: number
+          bonus_amount: number | null
+          bonus_description: string | null
+          deadline: string
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          account_id: string
+          title: string
+          description?: string | null
+          metric_type: string
+          target_value: number
+          bonus_amount?: number | null
+          bonus_description?: string | null
+          deadline: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          account_id?: string
+          title?: string
+          description?: string | null
+          metric_type?: string
+          target_value?: number
+          bonus_amount?: number | null
+          bonus_description?: string | null
+          deadline?: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_center_incentives_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       settings: {
         Row: {
           default_campaigns: Json

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Settings as SettingsIcon, Plus, X, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, Plus, X, Eye, EyeOff, ChevronDown, ChevronRight, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -11,22 +11,53 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ALL_KPIS, getPalette, type KpiKey } from "@/components/dashboard/AccountCard";
 import { useSettings, type ChangeLogOption } from "@/hooks/useSettings";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const Settings = () => {
   const { settings, isLoading, updateSettings } = useSettings();
+  const queryClient = useQueryClient();
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newSubOption, setNewSubOption] = useState<Record<string, string>>({});
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
-  const { data: accounts = [] } = useQuery({
-    queryKey: ["accounts-list"],
+  // Full accounts list with IDs (needed for feature flag upserts)
+  const { data: accountRows = [] } = useQuery({
+    queryKey: ["accounts-list-full"],
     queryFn: async () => {
-      const { data } = await supabase.from("accounts").select("account_name").order("account_name");
-      return (data ?? []).map((r) => r.account_name);
+      const { data } = await supabase.from("accounts").select("id, account_name").order("account_name");
+      return data ?? [];
     },
+  });
+  const accounts = accountRows.map((r) => r.account_name);
+
+  // Account feature flags (call center enabled per account)
+  const { data: featureRows = [] } = useQuery({
+    queryKey: ["account-features-all"],
+    queryFn: async () => {
+      const { data } = await supabase.from("account_features").select("account_id, call_center_enabled");
+      return data ?? [];
+    },
+  });
+
+  const featureMap: Record<string, boolean> = Object.fromEntries(
+    featureRows.map((r) => [r.account_id, r.call_center_enabled])
+  );
+
+  const toggleCallCenter = useMutation({
+    mutationFn: async ({ accountId, enabled }: { accountId: string; enabled: boolean }) => {
+      const { error } = await supabase.from("account_features").upsert(
+        { account_id: accountId, call_center_enabled: enabled, updated_at: new Date().toISOString() },
+        { onConflict: "account_id" }
+      );
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["account-features-all"] });
+      queryClient.invalidateQueries({ queryKey: ["account-features"] });
+    },
+    onError: () => toast.error("Failed to update client features"),
   });
 
   const changeLogOptions: ChangeLogOption[] = settings.change_log_options ?? [];
@@ -313,6 +344,52 @@ const Settings = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Client Features — VIP-only services toggled per account */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Phone className="h-4 w-4 text-sky-500" />
+              Client Features
+            </CardTitle>
+            <CardDescription>
+              Enable exclusive services per client. Call Center Dashboard is a VIP-only offering — only enable for clients who have this service active.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {accountRows.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">No accounts found</p>
+              )}
+              {accountRows.map((row) => {
+                const enabled = featureMap[row.id] ?? false;
+                return (
+                  <div key={row.id} className="flex items-center justify-between rounded-lg border border-border p-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Phone className="h-4 w-4 text-sky-500 shrink-0" />
+                      <div className="min-w-0">
+                        <Label className="font-medium block truncate">{row.account_name}</Label>
+                        <p className="text-xs text-muted-foreground">Call Center Dashboard</p>
+                      </div>
+                      {enabled && (
+                        <Badge className="bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300 text-[10px] px-1.5 py-0 shrink-0">
+                          VIP
+                        </Badge>
+                      )}
+                    </div>
+                    <Switch
+                      checked={enabled}
+                      onCheckedChange={(val) =>
+                        toggleCallCenter.mutate({ accountId: row.id, enabled: val })
+                      }
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
       </div>
     </div>
   );

@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/dialog";
 import { Link as RouterLink } from "react-router-dom";
 import { CustomerPOCPanel } from "./CustomerPOCPanel";
+import { CallCenterDashboard } from "./CallCenterDashboard";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import type { AdRow } from "@/hooks/useCouplerData";
@@ -215,6 +216,22 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
 
   // Fetch GHL conversions matched by full account UUID as tecrm_id
   const accountId = account?.id ?? "";
+
+  // Check if call center dashboard is enabled for this account
+  const { data: accountFeatures } = useQuery({
+    queryKey: ["account-features", accountId],
+    queryFn: async () => {
+      if (!accountId) return null;
+      const { data } = await supabase
+        .from("account_features")
+        .select("call_center_enabled")
+        .eq("account_id", accountId)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!accountId,
+    staleTime: 60_000,
+  });
   const { data: ghlConversionsRaw = [] } = useQuery({
     queryKey: ["ghl-conversions", accountId],
     queryFn: async () => {
@@ -1307,6 +1324,11 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
             </div>
           )}
         </div>
+
+        {/* Call Center Dashboard — VIP exclusive, toggled per account */}
+        {accountFeatures?.call_center_enabled && accountId && (
+          <CallCenterDashboard accountId={accountId} accountName={accountName} />
+        )}
 
       </CardContent>
 
