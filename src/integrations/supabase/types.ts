@@ -279,6 +279,7 @@ export type Database = {
           calls_made: number
           appointments_set: number
           installs_generated: number
+          unique_leads: number
           updated_at: string
         }
         Insert: {
@@ -289,6 +290,7 @@ export type Database = {
           calls_made?: number
           appointments_set?: number
           installs_generated?: number
+          unique_leads?: number
           updated_at?: string
         }
         Update: {
@@ -299,6 +301,7 @@ export type Database = {
           calls_made?: number
           appointments_set?: number
           installs_generated?: number
+          unique_leads?: number
           updated_at?: string
         }
         Relationships: [

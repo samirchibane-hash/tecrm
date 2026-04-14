@@ -8,6 +8,7 @@ import {
   Phone,
   CalendarCheck,
   Wrench,
+  UserCheck,
   Plus,
   Trash2,
   Trophy,
@@ -27,18 +28,20 @@ interface Props {
   accountName: string;
 }
 
-type MetricType = "calls_made" | "appointments_set" | "installs_generated";
+type MetricType = "calls_made" | "appointments_set" | "installs_generated" | "unique_leads";
 
 const METRIC_LABELS: Record<MetricType, string> = {
   calls_made: "Calls Made",
   appointments_set: "Appts Set",
   installs_generated: "Installs",
+  unique_leads: "Unique Leads",
 };
 
 const METRIC_ICONS: Record<MetricType, typeof Phone> = {
   calls_made: Phone,
   appointments_set: CalendarCheck,
   installs_generated: Wrench,
+  unique_leads: UserCheck,
 };
 
 function daysLeft(deadline: string): number {
@@ -129,8 +132,9 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
         calls: acc.calls + m.calls_made,
         appts: acc.appts + m.appointments_set,
         installs: acc.installs + m.installs_generated,
+        leads: acc.leads + m.unique_leads,
       }),
-      { calls: 0, appts: 0, installs: 0 }
+      { calls: 0, appts: 0, installs: 0, leads: 0 }
     );
   }, [metrics]);
 
@@ -139,6 +143,7 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
     calls_made: totals.calls,
     appointments_set: totals.appts,
     installs_generated: totals.installs,
+    unique_leads: totals.leads,
   }), [totals]);
 
   // Helper: get today's metric row for a setter (or empty defaults)
@@ -312,10 +317,11 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
       </div>
 
       {/* ── Summary KPI row ──────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-4 gap-2">
         {(
           [
             { label: "Total Calls", value: totals.calls, icon: Phone, color: "text-sky-600 dark:text-sky-400" },
+            { label: "Unique Leads", value: totals.leads, icon: UserCheck, color: "text-violet-600 dark:text-violet-400" },
             { label: "Appts Set", value: totals.appts, icon: CalendarCheck, color: "text-emerald-600 dark:text-emerald-400" },
             { label: "Installs", value: totals.installs, icon: Wrench, color: "text-amber-600 dark:text-amber-400" },
           ] as const
@@ -371,9 +377,10 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
         {setters.length > 0 && (
           <div className="rounded-lg border border-border/60 overflow-hidden">
             {/* Table header */}
-            <div className="grid grid-cols-[1fr_80px_80px_80px_28px] gap-0 bg-muted/40 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="grid grid-cols-[1fr_70px_80px_70px_70px_28px] gap-0 bg-muted/40 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               <span>Setter</span>
               <span className="text-center">Calls</span>
+              <span className="text-center">Uniq. Leads</span>
               <span className="text-center">Appts</span>
               <span className="text-center">Installs</span>
               <span />
@@ -385,11 +392,11 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
               return (
                 <div
                   key={setter.id}
-                  className="grid grid-cols-[1fr_80px_80px_80px_28px] gap-0 border-t border-border/40 px-3 py-2 items-center hover:bg-muted/20 transition-colors"
+                  className="grid grid-cols-[1fr_70px_80px_70px_70px_28px] gap-0 border-t border-border/40 px-3 py-2 items-center hover:bg-muted/20 transition-colors"
                 >
                   <span className="text-xs font-medium text-foreground truncate">{setter.name}</span>
 
-                  {(["calls_made", "appointments_set", "installs_generated"] as MetricType[]).map((field) => {
+                  {(["calls_made", "unique_leads", "appointments_set", "installs_generated"] as MetricType[]).map((field) => {
                     const isEditing =
                       editingMetric?.setterId === setter.id &&
                       editingMetric.date === today &&
@@ -463,15 +470,17 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
               const dayTotals = todayMetrics.reduce(
                 (acc, m) => ({
                   calls: acc.calls + m.calls_made,
+                  leads: acc.leads + m.unique_leads,
                   appts: acc.appts + m.appointments_set,
                   installs: acc.installs + m.installs_generated,
                 }),
-                { calls: 0, appts: 0, installs: 0 }
+                { calls: 0, leads: 0, appts: 0, installs: 0 }
               );
               return (
-                <div className="grid grid-cols-[1fr_80px_80px_80px_28px] gap-0 border-t border-border bg-muted/40 px-3 py-1.5 items-center">
+                <div className="grid grid-cols-[1fr_70px_80px_70px_70px_28px] gap-0 border-t border-border bg-muted/40 px-3 py-1.5 items-center">
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Day Total</span>
                   <span className="text-center text-xs font-bold text-foreground">{dayTotals.calls}</span>
+                  <span className="text-center text-xs font-bold text-foreground">{dayTotals.leads}</span>
                   <span className="text-center text-xs font-bold text-foreground">{dayTotals.appts}</span>
                   <span className="text-center text-xs font-bold text-foreground">{dayTotals.installs}</span>
                   <span />
@@ -639,6 +648,7 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
                       className="mt-0.5 w-full h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
                     >
                       <option value="calls_made">Calls Made</option>
+                      <option value="unique_leads">Unique Leads</option>
                       <option value="appointments_set">Appointments Set</option>
                       <option value="installs_generated">Installs Generated</option>
                     </select>
