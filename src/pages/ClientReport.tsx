@@ -23,8 +23,6 @@ import {
 } from "@/components/ui/chart";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ReferenceLine } from "recharts";
 import { CalendarDays, Image as ImageIcon, ExternalLink, ChevronLeft, Phone, Mail, MapPin, Clock, Plus, Search, BarChart2 } from "lucide-react";
-import { CallCenterDashboard } from "@/components/dashboard/CallCenterDashboard";
-import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { format, startOfDay, subDays, startOfMonth, endOfMonth, subMonths, max } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
@@ -304,8 +302,6 @@ export default function ClientReport() {
   const { accountName } = useParams<{ accountName: string }>();
   const decodedName = decodeURIComponent(accountName ?? "");
 
-  const isAdmin = useIsAdmin();
-  const [activeTab, setActiveTab] = useState<"campaign" | "call-center">("campaign");
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: max([startOfMonth(new Date()), MIN_DATE]),
     to: startOfDay(new Date()),
@@ -353,21 +349,6 @@ export default function ClientReport() {
   // ── GHL conversions ───────────────────────────────────────────────────────
   const accountId = account?.id ?? "";
 
-  // ── Call center feature flag ──────────────────────────────────────────────
-  const { data: accountFeatures } = useQuery({
-    queryKey: ["account-features", accountId],
-    queryFn: async () => {
-      if (!accountId) return null;
-      const { data } = await supabase
-        .from("account_features")
-        .select("call_center_enabled")
-        .eq("account_id", accountId)
-        .maybeSingle();
-      return data;
-    },
-    enabled: !!accountId,
-    staleTime: 60_000,
-  });
   const { data: ghlRaw = [] } = useQuery({
     queryKey: ["ghl-conversions", accountId],
     queryFn: async () => {
@@ -754,37 +735,12 @@ export default function ClientReport() {
         </div>
       </div>
 
-      {/* Tab navigation — shown when call center is enabled */}
-      {accountFeatures?.call_center_enabled && (
-        <div className="border-b border-border/50 bg-white px-4 sm:px-6">
-          <div className="mx-auto max-w-6xl flex gap-0">
-            {([
-              { key: "campaign", label: "Campaign Performance", icon: BarChart2 },
-              { key: "call-center", label: "Call Center", icon: Phone },
-            ] as const).map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key)}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors",
-                  activeTab === key
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Mobile toolbar — date picker + section nav (hidden on md+) */}
       <div className="md:hidden sticky top-0 z-10 border-b border-border/50 bg-white px-4 py-2 shadow-sm">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1 overflow-x-auto">
-            {activeTab === "campaign" && [{ href: "#kpi-metrics", label: "Metrics" }, { href: "#appointments", label: "Appts" }, { href: "#change-log", label: "Changes" }].map(({ href, label }) => (
+            {[{ href: "#kpi-metrics", label: "Metrics" }, { href: "#appointments", label: "Appts" }, { href: "#change-log", label: "Changes" }].map(({ href, label }) => (
               <a key={href} href={href} className="shrink-0 rounded-md px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors">
                 {label}
               </a>
@@ -940,46 +896,24 @@ export default function ClientReport() {
                 </div>
 
                 {/* Section links */}
-                {activeTab === "campaign" && (
-                  <>
-                    <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">On this page</p>
-                    <div className="flex flex-col p-1.5 pt-0 gap-0.5 pb-2">
-                      {[
-                        { href: "#kpi-metrics", label: "KPI Metrics" },
-                        { href: "#appointments", label: "Appointments" },
-                        { href: "#change-log", label: "Change Log" },
-                      ].map(({ href, label }) => (
-                        <a
-                          key={href}
-                          href={href}
-                          className="rounded-md px-2.5 py-2 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
-                        >
-                          {label}
-                        </a>
-                      ))}
-                    </div>
-                  </>
-                )}
-                {activeTab === "call-center" && (
-                  <>
-                    <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">On this page</p>
-                    <div className="flex flex-col p-1.5 pt-0 gap-0.5 pb-2">
-                      {[
-                        { href: "#cc-summary", label: "Summary" },
-                        { href: "#cc-setters", label: "Setters" },
-                        { href: "#cc-incentives", label: "Incentives" },
-                      ].map(({ href, label }) => (
-                        <a
-                          key={href}
-                          href={href}
-                          className="rounded-md px-2.5 py-2 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
-                        >
-                          {label}
-                        </a>
-                      ))}
-                    </div>
-                  </>
-                )}
+                <>
+                  <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">On this page</p>
+                  <div className="flex flex-col p-1.5 pt-0 gap-0.5 pb-2">
+                    {[
+                      { href: "#kpi-metrics", label: "KPI Metrics" },
+                      { href: "#appointments", label: "Appointments" },
+                      { href: "#change-log", label: "Change Log" },
+                    ].map(({ href, label }) => (
+                      <a
+                        key={href}
+                        href={href}
+                        className="rounded-md px-2.5 py-2 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+                      >
+                        {label}
+                      </a>
+                    ))}
+                  </div>
+                </>
 
               </nav>
             </div>
@@ -988,13 +922,8 @@ export default function ClientReport() {
           {/* Main content */}
           <div className="flex-1 min-w-0 space-y-8">
 
-        {/* ── Call Center Tab ── */}
-        {activeTab === "call-center" && accountId && (
-          <CallCenterDashboard accountId={accountId} accountName={decodedName} isAdmin={isAdmin} />
-        )}
-
-        {/* ── Campaign Tab ── */}
-        {activeTab === "campaign" && (isLoading ? (
+        {/* ── Campaign Performance ── */}
+        {isLoading ? (
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -1582,7 +1511,7 @@ export default function ClientReport() {
               <div className="py-20 text-center text-muted-foreground">No data found for the selected period.</div>
             )}
           </>
-        ))}
+        )}
           </div>{/* end main content */}
         </div>{/* end flex */}
       </div>{/* end body container */}
