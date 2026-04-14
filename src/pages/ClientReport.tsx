@@ -443,6 +443,7 @@ export default function ClientReport() {
   });
 
   const [dealValueDraft, setDealValueDraft] = useState<Record<string, string>>({});
+  const [createdOnDraft, setCreatedOnDraft] = useState<Record<string, string>>({});
   const [selectedAppt, setSelectedAppt] = useState<(typeof appointments)[0] | null>(null);
 
   // ── Add Booking ───────────────────────────────────────────────────────────
@@ -514,6 +515,22 @@ export default function ClientReport() {
       toast.success("Deal value saved");
     },
     onError: () => toast.error("Failed to save deal value"),
+  });
+
+  const { mutate: saveCreatedOn } = useMutation({
+    mutationFn: async ({ ghl_contact_id, created_on }: { ghl_contact_id: string; created_on: string }) => {
+      const { error } = await supabase
+        .from("ghl_conversions")
+        .update({ created_on } as any)
+        .eq("ghl_contact_id", ghl_contact_id);
+      if (error) throw error;
+    },
+    onSuccess: (_, { ghl_contact_id }) => {
+      setCreatedOnDraft((prev) => { const next = { ...prev }; delete next[ghl_contact_id]; return next; });
+      queryClient.invalidateQueries({ queryKey: ["ghl-conversions", accountId] });
+      toast.success("Date saved");
+    },
+    onError: () => toast.error("Failed to save date"),
   });
 
   // ── Settings (controls which KPIs are shown) ──────────────────────────────
@@ -1190,6 +1207,22 @@ export default function ClientReport() {
                           {/* Appointment info */}
                           <div className="space-y-2">
                             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Appointment</p>
+                            {/* Created on — editable date */}
+                            <div className="flex items-center gap-2 text-sm">
+                              <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                              <input
+                                type="date"
+                                value={createdOnDraft[selectedAppt.ghl_contact_id] ?? selectedAppt.created_on ?? ""}
+                                onChange={(e) =>
+                                  setCreatedOnDraft((prev) => ({ ...prev, [selectedAppt.ghl_contact_id]: e.target.value }))
+                                }
+                                onBlur={(e) => {
+                                  const val = e.target.value;
+                                  if (val) saveCreatedOn({ ghl_contact_id: selectedAppt.ghl_contact_id, created_on: val });
+                                }}
+                                className="h-8 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                              />
+                            </div>
                             {(selectedAppt as any).appointment_time && (
                               <div className="flex items-center gap-2 text-sm">
                                 <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
