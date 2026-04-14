@@ -457,8 +457,11 @@ export default function ClientReport() {
   const [bookingForm, setBookingForm] = useState(emptyBookingForm);
   const [tableSearchOpen, setTableSearchOpen] = useState(false);
   const [tableSearch, setTableSearch] = useState("");
+  const [apptPage, setApptPage] = useState(0);
+  const APPTS_PER_PAGE = 10;
 
   const filteredAppointments = useMemo(() => {
+    setApptPage(0);
     const q = tableSearch.trim().toLowerCase();
     if (!q) return appointments;
     return appointments.filter((a) =>
@@ -466,6 +469,13 @@ export default function ClientReport() {
       String(a.contact_phone ?? "").includes(q)
     );
   }, [appointments, tableSearch]);
+
+  const pagedAppointments = useMemo(() => {
+    const start = apptPage * APPTS_PER_PAGE;
+    return filteredAppointments.slice(start, start + APPTS_PER_PAGE);
+  }, [filteredAppointments, apptPage]);
+
+  const apptTotalPages = Math.ceil(filteredAppointments.length / APPTS_PER_PAGE);
 
   const bookingSearchResults = useMemo(() => {
     const q = bookingSearch.trim().toLowerCase();
@@ -1297,7 +1307,7 @@ export default function ClientReport() {
                       <span>Contact</span>
                       <span>Outcome</span>
                     </div>
-                    {filteredAppointments.map((appt) => {
+                    {pagedAppointments.map((appt) => {
                       const statusVal = ((appt as any).appointment_status ?? "") as ApptStatus | "";
                       const statusMeta = APPT_STATUSES.find((s) => s.value === statusVal);
                       return (
@@ -1347,7 +1357,7 @@ export default function ClientReport() {
                       <span>Ad Source</span>
                       <span>Outcome</span>
                     </div>
-                    {filteredAppointments.map((appt) => {
+                    {pagedAppointments.map((appt) => {
                       const statusVal = ((appt as any).appointment_status ?? "") as ApptStatus | "";
                       const statusMeta = APPT_STATUSES.find((s) => s.value === statusVal);
                       const savedDealValue = (appt as any).deal_value as number | null ?? null;
@@ -1411,6 +1421,29 @@ export default function ClientReport() {
                     })}
                   </div>
                 </Card>
+
+                {/* Pagination */}
+                {apptTotalPages > 1 && (
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      onClick={() => setApptPage((p) => Math.max(0, p - 1))}
+                      disabled={apptPage === 0}
+                      className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      ← Previous
+                    </button>
+                    <span className="text-xs text-muted-foreground">
+                      {apptPage * APPTS_PER_PAGE + 1}–{Math.min((apptPage + 1) * APPTS_PER_PAGE, filteredAppointments.length)} of {filteredAppointments.length}
+                    </span>
+                    <button
+                      onClick={() => setApptPage((p) => Math.min(apptTotalPages - 1, p + 1))}
+                      disabled={apptPage >= apptTotalPages - 1}
+                      className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      See more →
+                    </button>
+                  </div>
+                )}
 
               </>) : (
                 <p className="py-8 text-center text-sm text-muted-foreground">No appointments yet.</p>
