@@ -328,6 +328,7 @@ export type Database = {
           title: string
           description: string | null
           metric_type: string
+          target_type: string
           target_value: number
           bonus_amount: number | null
           bonus_description: string | null
@@ -342,6 +343,7 @@ export type Database = {
           title: string
           description?: string | null
           metric_type: string
+          target_type?: string
           target_value: number
           bonus_amount?: number | null
           bonus_description?: string | null
@@ -356,6 +358,7 @@ export type Database = {
           title?: string
           description?: string | null
           metric_type?: string
+          target_type?: string
           target_value?: number
           bonus_amount?: number | null
           bonus_description?: string | null
