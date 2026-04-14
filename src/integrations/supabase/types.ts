@@ -329,9 +329,10 @@ export type Database = {
           description: string | null
           metric_type: string
           target_type: string
-          target_value: number
+          target_value: number | null
           bonus_amount: number | null
           bonus_description: string | null
+          participant_ids: string[] | null
           deadline: string
           is_active: boolean
           created_at: string
@@ -344,9 +345,10 @@ export type Database = {
           description?: string | null
           metric_type: string
           target_type?: string
-          target_value: number
+          target_value?: number | null
           bonus_amount?: number | null
           bonus_description?: string | null
+          participant_ids?: string[] | null
           deadline: string
           is_active?: boolean
           created_at?: string
@@ -359,9 +361,10 @@ export type Database = {
           description?: string | null
           metric_type?: string
           target_type?: string
-          target_value?: number
+          target_value?: number | null
           bonus_amount?: number | null
           bonus_description?: string | null
+          participant_ids?: string[] | null
           deadline?: string
           is_active?: boolean
           created_at?: string

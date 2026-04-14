@@ -75,6 +75,7 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
     metric_type: "appointments_set" as MetricType,
     target_type: "team" as "team" | "individual",
     target_value: "",
+    participant_ids: null as string[] | null,
     bonus_amount: "",
     bonus_description: "",
     deadline: "",
@@ -252,7 +253,8 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
         description: incentiveForm.description || null,
         metric_type: incentiveForm.metric_type,
         target_type: incentiveForm.target_type,
-        target_value: parseInt(incentiveForm.target_value, 10),
+        target_value: incentiveForm.target_value ? parseInt(incentiveForm.target_value, 10) : null,
+        participant_ids: incentiveForm.participant_ids,
         bonus_amount: incentiveForm.bonus_amount ? parseFloat(incentiveForm.bonus_amount) : null,
         bonus_description: incentiveForm.bonus_description || null,
         deadline: incentiveForm.deadline,
@@ -267,6 +269,7 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
         metric_type: "appointments_set",
         target_type: "team",
         target_value: "",
+        participant_ids: null,
         bonus_amount: "",
         bonus_description: "",
         deadline: "",
@@ -355,11 +358,17 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
             {incentives.filter((i) => i.is_active).map((incentive) => {
               const isIndividual = incentive.target_type === "individual";
               const metric = incentive.metric_type as MetricType;
+              const hasTarget = incentive.target_value != null;
+              const participants = incentive.participant_ids as string[] | null;
 
-              // For team: single aggregate; for individual: per-setter leaderboard
-              const teamCurrent = metricTotals[metric] ?? 0;
+              // Filter setters to participants (null = all)
+              const eligibleSetters = participants
+                ? setters.filter((s) => participants.includes(s.id))
+                : setters;
+
+              // Build sorted leaderboard rows for individual
               const setterRows = isIndividual
-                ? setters
+                ? eligibleSetters
                     .map((s) => ({
                       id: s.id,
                       name: s.name,
@@ -367,14 +376,22 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
                     }))
                     .sort((a, b) => b.value - a.value)
                 : [];
-              const leaderValue = isIndividual ? (setterRows[0]?.value ?? 0) : 0;
-              const anyAchieved = isIndividual && setterRows.some((r) => r.value >= incentive.target_value);
 
-              const current = isIndividual ? leaderValue : teamCurrent;
-              const pct = progressPct(current, incentive.target_value);
+              const leaderValue = isIndividual ? (setterRows[0]?.value ?? 0) : 0;
+              const anyAchieved = hasTarget && isIndividual && setterRows.some((r) => r.value >= incentive.target_value!);
+
+              // Team aggregate (filtered to participants if set)
+              const teamCurrent = isIndividual
+                ? leaderValue
+                : eligibleSetters.reduce((sum, s) => sum + (setterTotals[s.id]?.[metric] ?? 0), 0);
+
+              const current = teamCurrent;
+              const pct = hasTarget ? progressPct(current, incentive.target_value!) : 0;
               const days = daysLeft(incentive.deadline);
               const isExpired = days < 0;
-              const isAchieved = isIndividual ? anyAchieved : current >= incentive.target_value;
+              const isAchieved = hasTarget
+                ? (isIndividual ? anyAchieved : current >= incentive.target_value!)
+                : false;
 
               return (
                 <div
@@ -429,8 +446,8 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
                     </div>
                   </div>
 
-                  {/* Team target: single progress bar */}
-                  {!isIndividual && (
+                  {/* Team target */}
+                  {!isIndividual && hasTarget && (
                     <div>
                       <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
                         <span>{METRIC_LABELS[metric]}: {current} / {incentive.target_value}</span>
@@ -439,13 +456,7 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
                       <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all ${
-                            isAchieved
-                              ? "bg-emerald-500"
-                              : isExpired
-                              ? "bg-red-400"
-                              : pct >= 75
-                              ? "bg-amber-400"
-                              : "bg-sky-400"
+                            isAchieved ? "bg-emerald-500" : isExpired ? "bg-red-400" : pct >= 75 ? "bg-amber-400" : "bg-sky-400"
                           }`}
                           style={{ width: `${pct}%` }}
                         />
@@ -453,38 +464,38 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
                     </div>
                   )}
 
-                  {/* Individual target: per-setter leaderboard */}
+                  {/* Individual: leaderboard (with or without target) */}
                   {isIndividual && (
                     <div className="space-y-1.5">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                        First to {incentive.target_value} {METRIC_LABELS[metric]}
-                      </p>
+                      {hasTarget && (
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                          First to {incentive.target_value} {METRIC_LABELS[metric]}
+                        </p>
+                      )}
                       {setterRows.map((row, idx) => {
-                        const rowPct = progressPct(row.value, incentive.target_value);
-                        const rowAchieved = row.value >= incentive.target_value;
+                        const rowPct = hasTarget ? progressPct(row.value, incentive.target_value!) : 0;
+                        const rowAchieved = hasTarget && row.value >= incentive.target_value!;
+                        const isLeader = idx === 0 && row.value > 0;
                         return (
                           <div key={row.id}>
                             <div className="flex items-center justify-between text-[10px] mb-0.5">
-                              <span className={`font-medium ${rowAchieved ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`}>
-                                {idx === 0 && !rowAchieved ? "🏆 " : ""}{row.name}
-                                {rowAchieved ? " ✓" : ""}
+                              <span className={`font-medium ${rowAchieved ? "text-emerald-600 dark:text-emerald-400" : isLeader ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>
+                                {isLeader && !rowAchieved ? "🏆 " : ""}{row.name}{rowAchieved ? " ✓" : ""}
                               </span>
-                              <span className="text-muted-foreground">{row.value} / {incentive.target_value}</span>
+                              <span className="text-muted-foreground">
+                                {hasTarget ? `${row.value} / ${incentive.target_value}` : row.value}
+                              </span>
                             </div>
-                            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all ${
-                                  rowAchieved
-                                    ? "bg-emerald-500"
-                                    : isExpired
-                                    ? "bg-red-400"
-                                    : idx === 0
-                                    ? "bg-amber-400"
-                                    : "bg-sky-400"
-                                }`}
-                                style={{ width: `${rowPct}%` }}
-                              />
-                            </div>
+                            {hasTarget && (
+                              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    rowAchieved ? "bg-emerald-500" : isExpired ? "bg-red-400" : isLeader ? "bg-amber-400" : "bg-sky-400"
+                                  }`}
+                                  style={{ width: `${rowPct}%` }}
+                                />
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -588,11 +599,11 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
                     </select>
                   </div>
                   <div>
-                    <label className="text-[10px] text-muted-foreground uppercase tracking-wide">Target #</label>
+                    <label className="text-[10px] text-muted-foreground uppercase tracking-wide">Target # (optional)</label>
                     <Input
                       type="number"
                       min={1}
-                      placeholder="e.g. 50"
+                      placeholder="e.g. 25 — or leave blank"
                       value={incentiveForm.target_value}
                       onChange={(e) =>
                         setIncentiveForm((f) => ({ ...f, target_value: e.target.value }))
@@ -601,6 +612,42 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
                     />
                   </div>
                 </div>
+
+                {/* Participant selection — individual only */}
+                {incentiveForm.target_type === "individual" && setters.length > 0 && (
+                  <div>
+                    <label className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                      Competing reps (leave all unchecked for everyone)
+                    </label>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {setters.map((s) => {
+                        const selected = incentiveForm.participant_ids?.includes(s.id) ?? false;
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() =>
+                              setIncentiveForm((f) => {
+                                const current = f.participant_ids ?? [];
+                                const next = selected
+                                  ? current.filter((id) => id !== s.id)
+                                  : [...current, s.id];
+                                return { ...f, participant_ids: next.length ? next : null };
+                              })
+                            }
+                            className={`px-2 py-0.5 rounded-full border text-[11px] transition-colors ${
+                              selected
+                                ? "bg-primary text-primary-foreground border-primary font-semibold"
+                                : "bg-background text-muted-foreground border-input hover:text-foreground"
+                            }`}
+                          >
+                            {s.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -652,7 +699,6 @@ export function CallCenterDashboard({ accountId, accountName }: Props) {
                     className="h-7 text-xs"
                     disabled={
                       !incentiveForm.title.trim() ||
-                      !incentiveForm.target_value ||
                       !incentiveForm.deadline ||
                       addIncentive.isPending
                     }
