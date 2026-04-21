@@ -62,14 +62,6 @@ function monthLabel(ym: string) {
   return format(parseISO(ym + "-01"), "MMMM yyyy");
 }
 
-function daysInMonth(ym: string): string[] {
-  const [year, month] = ym.split("-").map(Number);
-  const count = new Date(year, month, 0).getDate();
-  return Array.from({ length: count }, (_, i) =>
-    format(new Date(year, month - 1, i + 1), "yyyy-MM-dd")
-  );
-}
-
 // ────────────────────────────────────────────────────────────
 // Main component
 // ────────────────────────────────────────────────────────────
@@ -81,7 +73,6 @@ export function CallCenterDashboard({ accountId, accountName, isAdmin = false }:
   const [incentiveOpen, setIncentiveOpen] = useState(true);
   const [newSetterName, setNewSetterName] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), "yyyy-MM"));
-  const [expandedSetters, setExpandedSetters] = useState<Set<string>>(new Set());
   const [editingMetric, setEditingMetric] = useState<{
     setterId: string;
     date: string;
@@ -100,8 +91,8 @@ export function CallCenterDashboard({ accountId, accountName, isAdmin = false }:
     deadline: "",
   });
 
-  const today = format(new Date(), "yyyy-MM-dd");
-  const monthDays = useMemo(() => daysInMonth(selectedMonth), [selectedMonth]);
+  // Canonical date for monthly metric rows: first of the selected month
+  const monthDate = selectedMonth + "-01";
 
   function changeMonth(delta: number) {
     const [year, month] = selectedMonth.split("-").map(Number);
@@ -109,15 +100,6 @@ export function CallCenterDashboard({ accountId, accountName, isAdmin = false }:
     const next = format(d, "yyyy-MM");
     if (next < "2026-04") return;
     setSelectedMonth(next);
-  }
-
-  function toggleSetter(id: string) {
-    setExpandedSetters((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
   }
 
   // ── Data queries ───────────────────────────────────────────
@@ -164,26 +146,6 @@ export function CallCenterDashboard({ accountId, accountName, isAdmin = false }:
   });
 
   // ── Derived totals ─────────────────────────────────────────
-  // All-time totals used for incentive progress
-  const totals = useMemo(() => {
-    return metrics.reduce(
-      (acc, m) => ({
-        calls: acc.calls + m.calls_made,
-        appts: acc.appts + m.appointments_set,
-        installs: acc.installs + m.installs_generated,
-        leads: acc.leads + m.unique_leads,
-      }),
-      { calls: 0, appts: 0, installs: 0, leads: 0 }
-    );
-  }, [metrics]);
-
-  const metricTotals = useMemo(() => ({
-    calls_made: totals.calls,
-    appointments_set: totals.appts,
-    installs_generated: totals.installs,
-    unique_leads: totals.leads,
-  }), [totals]);
-
   const setterTotals = useMemo(() => {
     const map: Record<string, Record<MetricType, number>> = {};
     for (const m of metrics) {
@@ -198,10 +160,10 @@ export function CallCenterDashboard({ accountId, accountName, isAdmin = false }:
     return map;
   }, [metrics]);
 
-  // Monthly totals used for KPI cards
+  // Rows for the selected month (one per setter, stored against monthDate)
   const monthMetrics = useMemo(
-    () => metrics.filter((m) => m.metric_date >= monthDays[0] && m.metric_date <= monthDays[monthDays.length - 1]),
-    [metrics, monthDays]
+    () => metrics.filter((m) => m.metric_date === monthDate),
+    [metrics, monthDate]
   );
 
   const monthTotals = useMemo(() => monthMetrics.reduce(
@@ -800,169 +762,112 @@ export function CallCenterDashboard({ accountId, accountName, isAdmin = false }:
         ))}
       </div>
 
-      {/* ── Per-setter monthly tables ────────────────────────── */}
-      <div className="space-y-3">
+      {/* ── Setter monthly totals table ──────────────────────── */}
+      <div className="space-y-2">
         {setters.length === 0 && (
           <p className="text-xs text-muted-foreground text-center py-4">
             No setters added yet. Add a setter above to start tracking.
           </p>
         )}
 
-        {setters.map((setter) => {
-          const isExpanded = expandedSetters.has(setter.id);
-          const setterMonthMetrics = monthMetrics.filter((m) => m.setter_id === setter.id);
-          const setterMonthTotals = setterMonthMetrics.reduce(
-            (acc, m) => ({
-              calls: acc.calls + m.calls_made,
-              leads: acc.leads + m.unique_leads,
-              appts: acc.appts + m.appointments_set,
-              installs: acc.installs + m.installs_generated,
-            }),
-            { calls: 0, leads: 0, appts: 0, installs: 0 }
-          );
+        {setters.length > 0 && (
+          <div className="rounded-lg border border-border/60 overflow-hidden">
+            {/* Column headers */}
+            <div className="grid grid-cols-[1fr_70px_80px_70px_70px_28px] gap-0 bg-muted/40 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <span>Setter</span>
+              <span className="text-center">Calls</span>
+              <span className="text-center">Uniq. Leads</span>
+              <span className="text-center">Appts</span>
+              <span className="text-center">Installs</span>
+              <span />
+            </div>
 
-          return (
-            <div key={setter.id} className="rounded-lg border border-border/60 bg-background/80 overflow-hidden">
-              {/* Setter header */}
-              <div
-                className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-muted/20 transition-colors select-none"
-                onClick={() => toggleSetter(setter.id)}
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  {isExpanded ? (
-                    <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  ) : (
-                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  )}
-                  <span className="text-sm font-semibold text-foreground truncate">{setter.name}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  {/* Monthly summary chips */}
-                  <div className="hidden sm:flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <span className="flex items-center gap-0.5">
-                      <Phone className="h-3 w-3" />{setterMonthTotals.calls}
-                    </span>
-                    <span className="flex items-center gap-0.5">
-                      <UserCheck className="h-3 w-3" />{setterMonthTotals.leads}
-                    </span>
-                    <span className="flex items-center gap-0.5">
-                      <CalendarCheck className="h-3 w-3" />{setterMonthTotals.appts}
-                    </span>
-                    <span className="flex items-center gap-0.5">
-                      <Wrench className="h-3 w-3" />{setterMonthTotals.installs}
-                    </span>
-                  </div>
-                  {isAdmin && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); deleteSetter.mutate(setter.id); }}
-                      className="text-muted-foreground hover:text-destructive transition-colors"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
+            {setters.map((setter) => {
+              const row = monthMetrics.find((m) => m.setter_id === setter.id);
 
-              {/* Daily breakdown table */}
-              {isExpanded && (
-                <div className="border-t border-border/40">
-                  {/* Column headers */}
-                  <div className="grid grid-cols-[1fr_56px_56px_56px_56px] gap-0 bg-muted/40 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    <span>Date</span>
-                    <span className="text-center">Calls</span>
-                    <span className="text-center">Leads</span>
-                    <span className="text-center">Appts</span>
-                    <span className="text-center">Installs</span>
-                  </div>
+              return (
+                <div
+                  key={setter.id}
+                  className="grid grid-cols-[1fr_70px_80px_70px_70px_28px] gap-0 border-t border-border/40 px-3 py-2 items-center hover:bg-muted/20 transition-colors"
+                >
+                  <span className="text-xs font-medium text-foreground truncate">{setter.name}</span>
 
-                  {monthDays.map((date) => {
-                    const row = monthMetrics.find((m) => m.setter_id === setter.id && m.metric_date === date);
-                    const isToday = date === today;
-                    const isFuture = date > today;
+                  {METRIC_FIELDS.map((field) => {
+                    const val = row?.[field] ?? 0;
+                    const isEditing =
+                      editingMetric?.setterId === setter.id &&
+                      editingMetric.date === monthDate &&
+                      editingMetric.field === field;
 
                     return (
-                      <div
-                        key={date}
-                        className={`grid grid-cols-[1fr_56px_56px_56px_56px] gap-0 border-t border-border/30 px-3 py-1.5 items-center transition-colors ${
-                          isToday
-                            ? "bg-sky-50/60 dark:bg-sky-950/30"
-                            : isFuture
-                            ? "opacity-40"
-                            : "hover:bg-muted/10"
-                        }`}
-                      >
-                        <span className={`text-xs ${isToday ? "font-semibold text-sky-700 dark:text-sky-300" : "text-muted-foreground"}`}>
-                          {format(parseISO(date), "MMM d, EEE")}
-                          {isToday && <span className="ml-1 text-[10px] font-normal opacity-70">today</span>}
-                        </span>
-
-                        {METRIC_FIELDS.map((field) => {
-                          const val = row?.[field] ?? 0;
-                          const isEditing =
-                            editingMetric?.setterId === setter.id &&
-                            editingMetric.date === date &&
-                            editingMetric.field === field;
-
-                          return (
-                            <div key={field} className="text-center">
-                              {isAdmin && isEditing ? (
-                                <div className="flex items-center justify-center gap-0.5">
-                                  <Input
-                                    type="number"
-                                    min={0}
-                                    value={editingMetric!.value}
-                                    onChange={(e) => setEditingMetric({ ...editingMetric!, value: e.target.value })}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") commitMetricEdit();
-                                      if (e.key === "Escape") setEditingMetric(null);
-                                    }}
-                                    className="h-5 w-10 text-center text-xs px-1"
-                                    autoFocus
-                                  />
-                                  <button onClick={commitMetricEdit} className="text-green-600 hover:text-green-700">
-                                    <Check className="h-3 w-3" />
-                                  </button>
-                                  <button onClick={() => setEditingMetric(null)} className="text-muted-foreground hover:text-destructive">
-                                    <X className="h-3 w-3" />
-                                  </button>
-                                </div>
-                              ) : isAdmin ? (
-                                <button
-                                  className="group flex items-center justify-center gap-0.5 w-full"
-                                  onClick={() =>
-                                    setEditingMetric({ setterId: setter.id, date, field, value: String(val) })
-                                  }
-                                >
-                                  <span className={`text-xs font-semibold ${val === 0 && !row ? "text-muted-foreground/40" : "text-foreground"}`}>
-                                    {val === 0 && !row ? "—" : val}
-                                  </span>
-                                  <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                </button>
-                              ) : (
-                                <span className={`text-xs font-semibold ${val === 0 && !row ? "text-muted-foreground/40" : "text-foreground"}`}>
-                                  {val === 0 && !row ? "—" : val}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
+                      <div key={field} className="text-center">
+                        {isAdmin && isEditing ? (
+                          <div className="flex items-center justify-center gap-0.5">
+                            <Input
+                              type="number"
+                              min={0}
+                              value={editingMetric!.value}
+                              onChange={(e) => setEditingMetric({ ...editingMetric!, value: e.target.value })}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") commitMetricEdit();
+                                if (e.key === "Escape") setEditingMetric(null);
+                              }}
+                              className="h-5 w-12 text-center text-xs px-1"
+                              autoFocus
+                            />
+                            <button onClick={commitMetricEdit} className="text-green-600 hover:text-green-700">
+                              <Check className="h-3 w-3" />
+                            </button>
+                            <button onClick={() => setEditingMetric(null)} className="text-muted-foreground hover:text-destructive">
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : isAdmin ? (
+                          <button
+                            className="group flex items-center justify-center gap-0.5 w-full"
+                            onClick={() =>
+                              setEditingMetric({ setterId: setter.id, date: monthDate, field, value: String(val) })
+                            }
+                          >
+                            <span className={`text-xs font-semibold ${val === 0 && !row ? "text-muted-foreground/40" : "text-foreground"}`}>
+                              {val === 0 && !row ? "—" : val}
+                            </span>
+                            <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </button>
+                        ) : (
+                          <span className={`text-xs font-semibold ${val === 0 && !row ? "text-muted-foreground/40" : "text-foreground"}`}>
+                            {val === 0 && !row ? "—" : val}
+                          </span>
+                        )}
                       </div>
                     );
                   })}
 
-                  {/* Monthly total row */}
-                  <div className="grid grid-cols-[1fr_56px_56px_56px_56px] gap-0 border-t border-border bg-muted/40 px-3 py-1.5 items-center">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Total</span>
-                    <span className="text-center text-xs font-bold text-foreground">{setterMonthTotals.calls}</span>
-                    <span className="text-center text-xs font-bold text-foreground">{setterMonthTotals.leads}</span>
-                    <span className="text-center text-xs font-bold text-foreground">{setterMonthTotals.appts}</span>
-                    <span className="text-center text-xs font-bold text-foreground">{setterMonthTotals.installs}</span>
-                  </div>
+                  {isAdmin ? (
+                    <button
+                      onClick={() => deleteSetter.mutate(setter.id)}
+                      className="text-muted-foreground hover:text-destructive transition-colors flex items-center justify-center"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  ) : <span />}
                 </div>
-              )}
-            </div>
-          );
-        })}
+              );
+            })}
+
+            {/* Team total row */}
+            {setters.length > 1 && (
+              <div className="grid grid-cols-[1fr_70px_80px_70px_70px_28px] gap-0 border-t border-border bg-muted/40 px-3 py-1.5 items-center">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Total</span>
+                <span className="text-center text-xs font-bold text-foreground">{monthTotals.calls}</span>
+                <span className="text-center text-xs font-bold text-foreground">{monthTotals.leads}</span>
+                <span className="text-center text-xs font-bold text-foreground">{monthTotals.appts}</span>
+                <span className="text-center text-xs font-bold text-foreground">{monthTotals.installs}</span>
+                <span />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
