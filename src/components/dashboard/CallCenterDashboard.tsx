@@ -160,21 +160,46 @@ export function CallCenterDashboard({ accountId, accountName, isAdmin = false }:
     return map;
   }, [metrics]);
 
-  // Rows for the selected month (one per setter, stored against monthDate)
+  // Last day of selected month (for range filter)
+  const monthEnd = useMemo(() => {
+    const [year, month] = selectedMonth.split("-").map(Number);
+    const last = new Date(year, month, 0);
+    return format(last, "yyyy-MM-dd");
+  }, [selectedMonth]);
+
+  // All rows in the selected month (daily legacy data + any canonical monthly rows)
   const monthMetrics = useMemo(
-    () => metrics.filter((m) => m.metric_date === monthDate),
-    [metrics, monthDate]
+    () => metrics.filter((m) => m.metric_date >= monthDate && m.metric_date <= monthEnd),
+    [metrics, monthDate, monthEnd]
   );
 
-  const monthTotals = useMemo(() => monthMetrics.reduce(
-    (acc, m) => ({
-      calls: acc.calls + m.calls_made,
-      appts: acc.appts + m.appointments_set,
-      installs: acc.installs + m.installs_generated,
-      leads: acc.leads + m.unique_leads,
-    }),
-    { calls: 0, appts: 0, installs: 0, leads: 0 }
-  ), [monthMetrics]);
+  // Aggregate all rows in the month per setter into a single virtual total
+  const setterMonthValues = useMemo(() => {
+    const map: Record<string, { calls_made: number; unique_leads: number; appointments_set: number; installs_generated: number; hasData: boolean }> = {};
+    for (const m of monthMetrics) {
+      if (!map[m.setter_id]) {
+        map[m.setter_id] = { calls_made: 0, unique_leads: 0, appointments_set: 0, installs_generated: 0, hasData: false };
+      }
+      map[m.setter_id].calls_made += m.calls_made;
+      map[m.setter_id].unique_leads += m.unique_leads;
+      map[m.setter_id].appointments_set += m.appointments_set;
+      map[m.setter_id].installs_generated += m.installs_generated;
+      map[m.setter_id].hasData = true;
+    }
+    return map;
+  }, [monthMetrics]);
+
+  const monthTotals = useMemo(() => {
+    return Object.values(setterMonthValues).reduce(
+      (acc, v) => ({
+        calls: acc.calls + v.calls_made,
+        appts: acc.appts + v.appointments_set,
+        installs: acc.installs + v.installs_generated,
+        leads: acc.leads + v.unique_leads,
+      }),
+      { calls: 0, appts: 0, installs: 0, leads: 0 }
+    );
+  }, [setterMonthValues]);
 
   // ── Mutations ──────────────────────────────────────────────
   const addSetter = useMutation({
@@ -210,33 +235,45 @@ export function CallCenterDashboard({ accountId, accountName, isAdmin = false }:
   const upsertMetric = useMutation({
     mutationFn: async ({
       setterId,
-      date,
       field,
       value,
     }: {
       setterId: string;
-      date: string;
       field: MetricType;
       value: number;
     }) => {
-      const existing = metrics.find(
-        (m) => m.setter_id === setterId && m.metric_date === date
-      );
-      if (existing) {
+      // Get current aggregated values for this setter/month
+      const current = setterMonthValues[setterId] ?? {
+        calls_made: 0, unique_leads: 0, appointments_set: 0, installs_generated: 0, hasData: false,
+      };
+      const merged = {
+        calls_made: current.calls_made,
+        unique_leads: current.unique_leads,
+        appointments_set: current.appointments_set,
+        installs_generated: current.installs_generated,
+        [field]: value,
+      };
+
+      // Delete ALL existing rows for this setter in this month (consolidation)
+      const rowIds = monthMetrics
+        .filter((m) => m.setter_id === setterId)
+        .map((m) => m.id);
+      if (rowIds.length > 0) {
         const { error } = await supabase
           .from("call_center_metrics")
-          .update({ [field]: value, updated_at: new Date().toISOString() })
-          .eq("id", existing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("call_center_metrics").insert({
-          setter_id: setterId,
-          account_id: accountId,
-          metric_date: date,
-          [field]: value,
-        });
+          .delete()
+          .in("id", rowIds);
         if (error) throw error;
       }
+
+      // Insert single canonical row for the month
+      const { error } = await supabase.from("call_center_metrics").insert({
+        setter_id: setterId,
+        account_id: accountId,
+        metric_date: monthDate,
+        ...merged,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cc-metrics", accountId] });
@@ -315,7 +352,6 @@ export function CallCenterDashboard({ accountId, accountName, isAdmin = false }:
     }
     upsertMetric.mutate({
       setterId: editingMetric.setterId,
-      date: editingMetric.date,
       field: editingMetric.field,
       value: val,
     });
@@ -783,7 +819,8 @@ export function CallCenterDashboard({ accountId, accountName, isAdmin = false }:
             </div>
 
             {setters.map((setter) => {
-              const row = monthMetrics.find((m) => m.setter_id === setter.id);
+              const agg = setterMonthValues[setter.id];
+              const hasData = agg?.hasData ?? false;
 
               return (
                 <div
@@ -793,10 +830,9 @@ export function CallCenterDashboard({ accountId, accountName, isAdmin = false }:
                   <span className="text-xs font-medium text-foreground truncate">{setter.name}</span>
 
                   {METRIC_FIELDS.map((field) => {
-                    const val = row?.[field] ?? 0;
+                    const val = agg?.[field] ?? 0;
                     const isEditing =
                       editingMetric?.setterId === setter.id &&
-                      editingMetric.date === monthDate &&
                       editingMetric.field === field;
 
                     return (
@@ -829,14 +865,14 @@ export function CallCenterDashboard({ accountId, accountName, isAdmin = false }:
                               setEditingMetric({ setterId: setter.id, date: monthDate, field, value: String(val) })
                             }
                           >
-                            <span className={`text-xs font-semibold ${val === 0 && !row ? "text-muted-foreground/40" : "text-foreground"}`}>
-                              {val === 0 && !row ? "—" : val}
+                            <span className={`text-xs font-semibold ${!hasData ? "text-muted-foreground/40" : "text-foreground"}`}>
+                              {!hasData ? "—" : val}
                             </span>
                             <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                           </button>
                         ) : (
-                          <span className={`text-xs font-semibold ${val === 0 && !row ? "text-muted-foreground/40" : "text-foreground"}`}>
-                            {val === 0 && !row ? "—" : val}
+                          <span className={`text-xs font-semibold ${!hasData ? "text-muted-foreground/40" : "text-foreground"}`}>
+                            {!hasData ? "—" : val}
                           </span>
                         )}
                       </div>
