@@ -70,9 +70,13 @@ const Creatives = () => {
   const [addPreviewPreview, setAddPreviewPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Inline rename state (keyed by template name)
-  const [inlineEditName, setInlineEditName] = useState<string | null>(null);
-  const [inlineEditValue, setInlineEditValue] = useState("");
+  // Template settings dialog
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOriginalName, setSettingsOriginalName] = useState("");
+  const [settingsName, setSettingsName] = useState("");
+  const [settingsType, setSettingsType] = useState<"image" | "video" | null>(null);
+  const [settingsLink, setSettingsLink] = useState("");
+  const [settingsSaving, setSettingsSaving] = useState(false);
 
   // Edit client production dialog
   const [editProdOpen, setEditProdOpen] = useState(false);
@@ -138,11 +142,13 @@ const Creatives = () => {
         // First uploaded image across any client = template preview
         const previewImage = items.find((i) => i.file_type === "image")?.file_url ?? null;
 
-        // Template type meta row (stored as file_type: "template_type")
+        // Template meta row (stored as file_type: "template_type")
         const typeMeta = items.find((i) => i.file_type === "template_type");
-        const templateType: "image" | "video" | null = typeMeta
-          ? (typeMeta.file_name as "image" | "video")
-          : null;
+        const templateType: "image" | "video" | null =
+          typeMeta && (typeMeta.file_name === "image" || typeMeta.file_name === "video")
+            ? typeMeta.file_name
+            : null;
+        const templateLink: string = typeMeta?.file_url ?? "";
 
         // One entry per client; link takes priority over null
         // Exclude meta rows from client map
@@ -156,7 +162,7 @@ const Creatives = () => {
           }
         });
 
-        return { name, previewImage, templateType, typeMeta, clients: clientMap, items };
+        return { name, previewImage, templateType, templateLink, typeMeta, clients: clientMap, items };
       })
       .filter(({ name, clients }) => {
         if (filterAccount !== "all" && !(filterAccount in clients)) return false;
@@ -214,21 +220,61 @@ const Creatives = () => {
     },
   });
 
-  // Rename template (updates batch_name on all items)
-  const renameTemplate = useMutation({
-    mutationFn: async ({ oldName, newName }: { oldName: string; newName: string }) => {
-      const items = creatives.filter((c) => (c.batch_name || "Uncategorized") === oldName);
-      for (const item of items) {
-        const { error } = await supabase.from("creatives").update({ batch_name: newName }).eq("id", item.id);
+  // Save all template-level settings: name, type, link
+  const saveTemplateSettings = useMutation({
+    mutationFn: async ({
+      originalName,
+      newName,
+      type,
+      link,
+      existingMetaId,
+      accountName,
+    }: {
+      originalName: string;
+      newName: string;
+      type: "image" | "video" | null;
+      link: string;
+      existingMetaId: string | null;
+      accountName: string;
+    }) => {
+      setSettingsSaving(true);
+      // Rename: update batch_name on every row for this template
+      if (newName !== originalName) {
+        const items = creatives.filter((c) => (c.batch_name || "Uncategorized") === originalName);
+        for (const item of items) {
+          const { error } = await supabase.from("creatives").update({ batch_name: newName }).eq("id", item.id);
+          if (error) throw error;
+        }
+      }
+      // Upsert meta row for type + link
+      if (existingMetaId) {
+        const { error } = await supabase
+          .from("creatives")
+          .update({ file_name: type ?? "", file_url: link, batch_name: newName })
+          .eq("id", existingMetaId);
+        if (error) throw error;
+      } else if (type || link) {
+        const { error } = await supabase.from("creatives").insert({
+          account_name: accountName,
+          batch_name: newName,
+          file_name: type ?? "",
+          file_url: link,
+          file_type: "template_type",
+          launch_date: null,
+        });
         if (error) throw error;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["creatives"] });
-      setInlineEditName(null);
-      toast.success("Template renamed");
+      setSettingsOpen(false);
+      setSettingsSaving(false);
+      toast.success("Template updated");
     },
-    onError: (err: Error) => toast.error(`Failed: ${err.message}`),
+    onError: (err: Error) => {
+      setSettingsSaving(false);
+      toast.error(`Failed: ${err.message}`);
+    },
   });
 
   // Delete entire template
@@ -291,40 +337,6 @@ const Creatives = () => {
       setEditProdSaving(false);
       toast.error(`Failed: ${err.message}`);
     },
-  });
-
-  const setTemplateType = useMutation({
-    mutationFn: async ({
-      templateName,
-      type,
-      existingMetaId,
-      accountName,
-    }: {
-      templateName: string;
-      type: "image" | "video";
-      existingMetaId: string | null;
-      accountName: string;
-    }) => {
-      if (existingMetaId) {
-        const { error } = await supabase
-          .from("creatives")
-          .update({ file_name: type })
-          .eq("id", existingMetaId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("creatives").insert({
-          account_name: accountName,
-          batch_name: templateName,
-          file_name: type,
-          file_url: "",
-          file_type: "template_type",
-          launch_date: null,
-        });
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["creatives"] }),
-    onError: (err: Error) => toast.error(`Failed: ${err.message}`),
   });
 
   const uploadThumbnail = useMutation({
@@ -440,7 +452,7 @@ const Creatives = () => {
         {/* Template grid */}
         {!isLoading && templateGroups.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {templateGroups.map(({ name, previewImage, templateType, typeMeta, clients, items }) => (
+            {templateGroups.map(({ name, previewImage, templateType, templateLink, typeMeta, clients, items }) => (
               <div
                 key={name}
                 className="rounded-xl border border-border bg-card overflow-hidden flex flex-col shadow-sm"
@@ -489,37 +501,33 @@ const Creatives = () => {
                 {/* Card body */}
                 <div className="p-4 flex flex-col gap-3 flex-1">
                   <div className="flex items-start justify-between gap-2">
-                    {inlineEditName === name ? (
-                      <input
-                        autoFocus
-                        className="flex-1 text-sm font-semibold bg-transparent border-b border-primary outline-none leading-tight text-foreground"
-                        value={inlineEditValue}
-                        onChange={(e) => setInlineEditValue(e.target.value)}
-                        onBlur={() => {
-                          const trimmed = inlineEditValue.trim();
-                          if (trimmed && trimmed !== name) {
-                            renameTemplate.mutate({ oldName: name, newName: trimmed });
-                          } else {
-                            setInlineEditName(null);
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                          if (e.key === "Escape") setInlineEditName(null);
-                        }}
-                      />
-                    ) : (
-                      <h3
-                        className="font-semibold text-sm leading-tight text-foreground cursor-text hover:text-primary transition-colors"
-                        title="Click to rename"
-                        onClick={() => {
-                          setInlineEditName(name);
-                          setInlineEditValue(name);
-                        }}
-                      >
-                        {name}
-                      </h3>
-                    )}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-sm leading-tight text-foreground truncate">{name}</h3>
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        {templateType && (
+                          <span className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                            templateType === "video"
+                              ? "bg-violet-100 text-violet-800"
+                              : "bg-sky-100 text-sky-800"
+                          )}>
+                            {templateType === "video" ? "Video" : "Image"}
+                          </span>
+                        )}
+                        {templateLink && (
+                          <a
+                            href={templateLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                            title="Open template link"
+                          >
+                            <ExternalLink className="h-2.5 w-2.5" />
+                            Template link
+                          </a>
+                        )}
+                      </div>
+                    </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 -mt-0.5">
@@ -527,6 +535,17 @@ const Creatives = () => {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setSettingsOriginalName(name);
+                            setSettingsName(name);
+                            setSettingsType(templateType);
+                            setSettingsLink(templateLink);
+                            setSettingsOpen(true);
+                          }}
+                        >
+                          <Info className="mr-2 h-3.5 w-3.5" /> Settings
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => {
                             setAddTemplateName(name);
@@ -543,33 +562,6 @@ const Creatives = () => {
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </div>
-
-                  {/* Type badge */}
-                  <div className="flex gap-1.5">
-                    {(["image", "video"] as const).map((t) => (
-                      <button
-                        key={t}
-                        onClick={() =>
-                          setTemplateType.mutate({
-                            templateName: name,
-                            type: t,
-                            existingMetaId: typeMeta?.id ?? null,
-                            accountName: items[0]?.account_name ?? "_meta",
-                          })
-                        }
-                        className={cn(
-                          "rounded-full px-2.5 py-0.5 text-[11px] font-semibold border transition-colors",
-                          templateType === t
-                            ? t === "video"
-                              ? "bg-violet-100 text-violet-800 border-violet-200"
-                              : "bg-sky-100 text-sky-800 border-sky-200"
-                            : "bg-transparent text-muted-foreground border-border hover:border-muted-foreground"
-                        )}
-                      >
-                        {t === "video" ? "Video" : "Image"}
-                      </button>
-                    ))}
                   </div>
 
                   {/* Client pills */}
@@ -721,6 +713,75 @@ const Creatives = () => {
                 disabled={!addTemplateName.trim() || !addClient || !addGdriveUrl.trim() || saving}
               >
                 {saving ? "Saving…" : "Save"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Template Settings Dialog */}
+        <Dialog open={settingsOpen} onOpenChange={(open) => { if (!open) { setSettingsOpen(false); setSettingsSaving(false); } }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Template Settings</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Name</label>
+                <Input
+                  value={settingsName}
+                  onChange={(e) => setSettingsName(e.target.value)}
+                  placeholder="Template name"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Type</label>
+                <div className="flex gap-2">
+                  {(["image", "video"] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setSettingsType(settingsType === t ? null : t)}
+                      className={cn(
+                        "flex-1 rounded-lg border py-2 text-xs font-semibold transition-colors",
+                        settingsType === t
+                          ? t === "video"
+                            ? "bg-violet-100 text-violet-800 border-violet-200"
+                            : "bg-sky-100 text-sky-800 border-sky-200"
+                          : "border-border text-muted-foreground hover:border-muted-foreground"
+                      )}
+                    >
+                      {t === "video" ? "Video" : "Image"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Template Link <span className="text-muted-foreground/60">(optional)</span>
+                </label>
+                <Input
+                  value={settingsLink}
+                  onChange={(e) => setSettingsLink(e.target.value)}
+                  placeholder="https://drive.google.com/…"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSettingsOpen(false)}>Cancel</Button>
+              <Button
+                onClick={() => {
+                  const group = templateGroups.find((g) => g.name === settingsOriginalName);
+                  saveTemplateSettings.mutate({
+                    originalName: settingsOriginalName,
+                    newName: settingsName.trim() || settingsOriginalName,
+                    type: settingsType,
+                    link: settingsLink.trim(),
+                    existingMetaId: group?.typeMeta?.id ?? null,
+                    accountName: group?.items[0]?.account_name ?? "_meta",
+                  });
+                }}
+                disabled={!settingsName.trim() || settingsSaving}
+              >
+                {settingsSaving ? "Saving…" : "Save"}
               </Button>
             </DialogFooter>
           </DialogContent>
