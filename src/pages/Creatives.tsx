@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +18,7 @@ import {
   ExternalLink,
   Search,
   Info,
+  Camera,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
@@ -83,6 +84,11 @@ const Creatives = () => {
 
   // Delete template
   const [deleteTemplateName, setDeleteTemplateName] = useState<string | null>(null);
+
+  // Thumbnail upload (shared file input)
+  const thumbnailInputRef = useRef<HTMLInputElement>(null);
+  const [thumbnailTargetTemplate, setThumbnailTargetTemplate] = useState<string | null>(null);
+  const [thumbnailUploading, setThumbnailUploading] = useState(false);
 
   // Lightbox
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -279,6 +285,36 @@ const Creatives = () => {
     },
   });
 
+  const uploadThumbnail = useMutation({
+    mutationFn: async ({ templateName, file, accountName }: { templateName: string; file: File; accountName: string }) => {
+      setThumbnailUploading(true);
+      const ext = file.name.split(".").pop();
+      const path = `${accountName}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: uploadErr } = await supabase.storage.from("creatives").upload(path, file);
+      if (uploadErr) throw uploadErr;
+      const { data: urlData } = supabase.storage.from("creatives").getPublicUrl(path);
+      const { error } = await supabase.from("creatives").insert({
+        account_name: accountName,
+        batch_name: templateName,
+        file_name: file.name,
+        file_url: urlData.publicUrl,
+        file_type: "image",
+        launch_date: null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["creatives"] });
+      setThumbnailTargetTemplate(null);
+      setThumbnailUploading(false);
+      toast.success("Thumbnail updated");
+    },
+    onError: (err: Error) => {
+      setThumbnailUploading(false);
+      toast.error(`Upload failed: ${err.message}`);
+    },
+  });
+
   const resetAddForm = () => {
     setAddOpen(false);
     setAddTemplateName("");
@@ -362,17 +398,14 @@ const Creatives = () => {
         {/* Template grid */}
         {!isLoading && templateGroups.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {templateGroups.map(({ name, previewImage, clients }) => (
+            {templateGroups.map(({ name, previewImage, clients, items }) => (
               <div
                 key={name}
                 className="rounded-xl border border-border bg-card overflow-hidden flex flex-col shadow-sm"
               >
                 {/* Preview */}
                 <div
-                  className={cn(
-                    "aspect-video bg-muted flex items-center justify-center",
-                    previewImage && "cursor-pointer"
-                  )}
+                  className="group/preview relative aspect-video bg-muted flex items-center justify-center cursor-pointer"
                   onClick={() => previewImage && setLightboxUrl(previewImage)}
                 >
                   {previewImage ? (
@@ -385,6 +418,30 @@ const Creatives = () => {
                   ) : (
                     <ImageIcon className="h-10 w-10 text-muted-foreground/25" />
                   )}
+                  {/* Upload thumbnail overlay */}
+                  <button
+                    className={cn(
+                      "absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/40 opacity-0 group-hover/preview:opacity-100 transition-opacity",
+                      thumbnailUploading && thumbnailTargetTemplate === name && "opacity-100"
+                    )}
+                    title="Upload thumbnail"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setThumbnailTargetTemplate(name);
+                      thumbnailInputRef.current?.click();
+                    }}
+                  >
+                    {thumbnailUploading && thumbnailTargetTemplate === name ? (
+                      <span className="text-xs text-white">Uploading…</span>
+                    ) : (
+                      <>
+                        <Camera className="h-5 w-5 text-white" />
+                        <span className="text-xs text-white font-medium">
+                          {previewImage ? "Replace thumbnail" : "Upload thumbnail"}
+                        </span>
+                      </>
+                    )}
+                  </button>
                 </div>
 
                 {/* Card body */}
@@ -685,6 +742,21 @@ const Creatives = () => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        {/* Hidden shared thumbnail file input */}
+        <input
+          ref={thumbnailInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file || !thumbnailTargetTemplate) return;
+            const group = templateGroups.find((g) => g.name === thumbnailTargetTemplate);
+            const accountName = group?.items[0]?.account_name ?? "template";
+            uploadThumbnail.mutate({ templateName: thumbnailTargetTemplate, file, accountName });
+            e.target.value = "";
+          }}
+        />
       </div>
     </div>
   );
