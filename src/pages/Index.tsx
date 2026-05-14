@@ -356,6 +356,13 @@ const Index = () => {
           </div>
         </div>
 
+        {/* ── Comparison footnote ───────────────────────────────────────────── */}
+        {prevDateRange && (
+          <p className="text-[11px] text-muted-foreground text-right -mt-5 mb-6">
+            Comparing to {format(prevDateRange.from, "MMM d")} – {format(prevDateRange.to, "MMM d, yyyy")}
+          </p>
+        )}
+
         {/* ── New Clients ──────────────────────────────────────────────────── */}
         {newClients && newClients.length > 0 && (
           <div className="mb-8">
