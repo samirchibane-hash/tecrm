@@ -454,6 +454,8 @@ const Index = () => {
                     const spendDelta = pctDelta(row.totalSpend, row.prevSpend);
                     const leadsDelta = pctDelta(row.ghlLeads, row.prevGhlLeads);
                     const apptsDelta = pctDelta(row.ghlAppointments, row.prevGhlAppointments);
+                    const cplDelta = pctDelta(row.ghlCostPerLead, row.prevGhlCostPerLead);
+                    const cpaDelta = pctDelta(row.ghlCostPerAppt, row.prevGhlCostPerAppt);
                     const isLast = i === tableRows.length - 1;
                     return (
                       <tr
@@ -499,9 +501,16 @@ const Index = () => {
                         {/* CPL */}
                         <td className="py-3.5 px-4 text-right tabular-nums">
                           {row.ghlCostPerLead > 0 ? (
-                            <span className={`font-semibold ${cplStatus ? STATUS_TEXT[cplStatus] : "text-foreground"}`}>
-                              ${row.ghlCostPerLead.toFixed(0)}
-                            </span>
+                            <>
+                              <span className={`font-semibold ${cplStatus ? STATUS_TEXT[cplStatus] : "text-foreground"}`}>
+                                ${row.ghlCostPerLead.toFixed(0)}
+                              </span>
+                              {cplDelta && (
+                                <span className={`ml-1.5 text-[11px] ${cplDelta.flat ? "text-muted-foreground" : cplDelta.up ? "text-red-500 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
+                                  {cplDelta.flat ? "→" : cplDelta.up ? "↑" : "↓"}{cplDelta.pct}
+                                </span>
+                              )}
+                            </>
                           ) : (
                             <span className="text-muted-foreground">–</span>
                           )}
@@ -526,9 +535,16 @@ const Index = () => {
                         {/* CPA */}
                         <td className="py-3.5 px-4 text-right tabular-nums">
                           {row.ghlCostPerAppt > 0 ? (
-                            <span className={`font-semibold ${cpaStatus ? STATUS_TEXT[cpaStatus] : "text-foreground"}`}>
-                              ${row.ghlCostPerAppt.toFixed(0)}
-                            </span>
+                            <>
+                              <span className={`font-semibold ${cpaStatus ? STATUS_TEXT[cpaStatus] : "text-foreground"}`}>
+                                ${row.ghlCostPerAppt.toFixed(0)}
+                              </span>
+                              {cpaDelta && (
+                                <span className={`ml-1.5 text-[11px] ${cpaDelta.flat ? "text-muted-foreground" : cpaDelta.up ? "text-red-500 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
+                                  {cpaDelta.flat ? "→" : cpaDelta.up ? "↑" : "↓"}{cpaDelta.pct}
+                                </span>
+                              )}
+                            </>
                           ) : (
                             <span className="text-muted-foreground">–</span>
                           )}
