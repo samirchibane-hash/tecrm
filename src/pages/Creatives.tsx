@@ -59,6 +59,7 @@ const CLIENT_COLORS = [
 const Creatives = () => {
   const queryClient = useQueryClient();
   const [filterAccount, setFilterAccount] = useState<string>("all");
+  const [filterType, setFilterType] = useState<string>("all");
   const [search, setSearch] = useState("");
 
   // Add production dialog
@@ -164,13 +165,14 @@ const Creatives = () => {
 
         return { name, previewImage, templateType, templateLink, typeMeta, clients: clientMap, items };
       })
-      .filter(({ name, clients }) => {
+      .filter(({ name, templateType, clients }) => {
         if (filterAccount !== "all" && !(filterAccount in clients)) return false;
+        if (filterType !== "all" && templateType !== filterType) return false;
         if (search && !name.toLowerCase().includes(search.toLowerCase())) return false;
-        return Object.keys(clients).length > 0 || true; // keep empty-client templates too
+        return true;
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [creatives, filterAccount, search]);
+  }, [creatives, filterAccount, filterType, search]);
 
   const existingTemplates = useMemo(() => {
     return [...new Set(creatives.map((c) => c.batch_name || "Uncategorized"))].sort();
@@ -407,6 +409,16 @@ const Creatives = () => {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="w-[130px] h-9 text-xs">
+                <SelectValue placeholder="All Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="image">Image</SelectItem>
+                <SelectItem value="video">Video</SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={filterAccount} onValueChange={setFilterAccount}>
               <SelectTrigger className="w-[160px] h-9 text-xs">
                 <SelectValue placeholder="All Clients" />
