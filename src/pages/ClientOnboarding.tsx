@@ -12,28 +12,38 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, ExternalLink, Globe, Phone, Mail, MapPin, Clock, DollarSign, Tag, MessageSquare, CheckSquare } from "lucide-react";
 import { format } from "date-fns";
 
-const CHECKLIST_ITEMS = [
-  { section: "Access & Setup", items: [
-    { key: "fb_access", label: "Facebook Ad Account Access Granted" },
-    { key: "ghl_created", label: "GHL Sub-Account Created" },
-    { key: "ghl_integrations", label: "GHL Integrations Configured" },
-  ]},
-  { section: "Strategy", items: [
-    { key: "kickoff_scheduled", label: "Kickoff Call Scheduled" },
-    { key: "kickoff_completed", label: "Kickoff Call Completed" },
-    { key: "strategy_approved", label: "Campaign Strategy Approved" },
-  ]},
-  { section: "Creative", items: [
-    { key: "brief_sent", label: "Creative Brief Sent to Client" },
-    { key: "creatives_received", label: "First Creative Batch Received" },
-    { key: "creatives_uploaded", label: "Creatives Uploaded to Portal" },
-  ]},
-  { section: "Launch", items: [
-    { key: "campaigns_built", label: "Campaign Structure Built" },
-    { key: "campaigns_live", label: "Campaigns Live" },
-    { key: "first_report", label: "First Weekly Report Sent" },
-  ]},
-];
+type ChecklistSection = { section: string; items: { key: string; label: string }[] };
+
+const CHECKLISTS: Record<string, ChecklistSection[]> = {
+  leads: [
+    { section: "Access & Setup", items: [
+      { key: "fb_access", label: "Facebook Ad Account Access Granted" },
+      { key: "ghl_created", label: "GHL Sub-Account Created" },
+      { key: "ghl_integrations", label: "GHL Integrations Configured" },
+    ]},
+    { section: "Strategy", items: [
+      { key: "kickoff_scheduled", label: "Kickoff Call Scheduled" },
+      { key: "kickoff_completed", label: "Kickoff Call Completed" },
+      { key: "strategy_approved", label: "Campaign Strategy Approved" },
+    ]},
+    { section: "Creative", items: [
+      { key: "brief_sent", label: "Creative Brief Sent to Client" },
+      { key: "creatives_received", label: "First Creative Batch Received" },
+      { key: "creatives_uploaded", label: "Creatives Uploaded to Portal" },
+    ]},
+    { section: "Launch", items: [
+      { key: "campaigns_built", label: "Campaign Structure Built" },
+      { key: "campaigns_live", label: "Campaigns Live" },
+      { key: "first_report", label: "First Weekly Report Sent" },
+    ]},
+  ],
+  // websites: [...],   // TODO: add when first Websites client is onboarded
+  // cleardeals: [...], // TODO: add when first ClearDeals client is onboarded
+};
+
+function getChecklist(service: string | null): ChecklistSection[] {
+  return CHECKLISTS[service?.toLowerCase() ?? ""] ?? [];
+}
 
 const DAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -128,9 +138,10 @@ export default function ClientOnboarding() {
     },
   });
 
+  const checklist = getChecklist(client?.service ?? null);
   const completedKeys = new Set((progress ?? []).filter((p) => p.completed).map((p) => p.item_key));
-  const totalItems = CHECKLIST_ITEMS.flatMap((s) => s.items).length;
-  const completedCount = CHECKLIST_ITEMS.flatMap((s) => s.items).filter((i) => completedKeys.has(i.key)).length;
+  const totalItems = checklist.flatMap((s) => s.items).length;
+  const completedCount = checklist.flatMap((s) => s.items).filter((i) => completedKeys.has(i.key)).length;
 
   if (isLoading) {
     return (
@@ -190,7 +201,9 @@ export default function ClientOnboarding() {
             <TabsTrigger value="profile">Client Profile</TabsTrigger>
             <TabsTrigger value="onboarding">
               Onboarding
-              <span className="ml-2 text-xs text-muted-foreground">{completedCount}/{totalItems}</span>
+              {totalItems > 0 && (
+                <span className="ml-2 text-xs text-muted-foreground">{completedCount}/{totalItems}</span>
+              )}
             </TabsTrigger>
           </TabsList>
 
@@ -301,44 +314,56 @@ export default function ClientOnboarding() {
           <TabsContent value="onboarding" className="space-y-6">
 
             {/* Progress bar */}
-            <div className="rounded-xl border border-border bg-card p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Overall Progress</span>
-                <span className="text-sm font-bold">{completedCount} / {totalItems}</span>
+            {totalItems > 0 && (
+              <div className="rounded-xl border border-border bg-card p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Overall Progress</span>
+                  <span className="text-sm font-bold">{completedCount} / {totalItems}</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div
+                    className="bg-primary h-2 rounded-full transition-all"
+                    style={{ width: `${(completedCount / totalItems) * 100}%` }}
+                  />
+                </div>
               </div>
-              <div className="w-full bg-muted rounded-full h-2">
-                <div
-                  className="bg-primary h-2 rounded-full transition-all"
-                  style={{ width: `${totalItems > 0 ? (completedCount / totalItems) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
+            )}
 
             {/* Checklist */}
-            <div className="space-y-5">
-              {CHECKLIST_ITEMS.map((section) => (
-                <Section key={section.section} title={section.section}>
-                  {section.items.map((item) => {
-                    const checked = completedKeys.has(item.key);
-                    return (
-                      <div key={item.key} className="flex items-center gap-3">
-                        <Checkbox
-                          id={item.key}
-                          checked={checked}
-                          onCheckedChange={(v) => toggleItem.mutate({ itemKey: item.key, completed: !!v })}
-                        />
-                        <label
-                          htmlFor={item.key}
-                          className={`text-sm cursor-pointer select-none ${checked ? "line-through text-muted-foreground" : "text-foreground"}`}
-                        >
-                          {item.label}
-                        </label>
-                      </div>
-                    );
-                  })}
-                </Section>
-              ))}
-            </div>
+            {checklist.length === 0 ? (
+              <div className="rounded-xl border border-border bg-card p-6 text-center">
+                <CheckSquare className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm font-medium text-foreground mb-1">No checklist yet</p>
+                <p className="text-xs text-muted-foreground">
+                  The onboarding checklist for <span className="font-medium capitalize">{client.service ?? "this service"}</span> hasn't been set up yet.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {checklist.map((section) => (
+                  <Section key={section.section} title={section.section}>
+                    {section.items.map((item) => {
+                      const checked = completedKeys.has(item.key);
+                      return (
+                        <div key={item.key} className="flex items-center gap-3">
+                          <Checkbox
+                            id={item.key}
+                            checked={checked}
+                            onCheckedChange={(v) => toggleItem.mutate({ itemKey: item.key, completed: !!v })}
+                          />
+                          <label
+                            htmlFor={item.key}
+                            className={`text-sm cursor-pointer select-none ${checked ? "line-through text-muted-foreground" : "text-foreground"}`}
+                          >
+                            {item.label}
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </Section>
+                ))}
+              </div>
+            )}
 
             {/* Comments */}
             <div>
