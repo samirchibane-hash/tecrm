@@ -1,25 +1,61 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCouplerData } from "@/hooks/useCouplerData";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, RefreshCw, CalendarDays, SlidersHorizontal, Settings, Image as ImageIcon, Crosshair, Sparkles, ArrowRight } from "lucide-react";
+import {
+  AlertCircle,
+  RefreshCw,
+  CalendarDays,
+  Settings,
+  Image as ImageIcon,
+  Crosshair,
+  Sparkles,
+  ArrowRight,
+  ChevronRight,
+  TrendingUp,
+  TrendingDown,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { format, startOfDay, subDays, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { cn } from "@/lib/utils";
-import { AccountCard, ALL_KPIS, type KpiKey } from "@/components/dashboard/AccountCard";
 import { useSettings } from "@/hooks/useSettings";
 import type { AdRow } from "@/hooks/useCouplerData";
 import type { DateRange } from "react-day-picker";
 
+// ─── KPI helpers ─────────────────────────────────────────────────────────────
+const CPL_TARGET = 40;
+const APPT_TARGET = 200;
+
+function getCostStatus(value: number, target: number): "green" | "orange" | "red" | null {
+  if (value <= 0) return null;
+  if (value <= target) return "green";
+  if (value <= target * 1.25) return "orange";
+  return "red";
+}
+
+const STATUS_TEXT: Record<string, string> = {
+  green: "text-green-700 dark:text-green-400",
+  orange: "text-orange-700 dark:text-orange-400",
+  red: "text-red-700 dark:text-red-400",
+};
+
+function pctDelta(curr: number, prev: number): { pct: string; up: boolean } | null {
+  if (prev <= 0 || curr < 0) return null;
+  const pct = ((curr - prev) / prev) * 100;
+  if (Math.abs(pct) < 0.5) return null;
+  return { pct: Math.abs(pct).toFixed(1) + "%", up: pct > 0 };
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 const Index = () => {
+  const navigate = useNavigate();
   const { data, isLoading, isError, error, refetch, isFetching } = useCouplerData();
+  const { settings } = useSettings();
 
   const { data: newClients } = useQuery({
     queryKey: ["new_clients"],
@@ -33,12 +69,32 @@ const Index = () => {
       return data ?? [];
     },
   });
-  const { settings, updateSettings } = useSettings();
 
-  const enabledKpis = settings.enabled_kpis;
-  const availableKpis = ALL_KPIS.filter((k) => enabledKpis.includes(k.key));
-  const visibleKpis = settings.visible_kpis.filter((k) => enabledKpis.includes(k));
+  // All accounts (for UUID → name mapping used in GHL join)
+  const { data: dbAccounts = [] } = useQuery({
+    queryKey: ["all-accounts"],
+    queryFn: async () => {
+      const { data } = await supabase.from("accounts").select("id, account_name");
+      return data ?? [];
+    },
+  });
 
+  const accountIdMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    dbAccounts.forEach((a) => { map[a.account_name] = a.id; });
+    return map;
+  }, [dbAccounts]);
+
+  // All GHL conversions (one query, grouped client-side)
+  const { data: allGhlConversions = [] } = useQuery({
+    queryKey: ["all-ghl-conversions"],
+    queryFn: async () => {
+      const { data } = await supabase.from("ghl_conversions").select("*");
+      return data ?? [];
+    },
+  });
+
+  // ─── Date range ────────────────────────────────────────────────────────────
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: startOfMonth(new Date()),
     to: startOfDay(new Date()),
@@ -52,14 +108,12 @@ const Index = () => {
     const from = startOfDay(dateRange.from);
     const to = dateRange.to ? startOfDay(dateRange.to) : from;
     return data.filter((row) => {
-      // Parse YYYY-MM-DD as local date to avoid UTC timezone shift
       const [y, m, d] = row["Report: Date"].split("-").map(Number);
       const rowDate = new Date(y, m - 1, d);
       return rowDate >= from && rowDate <= to;
     });
   }, [data, dateRange]);
 
-  // Previous period: same length, immediately before current range
   const prevDateRange = useMemo(() => {
     if (!dateRange?.from || !dateRange?.to) return undefined;
     const periodMs = dateRange.to.getTime() - dateRange.from.getTime() + 86400000;
@@ -74,27 +128,27 @@ const Index = () => {
     const from = startOfDay(prevDateRange.from);
     const to = startOfDay(prevDateRange.to!);
     const map: Record<string, AdRow[]> = {};
-    data.filter((row) => {
-      const [y, m, d] = row["Report: Date"].split("-").map(Number);
-      const rowDate = new Date(y, m - 1, d);
-      return rowDate >= from && rowDate <= to;
-    }).forEach((row) => {
-      const name = row["Account: Account name"];
-      if (!map[name]) map[name] = [];
-      map[name].push(row);
-    });
+    data
+      .filter((row) => {
+        const [y, m, d] = row["Report: Date"].split("-").map(Number);
+        const rowDate = new Date(y, m - 1, d);
+        return rowDate >= from && rowDate <= to;
+      })
+      .forEach((row) => {
+        const name = row["Account: Account name"];
+        if (!map[name]) map[name] = [];
+        map[name].push(row);
+      });
     return map;
   }, [data, prevDateRange]);
 
   const accountGroups = useMemo(() => {
-    // Build map from filtered ad data
     const map: Record<string, AdRow[]> = {};
     filteredData.forEach((row) => {
       const name = row["Account: Account name"];
       if (!map[name]) map[name] = [];
       map[name].push(row);
     });
-    // Also include all accounts from the full dataset so GHL-only data still shows
     if (data) {
       data.forEach((row) => {
         const name = row["Account: Account name"];
@@ -112,27 +166,78 @@ const Index = () => {
       });
   }, [filteredData, data, settings.hidden_accounts]);
 
-  const toggleKpi = (key: KpiKey) => {
-    const next = visibleKpis.includes(key)
-      ? visibleKpis.filter((k) => k !== key)
-      : [...visibleKpis, key];
-    updateSettings({ visible_kpis: next });
-  };
+  // ─── Table rows ────────────────────────────────────────────────────────────
+  const tableRows = useMemo(() => {
+    return accountGroups.map(([name, rows]) => {
+      const accountId = accountIdMap[name];
+
+      const filterGhl = (from?: Date, to?: Date) =>
+        allGhlConversions.filter((c) => {
+          if (c.tecrm_id !== accountId) return false;
+          if (!from) return true;
+          const [y, m, d] = c.created_on.split("-").map(Number);
+          const dateVal = new Date(y, m - 1, d);
+          if (dateVal < from) return false;
+          if (to && dateVal > new Date(to.getTime() + 86400000 - 1)) return false;
+          return true;
+        });
+
+      const ghl = filterGhl(dateRange?.from, dateRange?.to);
+      const prevGhl = prevDateRange?.from
+        ? filterGhl(prevDateRange.from, prevDateRange.to)
+        : [];
+
+      const totalSpend = rows.reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
+      const prevSpend = (prevGroupMap[name] ?? []).reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
+
+      const ghlLeads = ghl.filter((c) =>
+        c.type?.toLowerCase() === "lead" || c.type?.toLowerCase() === "water test"
+      ).length;
+      const ghlAppointments = ghl.filter((c) =>
+        c.type?.toLowerCase() === "appointment" || c.type?.toLowerCase() === "water test"
+      ).length;
+      const ghlCostPerLead = ghlLeads > 0 ? totalSpend / ghlLeads : 0;
+      const ghlCostPerAppt = ghlAppointments > 0 ? totalSpend / ghlAppointments : 0;
+      const soldCount = ghl.filter((c) => c.appointment_status === "sold").length;
+      const totalRevenue = ghl
+        .filter((c) => c.appointment_status === "sold")
+        .reduce((s, c) => s + (c.deal_value ?? 0), 0);
+
+      const prevGhlLeads = prevGhl.filter((c) =>
+        c.type?.toLowerCase() === "lead" || c.type?.toLowerCase() === "water test"
+      ).length;
+      const prevGhlAppointments = prevGhl.filter((c) =>
+        c.type?.toLowerCase() === "appointment" || c.type?.toLowerCase() === "water test"
+      ).length;
+      const prevGhlCostPerLead = prevGhlLeads > 0 ? prevSpend / prevGhlLeads : 0;
+      const prevGhlCostPerAppt = prevGhlAppointments > 0 ? prevSpend / prevGhlAppointments : 0;
+
+      return {
+        name,
+        totalSpend, prevSpend,
+        ghlLeads, prevGhlLeads,
+        ghlCostPerLead, prevGhlCostPerLead,
+        ghlAppointments, prevGhlAppointments,
+        ghlCostPerAppt, prevGhlCostPerAppt,
+        soldCount, totalRevenue,
+      };
+    });
+  }, [accountGroups, accountIdMap, allGhlConversions, dateRange, prevDateRange, prevGroupMap]);
 
   const dateRangeStr = dateRange?.from
     ? dateRange.to
       ? `${format(dateRange.from, "MM/dd")} – ${format(dateRange.to, "MM/dd/yyyy")}`
       : format(dateRange.from, "MM/dd/yyyy")
     : null;
-
   const dateLabel = presetLabel && dateRangeStr
     ? `${presetLabel} (${dateRangeStr})`
     : dateRangeStr ?? "All time";
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-4xl px-4 py-6 sm:py-10 sm:px-6 lg:px-8">
-        {/* Header */}
+      <div className="mx-auto max-w-5xl px-4 py-6 sm:py-10 sm:px-6 lg:px-8">
+
+        {/* ── Header ───────────────────────────────────────────────────────── */}
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <img
@@ -140,13 +245,13 @@ const Index = () => {
               alt="Treat Engine"
               className="h-8 sm:h-10 w-auto"
             />
-            <p className="mt-1 text-sm text-muted-foreground">Campaign performance &amp; change logs</p>
+            <p className="mt-1 text-sm text-muted-foreground">Campaign performance overview</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {/* Date Range Picker */}
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2 max-w-[180px] sm:max-w-none">
+                <Button variant="outline" size="sm" className="gap-2 max-w-[200px] sm:max-w-none">
                   <CalendarDays className="h-4 w-4 shrink-0" />
                   <span className="text-xs truncate">{dateLabel}</span>
                 </Button>
@@ -167,7 +272,11 @@ const Index = () => {
                       variant="ghost"
                       size="sm"
                       className="justify-start text-xs h-10 rounded-sm"
-                      onClick={() => { setDateRange(preset.range); setPresetLabel(preset.label); setShowCustomCalendar(false); }}
+                      onClick={() => {
+                        setDateRange(preset.range);
+                        setPresetLabel(preset.label);
+                        setShowCustomCalendar(false);
+                      }}
                     >
                       {preset.label}
                     </Button>
@@ -181,7 +290,12 @@ const Index = () => {
                     Custom…
                   </Button>
                   {dateRange?.from && (
-                    <Button variant="ghost" size="sm" className="justify-start text-xs h-10 rounded-sm text-muted-foreground" onClick={() => { setDateRange(undefined); setPresetLabel(""); setShowCustomCalendar(false); }}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="justify-start text-xs h-10 rounded-sm text-muted-foreground"
+                      onClick={() => { setDateRange(undefined); setPresetLabel(""); setShowCustomCalendar(false); }}
+                    >
                       Clear
                     </Button>
                   )}
@@ -200,31 +314,6 @@ const Index = () => {
               </PopoverContent>
             </Popover>
 
-            {/* KPI Selector */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <SlidersHorizontal className="h-4 w-4" />
-                  <span className="text-xs">KPIs ({visibleKpis.length})</span>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-56" align="end">
-                <div className="space-y-3">
-                  <p className="text-sm font-medium text-foreground">Visible KPIs</p>
-                  {availableKpis.map(({ key, label }) => (
-                    <div key={key} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`kpi-${key}`}
-                        checked={visibleKpis.includes(key)}
-                        onCheckedChange={() => toggleKpi(key)}
-                      />
-                      <Label htmlFor={`kpi-${key}`} className="text-sm cursor-pointer">{label}</Label>
-                    </div>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
-
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
               <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline ml-2">Refresh</span>
@@ -233,18 +322,16 @@ const Index = () => {
             <Button variant="ghost" size="sm" asChild>
               <Link to="/creatives"><ImageIcon className="h-4 w-4" /></Link>
             </Button>
-
             <Button variant="ghost" size="sm" asChild>
               <Link to="/competitor-analysis"><Crosshair className="h-4 w-4" /></Link>
             </Button>
-
             <Button variant="ghost" size="sm" asChild>
               <Link to="/settings"><Settings className="h-4 w-4" /></Link>
             </Button>
           </div>
         </div>
 
-        {/* New Clients */}
+        {/* ── New Clients ──────────────────────────────────────────────────── */}
         {newClients && newClients.length > 0 && (
           <div className="mb-8">
             <div className="flex items-center gap-2 mb-3">
@@ -266,9 +353,7 @@ const Index = () => {
                     <p className="text-xs text-muted-foreground mt-0.5 capitalize">
                       {[client.service, client.plan].filter(Boolean).join(" · ")}
                       {client.submitted_at && (
-                        <span className="ml-2">
-                          · {formatDistanceToNow(new Date(client.submitted_at), { addSuffix: true })}
-                        </span>
+                        <span className="ml-2">· {formatDistanceToNow(new Date(client.submitted_at), { addSuffix: true })}</span>
                       )}
                     </p>
                   </div>
@@ -279,16 +364,16 @@ const Index = () => {
           </div>
         )}
 
-        {/* Loading */}
+        {/* ── Loading ───────────────────────────────────────────────────────── */}
         {isLoading && (
-          <div className="space-y-4">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-32 rounded-2xl" />
+          <div className="space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 rounded-xl" />
             ))}
           </div>
         )}
 
-        {/* Error */}
+        {/* ── Error ─────────────────────────────────────────────────────────── */}
         {isError && (
           <div className="flex flex-col items-center gap-4 py-20 text-center">
             <AlertCircle className="h-12 w-12 text-destructive" />
@@ -298,21 +383,143 @@ const Index = () => {
           </div>
         )}
 
-        {/* Account Cards */}
-        {accountGroups.length > 0 && (
-          <div className="space-y-4">
-            {accountGroups.map(([name, rows]) => (
-              <AccountCard
-                key={name}
-                accountName={name}
-                rows={rows}
-                prevRows={prevGroupMap[name] ?? []}
-                prevDateRange={prevDateRange}
-                visibleKpis={visibleKpis}
-                dateRange={dateRange}
-                changeLogOptions={settings.change_log_options}
-              />
-            ))}
+        {/* ── Accounts Table ────────────────────────────────────────────────── */}
+        {tableRows.length > 0 && (
+          <div className="rounded-xl border border-border/60 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[600px]">
+                <thead>
+                  <tr className="border-b border-border/60 bg-muted/40">
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Account
+                    </th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Spend
+                    </th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Leads
+                    </th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      CPL
+                    </th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Appts
+                    </th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      CPA
+                    </th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Sold
+                    </th>
+                    <th className="py-3 px-4 w-8" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableRows.map((row, i) => {
+                    const cplStatus = getCostStatus(row.ghlCostPerLead, CPL_TARGET);
+                    const cpaStatus = getCostStatus(row.ghlCostPerAppt, APPT_TARGET);
+                    const spendDelta = pctDelta(row.totalSpend, row.prevSpend);
+                    const leadsDelta = pctDelta(row.ghlLeads, row.prevGhlLeads);
+                    const apptsDelta = pctDelta(row.ghlAppointments, row.prevGhlAppointments);
+                    const isLast = i === tableRows.length - 1;
+                    return (
+                      <tr
+                        key={row.name}
+                        onClick={() => navigate(`/account/${encodeURIComponent(row.name)}`)}
+                        className={`group cursor-pointer hover:bg-muted/30 transition-colors ${!isLast ? "border-b border-border/40" : ""}`}
+                      >
+                        {/* Account */}
+                        <td className="py-3.5 px-4">
+                          <span className="font-medium text-foreground group-hover:text-primary transition-colors">
+                            {row.name}
+                          </span>
+                        </td>
+
+                        {/* Spend */}
+                        <td className="py-3.5 px-4 text-right tabular-nums">
+                          <span className="font-semibold text-foreground">
+                            ${row.totalSpend.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                          </span>
+                          {spendDelta && (
+                            <span className="ml-1.5 text-[11px] text-muted-foreground">
+                              {spendDelta.up ? "↑" : "↓"}{spendDelta.pct}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Leads */}
+                        <td className="py-3.5 px-4 text-right tabular-nums">
+                          {row.ghlLeads > 0 ? (
+                            <>
+                              <span className="font-medium text-foreground">{row.ghlLeads}</span>
+                              {leadsDelta && (
+                                <span className={`ml-1.5 text-[11px] ${leadsDelta.up ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
+                                  {leadsDelta.up ? "↑" : "↓"}{leadsDelta.pct}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">–</span>
+                          )}
+                        </td>
+
+                        {/* CPL */}
+                        <td className="py-3.5 px-4 text-right tabular-nums">
+                          {row.ghlCostPerLead > 0 ? (
+                            <span className={`font-semibold ${cplStatus ? STATUS_TEXT[cplStatus] : "text-foreground"}`}>
+                              ${row.ghlCostPerLead.toFixed(0)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">–</span>
+                          )}
+                        </td>
+
+                        {/* Appts */}
+                        <td className="py-3.5 px-4 text-right tabular-nums">
+                          {row.ghlAppointments > 0 ? (
+                            <>
+                              <span className="font-medium text-foreground">{row.ghlAppointments}</span>
+                              {apptsDelta && (
+                                <span className={`ml-1.5 text-[11px] ${apptsDelta.up ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
+                                  {apptsDelta.up ? "↑" : "↓"}{apptsDelta.pct}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">–</span>
+                          )}
+                        </td>
+
+                        {/* CPA */}
+                        <td className="py-3.5 px-4 text-right tabular-nums">
+                          {row.ghlCostPerAppt > 0 ? (
+                            <span className={`font-semibold ${cpaStatus ? STATUS_TEXT[cpaStatus] : "text-foreground"}`}>
+                              ${row.ghlCostPerAppt.toFixed(0)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">–</span>
+                          )}
+                        </td>
+
+                        {/* Sold */}
+                        <td className="py-3.5 px-4 text-right tabular-nums">
+                          {row.soldCount > 0 ? (
+                            <span className="font-medium text-foreground">{row.soldCount}</span>
+                          ) : (
+                            <span className="text-muted-foreground">–</span>
+                          )}
+                        </td>
+
+                        {/* Arrow */}
+                        <td className="py-3.5 px-4">
+                          <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity ml-auto" />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
