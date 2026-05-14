@@ -43,11 +43,11 @@ const STATUS_TEXT: Record<string, string> = {
   red: "text-red-700 dark:text-red-400",
 };
 
-function pctDelta(curr: number, prev: number): { pct: string; up: boolean } | null {
+function pctDelta(curr: number, prev: number): { pct: string; up: boolean; flat: boolean } | null {
   if (prev <= 0 || curr < 0) return null;
   const pct = ((curr - prev) / prev) * 100;
-  if (Math.abs(pct) < 0.5) return null;
-  return { pct: Math.abs(pct).toFixed(1) + "%", up: pct > 0 };
+  if (Math.abs(pct) < 0.5) return { pct: "0%", up: false, flat: true };
+  return { pct: Math.abs(pct).toFixed(1) + "%", up: pct > 0, flat: false };
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -472,20 +472,20 @@ const Index = () => {
                             ${row.totalSpend.toLocaleString("en-US", { maximumFractionDigits: 0 })}
                           </span>
                           {spendDelta && (
-                            <span className="ml-1.5 text-[11px] text-muted-foreground">
-                              {spendDelta.up ? "↑" : "↓"}{spendDelta.pct}
+                            <span className={`ml-1.5 text-[11px] ${spendDelta.flat ? "text-muted-foreground" : "text-muted-foreground"}`}>
+                              {spendDelta.flat ? "→" : spendDelta.up ? "↑" : "↓"}{spendDelta.pct}
                             </span>
                           )}
                         </td>
 
                         {/* Leads */}
                         <td className="py-3.5 px-4 text-right tabular-nums">
-                          {row.ghlLeads > 0 ? (
+                          {(row.ghlLeads > 0 || row.prevGhlLeads > 0) ? (
                             <>
                               <span className="font-medium text-foreground">{row.ghlLeads}</span>
                               {leadsDelta && (
-                                <span className={`ml-1.5 text-[11px] ${leadsDelta.up ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
-                                  {leadsDelta.up ? "↑" : "↓"}{leadsDelta.pct}
+                                <span className={`ml-1.5 text-[11px] ${leadsDelta.flat ? "text-muted-foreground" : leadsDelta.up ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
+                                  {leadsDelta.flat ? "→" : leadsDelta.up ? "↑" : "↓"}{leadsDelta.pct}
                                 </span>
                               )}
                             </>
@@ -507,12 +507,12 @@ const Index = () => {
 
                         {/* Appts */}
                         <td className="py-3.5 px-4 text-right tabular-nums">
-                          {row.ghlAppointments > 0 ? (
+                          {(row.ghlAppointments > 0 || row.prevGhlAppointments > 0) ? (
                             <>
                               <span className="font-medium text-foreground">{row.ghlAppointments}</span>
                               {apptsDelta && (
-                                <span className={`ml-1.5 text-[11px] ${apptsDelta.up ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
-                                  {apptsDelta.up ? "↑" : "↓"}{apptsDelta.pct}
+                                <span className={`ml-1.5 text-[11px] ${apptsDelta.flat ? "text-muted-foreground" : apptsDelta.up ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
+                                  {apptsDelta.flat ? "→" : apptsDelta.up ? "↑" : "↓"}{apptsDelta.pct}
                                 </span>
                               )}
                             </>
