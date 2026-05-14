@@ -273,77 +273,6 @@ const Index = () => {
             <p className="mt-1 text-sm text-muted-foreground">Campaign performance overview</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {/* Date Range Picker */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2 max-w-[200px] sm:max-w-none">
-                  <CalendarDays className="h-4 w-4 shrink-0" />
-                  <span className="text-xs truncate">{dateLabel}</span>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className={cn("p-1.5", showCustomCalendar ? "w-auto" : "w-48")} align="end">
-                <div className="flex flex-col gap-0.5">
-                  {[
-                    { label: "Today", range: { from: startOfDay(new Date()), to: startOfDay(new Date()) } },
-                    { label: "Yesterday", range: { from: startOfDay(subDays(new Date(), 1)), to: startOfDay(subDays(new Date(), 1)) } },
-                    { label: "Month to Date", range: { from: startOfMonth(new Date()), to: startOfDay(new Date()) } },
-                    { label: "Last 7 days", range: { from: startOfDay(subDays(new Date(), 7)), to: startOfDay(subDays(new Date(), 1)) } },
-                    { label: "Last 14 days", range: { from: startOfDay(subDays(new Date(), 14)), to: startOfDay(subDays(new Date(), 1)) } },
-                    { label: "Last 28 days", range: { from: startOfDay(subDays(new Date(), 28)), to: startOfDay(subDays(new Date(), 1)) } },
-                    { label: "Last month", range: { from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) } },
-                  ].map((preset) => (
-                    <Button
-                      key={preset.label}
-                      variant="ghost"
-                      size="sm"
-                      className="justify-start text-xs h-10 rounded-sm"
-                      onClick={() => {
-                        setDateRange(preset.range);
-                        setPresetLabel(preset.label);
-                        setShowCustomCalendar(false);
-                      }}
-                    >
-                      {preset.label}
-                    </Button>
-                  ))}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="justify-start text-xs h-10 rounded-sm"
-                    onClick={() => { setPresetLabel(""); setShowCustomCalendar((v) => !v); }}
-                  >
-                    Custom…
-                  </Button>
-                  {dateRange?.from && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="justify-start text-xs h-10 rounded-sm text-muted-foreground"
-                      onClick={() => { setDateRange(undefined); setPresetLabel(""); setShowCustomCalendar(false); }}
-                    >
-                      Clear
-                    </Button>
-                  )}
-                  {showCustomCalendar && (
-                    <div className="border-t border-border pt-2 mt-1">
-                      <Calendar
-                        mode="range"
-                        selected={dateRange}
-                        onSelect={setDateRange}
-                        numberOfMonths={1}
-                        className={cn("p-0 pointer-events-auto")}
-                      />
-                    </div>
-                  )}
-                </div>
-              </PopoverContent>
-            </Popover>
-
-            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-              <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline ml-2">Refresh</span>
-            </Button>
-
             <Button variant="ghost" size="sm" asChild>
               <Link to="/creatives"><ImageIcon className="h-4 w-4" /></Link>
             </Button>
@@ -355,13 +284,6 @@ const Index = () => {
             </Button>
           </div>
         </div>
-
-        {/* ── Comparison footnote ───────────────────────────────────────────── */}
-        {prevDateRange && (
-          <p className="text-[11px] text-muted-foreground text-right -mt-5 mb-6">
-            Comparing to {format(prevDateRange.from, "MMM d")} – {format(prevDateRange.to, "MMM d, yyyy")}
-          </p>
-        )}
 
         {/* ── New Clients ──────────────────────────────────────────────────── */}
         {newClients && newClients.length > 0 && (
@@ -419,10 +341,83 @@ const Index = () => {
         {tableRows.length > 0 && (
           <div className="rounded-xl border border-border/60 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 bg-muted/40 border-b border-border/60">
-              <h2 className="text-sm font-semibold text-foreground">Account Performance</h2>
-              <span className="text-[11px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border/50">
-                Leads & Appts via GHL
-              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Account Performance</h2>
+                {prevDateRange && (
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    vs {format(prevDateRange.from, "MMM d")} – {format(prevDateRange.to, "MMM d, yyyy")}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2 max-w-[180px]">
+                      <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                      <span className="text-xs truncate">{dateLabel}</span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className={cn("p-1.5", showCustomCalendar ? "w-auto" : "w-48")} align="end">
+                    <div className="flex flex-col gap-0.5">
+                      {[
+                        { label: "Today", range: { from: startOfDay(new Date()), to: startOfDay(new Date()) } },
+                        { label: "Yesterday", range: { from: startOfDay(subDays(new Date(), 1)), to: startOfDay(subDays(new Date(), 1)) } },
+                        { label: "Month to Date", range: { from: startOfMonth(new Date()), to: startOfDay(new Date()) } },
+                        { label: "Last 7 days", range: { from: startOfDay(subDays(new Date(), 7)), to: startOfDay(subDays(new Date(), 1)) } },
+                        { label: "Last 14 days", range: { from: startOfDay(subDays(new Date(), 14)), to: startOfDay(subDays(new Date(), 1)) } },
+                        { label: "Last 28 days", range: { from: startOfDay(subDays(new Date(), 28)), to: startOfDay(subDays(new Date(), 1)) } },
+                        { label: "Last month", range: { from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) } },
+                      ].map((preset) => (
+                        <Button
+                          key={preset.label}
+                          variant="ghost"
+                          size="sm"
+                          className="justify-start text-xs h-10 rounded-sm"
+                          onClick={() => {
+                            setDateRange(preset.range);
+                            setPresetLabel(preset.label);
+                            setShowCustomCalendar(false);
+                          }}
+                        >
+                          {preset.label}
+                        </Button>
+                      ))}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="justify-start text-xs h-10 rounded-sm"
+                        onClick={() => { setPresetLabel(""); setShowCustomCalendar((v) => !v); }}
+                      >
+                        Custom…
+                      </Button>
+                      {dateRange?.from && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="justify-start text-xs h-10 rounded-sm text-muted-foreground"
+                          onClick={() => { setDateRange(undefined); setPresetLabel(""); setShowCustomCalendar(false); }}
+                        >
+                          Clear
+                        </Button>
+                      )}
+                      {showCustomCalendar && (
+                        <div className="border-t border-border pt-2 mt-1">
+                          <Calendar
+                            mode="range"
+                            selected={dateRange}
+                            onSelect={setDateRange}
+                            numberOfMonths={1}
+                            className={cn("p-0 pointer-events-auto")}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+                  <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+                </Button>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[600px]">
