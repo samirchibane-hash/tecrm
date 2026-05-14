@@ -400,10 +400,16 @@ const Index = () => {
         {/* ── Accounts Table ────────────────────────────────────────────────── */}
         {tableRows.length > 0 && (
           <div className="rounded-xl border border-border/60 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 bg-muted/40 border-b border-border/60">
+              <h2 className="text-sm font-semibold text-foreground">Account Performance</h2>
+              <span className="text-[11px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border/50">
+                Leads & Appts via GHL
+              </span>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[600px]">
                 <thead>
-                  <tr className="border-b border-border/60 bg-muted/40">
+                  <tr className="border-b border-border/60 bg-muted/20">
                     <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       Account
                     </th>
@@ -411,16 +417,16 @@ const Index = () => {
                       Spend
                     </th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Leads
+                      GHL Leads
                     </th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      CPL
+                      CPL / Lead
                     </th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Appts
+                      GHL Appts
                     </th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      CPA
+                      CPA / Appt
                     </th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       Last Change
