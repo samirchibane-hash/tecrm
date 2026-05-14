@@ -84,26 +84,6 @@ const Index = () => {
     return map;
   }, [dbAccounts]);
 
-  // GHL conversions — fetch a window covering current + previous period so deltas work.
-  // Date range is in the query key so this refetches when the picker changes.
-  const ghlFetchFrom = useMemo(() => {
-    if (!dateRange?.from) return startOfDay(subDays(new Date(), 180));
-    const periodMs =
-      ((dateRange.to ?? dateRange.from).getTime() - dateRange.from.getTime()) + 86400000;
-    return new Date(dateRange.from.getTime() - periodMs);
-  }, [dateRange]);
-
-  const { data: allGhlConversions = [] } = useQuery({
-    queryKey: ["all-ghl-conversions", format(ghlFetchFrom, "yyyy-MM-dd")],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("ghl_conversions")
-        .select("*")
-        .gte("created_on", format(ghlFetchFrom, "yyyy-MM-dd"));
-      return data ?? [];
-    },
-  });
-
   // Most recent change log date per account
   const { data: lastChanges = [] } = useQuery({
     queryKey: ["last-changes"],
@@ -131,6 +111,26 @@ const Index = () => {
   });
   const [presetLabel, setPresetLabel] = useState<string>("Month to Date");
   const [showCustomCalendar, setShowCustomCalendar] = useState(false);
+
+  // GHL conversions — fetch a window covering current + previous period so deltas work.
+  // Date range is in the query key so this refetches when the picker changes.
+  const ghlFetchFrom = useMemo(() => {
+    if (!dateRange?.from) return startOfDay(subDays(new Date(), 180));
+    const periodMs =
+      ((dateRange.to ?? dateRange.from).getTime() - dateRange.from.getTime()) + 86400000;
+    return new Date(dateRange.from.getTime() - periodMs);
+  }, [dateRange]);
+
+  const { data: allGhlConversions = [] } = useQuery({
+    queryKey: ["all-ghl-conversions", format(ghlFetchFrom, "yyyy-MM-dd")],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("ghl_conversions")
+        .select("*")
+        .gte("created_on", format(ghlFetchFrom, "yyyy-MM-dd"));
+      return data ?? [];
+    },
+  });
 
   const filteredData = useMemo(() => {
     if (!data) return [];
