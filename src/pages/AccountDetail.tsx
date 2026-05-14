@@ -54,6 +54,7 @@ import {
   CalendarDays,
   Circle,
   ListTodo,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, startOfDay, subDays, startOfMonth, endOfMonth, subMonths, max, isPast, isToday } from "date-fns";
@@ -924,16 +925,38 @@ const AccountDetail = () => {
                 {accountLinks.length === 0 && !showLinkForm ? (
                   <p className="text-sm text-muted-foreground py-2">No funnel pages added yet.</p>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="space-y-2">
                     {accountLinks.map((link) => (
-                      <div key={link.id} className="group flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/20 px-3 py-1.5 text-sm">
-                        <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors">
-                          <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          {link.label}
-                        </a>
-                        <button onClick={() => deleteLink.mutate(link.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive ml-0.5">
-                          <X className="h-3 w-3" />
-                        </button>
+                      <div key={link.id} className="group flex items-center gap-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{link.label}</p>
+                          <p className="text-xs text-muted-foreground truncate">{link.url}</p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(link.url); toast.success("Link copied"); }}
+                            className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                            title="Copy link"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                          <a
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                            title="Open in new tab"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                          <button
+                            onClick={() => deleteLink.mutate(link.id)}
+                            className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
