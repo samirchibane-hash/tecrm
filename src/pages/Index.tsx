@@ -47,7 +47,7 @@ function pctDelta(curr: number, prev: number): { pct: string; up: boolean; flat:
   if (prev <= 0 || curr < 0) return null;
   const pct = ((curr - prev) / prev) * 100;
   if (Math.abs(pct) < 0.5) return { pct: "0%", up: false, flat: true };
-  return { pct: Math.abs(pct).toFixed(1) + "%", up: pct > 0, flat: false };
+  return { pct: Math.abs(pct).toFixed(0) + "%", up: pct > 0, flat: false };
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
