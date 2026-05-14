@@ -5,52 +5,81 @@ import { supabase } from "@/integrations/supabase/client";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft,
-  CalendarDays,
-  Upload,
-  Trash2,
-  Image as ImageIcon,
-  Filter,
   Plus,
   X,
   Pencil,
   MoreVertical,
+  Trash2,
+  Image as ImageIcon,
+  ExternalLink,
+  Search,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { format } from "date-fns";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-const SUPABASE_URL = "https://wyjxkkabuwuuvyzrsusy.supabase.co";
+type Creative = {
+  id: string;
+  account_name: string;
+  batch_name: string | null;
+  file_name: string;
+  file_url: string;
+  file_type: string;
+  launch_date: string | null;
+  created_at: string;
+};
+
+const CLIENT_COLORS = [
+  "bg-blue-100 text-blue-800 hover:bg-blue-200",
+  "bg-emerald-100 text-emerald-800 hover:bg-emerald-200",
+  "bg-amber-100 text-amber-800 hover:bg-amber-200",
+  "bg-purple-100 text-purple-800 hover:bg-purple-200",
+  "bg-rose-100 text-rose-800 hover:bg-rose-200",
+  "bg-cyan-100 text-cyan-800 hover:bg-cyan-200",
+  "bg-orange-100 text-orange-800 hover:bg-orange-200",
+  "bg-indigo-100 text-indigo-800 hover:bg-indigo-200",
+];
 
 const Creatives = () => {
   const queryClient = useQueryClient();
   const [filterAccount, setFilterAccount] = useState<string>("all");
-  const [filterBatch, setFilterBatch] = useState<string>("all");
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [filePreviews, setFilePreviews] = useState<string[]>([]);
-  const [uploadAccount, setUploadAccount] = useState("");
-  const [uploadBatch, setUploadBatch] = useState("");
-  const [uploadLaunchDate, setUploadLaunchDate] = useState<Date | undefined>();
-  const [uploading, setUploading] = useState(false);
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  const [linkUrl, setLinkUrl] = useState("");
-  const [editOpen, setEditOpen] = useState(false);
-  const [editKey, setEditKey] = useState<string | null>(null);
-  const [editBatchName, setEditBatchName] = useState("");
-  const [editLaunchDate, setEditLaunchDate] = useState<Date | undefined>();
-  const [deleteConfirmKey, setDeleteConfirmKey] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
-  // Fetch accounts
+  // Add production dialog
+  const [addOpen, setAddOpen] = useState(false);
+  const [addTemplateName, setAddTemplateName] = useState("");
+  const [addClient, setAddClient] = useState("");
+  const [addGdriveUrl, setAddGdriveUrl] = useState("");
+  const [addPreviewFile, setAddPreviewFile] = useState<File | null>(null);
+  const [addPreviewPreview, setAddPreviewPreview] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Rename template dialog
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTemplateName, setEditTemplateName] = useState("");
+  const [editNewName, setEditNewName] = useState("");
+
+  // Delete template
+  const [deleteTemplateName, setDeleteTemplateName] = useState<string | null>(null);
+
+  // Lightbox
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
   const { data: accounts = [] } = useQuery({
     queryKey: ["accounts"],
     queryFn: async () => {
@@ -60,431 +89,485 @@ const Creatives = () => {
     },
   });
 
-  // Fetch creatives
   const { data: creatives = [], isLoading } = useQuery({
     queryKey: ["creatives"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("creatives")
         .select("*")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: true });
       if (error) throw error;
-      return data;
+      return data as Creative[];
     },
   });
 
-  // Derived filters
-  const batches = useMemo(() => {
-    const set = new Set<string>();
-    creatives.forEach((c) => { if (c.batch_name) set.add(c.batch_name); });
-    return Array.from(set).sort();
-  }, [creatives]);
-
-  const filtered = useMemo(() => {
-    return creatives.filter((c) => {
-      if (filterAccount !== "all" && c.account_name !== filterAccount) return false;
-      if (filterBatch !== "all" && c.batch_name !== filterBatch) return false;
-      return true;
-    });
-  }, [creatives, filterAccount, filterBatch]);
-
-  // Group by batch for display
-  // Color palette for account badges
+  // Stable color assignment per account name
   const accountColors = useMemo(() => {
-    const palette = [
-      "bg-blue-100 text-blue-800", "bg-emerald-100 text-emerald-800",
-      "bg-amber-100 text-amber-800", "bg-purple-100 text-purple-800",
-      "bg-rose-100 text-rose-800", "bg-cyan-100 text-cyan-800",
-      "bg-orange-100 text-orange-800", "bg-indigo-100 text-indigo-800",
-    ];
     const map: Record<string, string> = {};
     const names = [...new Set(creatives.map((c) => c.account_name))].sort();
-    names.forEach((name, i) => { map[name] = palette[i % palette.length]; });
+    names.forEach((name, i) => {
+      map[name] = CLIENT_COLORS[i % CLIENT_COLORS.length];
+    });
     return map;
   }, [creatives]);
 
-  const groupedByBatch = useMemo(() => {
-    const map: Record<string, typeof filtered> = {};
-    filtered.forEach((c) => {
-      const key = `${c.account_name}|||${c.batch_name || "Ungrouped"}`;
+  // Group by template (batch_name), derive preview + client map
+  const templateGroups = useMemo(() => {
+    const map: Record<string, Creative[]> = {};
+    creatives.forEach((c) => {
+      const key = c.batch_name || "Uncategorized";
       if (!map[key]) map[key] = [];
       map[key].push(c);
     });
-    // Sort by most recent launch_date descending
-    return Object.entries(map).sort(([, a], [, b]) => {
-      const dateA = a.find((c) => c.launch_date)?.launch_date || "";
-      const dateB = b.find((c) => c.launch_date)?.launch_date || "";
-      return dateB.localeCompare(dateA);
-    });
-  }, [filtered]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    if (!files.length) return;
-    setSelectedFiles((prev) => [...prev, ...files]);
-    setFilePreviews((prev) => [...prev, ...files.map((f) => URL.createObjectURL(f))]);
-  };
+    return Object.entries(map)
+      .map(([name, items]) => {
+        // First uploaded image across any client = template preview
+        const previewImage = items.find((i) => i.file_type !== "link")?.file_url ?? null;
 
-  const removeFile = (index: number) => {
-    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
-    setFilePreviews((prev) => prev.filter((_, i) => i !== index));
-  };
+        // One entry per client; link takes priority over null
+        const clientMap: Record<string, string | null> = {};
+        items.forEach((i) => {
+          if (i.file_type === "link") {
+            clientMap[i.account_name] = i.file_url;
+          } else if (!(i.account_name in clientMap)) {
+            clientMap[i.account_name] = null;
+          }
+        });
 
-  const uploadCreatives = useMutation({
+        return { name, previewImage, clients: clientMap, items };
+      })
+      .filter(({ name, clients }) => {
+        if (filterAccount !== "all" && !(filterAccount in clients)) return false;
+        if (search && !name.toLowerCase().includes(search.toLowerCase())) return false;
+        return true;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [creatives, filterAccount, search]);
+
+  const existingTemplates = useMemo(() => {
+    return [...new Set(creatives.map((c) => c.batch_name || "Uncategorized"))].sort();
+  }, [creatives]);
+
+  // Add a client production (GDrive link + optional preview image)
+  const saveProduction = useMutation({
     mutationFn: async () => {
-      if (!uploadAccount || (selectedFiles.length === 0 && !linkUrl.trim())) return;
-      setUploading(true);
+      if (!addTemplateName.trim() || !addClient || !addGdriveUrl.trim()) return;
+      setSaving(true);
 
-      // Upload image files
-      for (const file of selectedFiles) {
-        const ext = file.name.split(".").pop();
-        const path = `${uploadAccount}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error: uploadErr } = await supabase.storage.from("creatives").upload(path, file);
+      if (addPreviewFile) {
+        const ext = addPreviewFile.name.split(".").pop();
+        const path = `${addClient}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error: uploadErr } = await supabase.storage.from("creatives").upload(path, addPreviewFile);
         if (uploadErr) throw uploadErr;
-
         const { data: urlData } = supabase.storage.from("creatives").getPublicUrl(path);
-
-        const { error: insertErr } = await supabase.from("creatives").insert({
-          account_name: uploadAccount,
-          batch_name: uploadBatch || "",
-          file_name: file.name,
+        const { error: imgErr } = await supabase.from("creatives").insert({
+          account_name: addClient,
+          batch_name: addTemplateName.trim(),
+          file_name: addPreviewFile.name,
           file_url: urlData.publicUrl,
           file_type: "image",
-          launch_date: uploadLaunchDate ? format(uploadLaunchDate, "yyyy-MM-dd") : null,
+          launch_date: null,
         });
-        if (insertErr) throw insertErr;
+        if (imgErr) throw imgErr;
       }
 
-      // Save link if provided
-      if (linkUrl.trim()) {
-        const { error: insertErr } = await supabase.from("creatives").insert({
-          account_name: uploadAccount,
-          batch_name: uploadBatch || "",
-          file_name: linkUrl.trim(),
-          file_url: linkUrl.trim(),
-          file_type: "link",
-          launch_date: uploadLaunchDate ? format(uploadLaunchDate, "yyyy-MM-dd") : null,
-        });
-        if (insertErr) throw insertErr;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["creatives"] });
-      resetUploadForm();
-      toast.success("Creatives uploaded successfully");
-    },
-    onError: (err: Error) => {
-      setUploading(false);
-      toast.error(`Upload failed: ${err.message}`);
-    },
-  });
-
-  const deleteCreative = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("creatives").delete().eq("id", id);
+      const { error } = await supabase.from("creatives").insert({
+        account_name: addClient,
+        batch_name: addTemplateName.trim(),
+        file_name: addGdriveUrl.trim(),
+        file_url: addGdriveUrl.trim(),
+        file_type: "link",
+        launch_date: null,
+      });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["creatives"] });
-      toast.success("Creative deleted");
+      resetAddForm();
+      toast.success("Production added");
+    },
+    onError: (err: Error) => {
+      setSaving(false);
+      toast.error(`Failed: ${err.message}`);
     },
   });
 
-  // Update all creatives in a batch group
-  const updateBatchGroup = useMutation({
-    mutationFn: async ({ items, newBatchName, newLaunchDate }: { items: typeof creatives; newBatchName: string; newLaunchDate: Date | undefined }) => {
+  // Rename template (updates batch_name on all items)
+  const renameTemplate = useMutation({
+    mutationFn: async ({ oldName, newName }: { oldName: string; newName: string }) => {
+      const items = creatives.filter((c) => (c.batch_name || "Uncategorized") === oldName);
       for (const item of items) {
-        const updates: Record<string, string | null> = {};
-        if (newBatchName !== item.batch_name) updates.batch_name = newBatchName;
-        const newDateStr = newLaunchDate ? format(newLaunchDate, "yyyy-MM-dd") : null;
-        if (newDateStr !== item.launch_date) updates.launch_date = newDateStr;
-        if (Object.keys(updates).length > 0) {
-          const { error } = await supabase.from("creatives").update(updates).eq("id", item.id);
-          if (error) throw error;
-        }
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["creatives"] });
-      setEditOpen(false);
-      setEditKey(null);
-      toast.success("Batch updated");
-    },
-    onError: (err: Error) => toast.error(`Update failed: ${err.message}`),
-  });
-
-  // Delete all creatives in a batch group
-  const deleteBatchGroup = useMutation({
-    mutationFn: async (items: typeof creatives) => {
-      for (const item of items) {
-        // Also delete from storage if it's an image
-        if (item.file_type !== "link" && item.file_url.includes("creatives/")) {
-          const path = item.file_url.split("/storage/v1/object/public/creatives/")[1];
-          if (path) await supabase.storage.from("creatives").remove([path]);
-        }
-        const { error } = await supabase.from("creatives").delete().eq("id", item.id);
+        const { error } = await supabase.from("creatives").update({ batch_name: newName }).eq("id", item.id);
         if (error) throw error;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["creatives"] });
-      setDeleteConfirmKey(null);
-      toast.success("Batch deleted");
+      setEditOpen(false);
+      toast.success("Template renamed");
     },
-    onError: (err: Error) => toast.error(`Delete failed: ${err.message}`),
+    onError: (err: Error) => toast.error(`Failed: ${err.message}`),
   });
 
-  const resetUploadForm = () => {
-    setUploadOpen(false);
-    setSelectedFiles([]);
-    setFilePreviews([]);
-    setUploadAccount("");
-    setUploadBatch("");
-    setUploadLaunchDate(undefined);
-    setUploading(false);
-    setLinkUrl("");
-  };
+  // Delete entire template
+  const deleteTemplate = useMutation({
+    mutationFn: async (templateName: string) => {
+      const items = creatives.filter((c) => (c.batch_name || "Uncategorized") === templateName);
+      for (const item of items) {
+        if (item.file_type !== "link" && item.file_url.includes("creatives/")) {
+          const path = item.file_url.split("/storage/v1/object/public/creatives/")[1];
+          if (path) await supabase.storage.from("creatives").remove([path]);
+        }
+        await supabase.from("creatives").delete().eq("id", item.id);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["creatives"] });
+      setDeleteTemplateName(null);
+      toast.success("Template deleted");
+    },
+    onError: (err: Error) => toast.error(`Failed: ${err.message}`),
+  });
 
+  // Remove one client from a template
+  const removeClientFromTemplate = useMutation({
+    mutationFn: async ({ templateName, accountName }: { templateName: string; accountName: string }) => {
+      const items = creatives.filter(
+        (c) => (c.batch_name || "Uncategorized") === templateName && c.account_name === accountName
+      );
+      for (const item of items) {
+        if (item.file_type !== "link" && item.file_url.includes("creatives/")) {
+          const path = item.file_url.split("/storage/v1/object/public/creatives/")[1];
+          if (path) await supabase.storage.from("creatives").remove([path]);
+        }
+        await supabase.from("creatives").delete().eq("id", item.id);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["creatives"] });
+      toast.success("Client removed");
+    },
+    onError: (err: Error) => toast.error(`Failed: ${err.message}`),
+  });
+
+  const resetAddForm = () => {
+    setAddOpen(false);
+    setAddTemplateName("");
+    setAddClient("");
+    setAddGdriveUrl("");
+    setAddPreviewFile(null);
+    setAddPreviewPreview(null);
+    setSaving(false);
+  };
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" asChild>
-              <Link to="/"><ArrowLeft className="h-4 w-4" /></Link>
+              <Link to="/">
+                <ArrowLeft className="h-4 w-4" />
+              </Link>
             </Button>
             <div>
               <h1 className="text-3xl font-bold tracking-tight text-foreground">Creatives</h1>
-              <p className="mt-1 text-sm text-muted-foreground">Manage client creatives by batch &amp; launch date</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Template library — see which clients each template was produced for
+              </p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {/* Account Filter */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                className="pl-8 h-9 w-[180px] text-xs"
+                placeholder="Search templates…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
             <Select value={filterAccount} onValueChange={setFilterAccount}>
-              <SelectTrigger className="w-[180px] h-9 text-xs">
-                <Filter className="mr-1.5 h-3.5 w-3.5" />
+              <SelectTrigger className="w-[160px] h-9 text-xs">
                 <SelectValue placeholder="All Clients" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Clients</SelectItem>
                 {accounts.map((a) => (
-                  <SelectItem key={a.id} value={a.account_name}>{a.account_name}</SelectItem>
+                  <SelectItem key={a.id} value={a.account_name}>
+                    {a.account_name}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-
-            {/* Batch Filter */}
-            <Select value={filterBatch} onValueChange={setFilterBatch}>
-              <SelectTrigger className="w-[160px] h-9 text-xs">
-                <SelectValue placeholder="All Batches" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Batches</SelectItem>
-                {batches.map((b) => (
-                  <SelectItem key={b} value={b}>{b}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Button size="sm" className="gap-1.5" onClick={() => setUploadOpen(true)}>
-              <Plus className="h-4 w-4" /> Upload
+            <Button size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}>
+              <Plus className="h-4 w-4" /> Add Production
             </Button>
           </div>
         </div>
 
         {/* Loading */}
         {isLoading && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="aspect-square rounded-xl" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="aspect-[4/3] rounded-xl" />
             ))}
           </div>
         )}
 
-        {/* Empty State */}
-        {!isLoading && filtered.length === 0 && (
+        {/* Empty state */}
+        {!isLoading && templateGroups.length === 0 && (
           <div className="flex flex-col items-center gap-4 py-20 text-center">
             <ImageIcon className="h-12 w-12 text-muted-foreground/40" />
-            <p className="text-lg font-medium text-foreground">No creatives yet</p>
+            <p className="text-lg font-medium text-foreground">No templates yet</p>
             <p className="max-w-md text-sm text-muted-foreground">
-              Upload images and videos for your clients to organize them by batch and launch date.
+              Add client productions to build your template library.
             </p>
-            <Button onClick={() => setUploadOpen(true)} className="gap-1.5">
-              <Upload className="h-4 w-4" /> Upload Creatives
+            <Button onClick={() => setAddOpen(true)} className="gap-1.5">
+              <Plus className="h-4 w-4" /> Add Production
             </Button>
           </div>
         )}
 
-        {/* Feed-style Creatives */}
-        {groupedByBatch.map(([compositeKey, items]) => {
-          const batchName = compositeKey.split("|||")[1] || "Ungrouped";
-          return (
-          <div key={compositeKey} className="mb-10">
-            {/* Account badges */}
-            <div className="mb-2 flex flex-wrap gap-1.5">
-              {[...new Set(items.map((c) => c.account_name))].map((name) => (
-                <span key={name} className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold", accountColors[name])}>
-                  {name}
-                </span>
-              ))}
-            </div>
-            <div className="mb-4 flex items-center gap-2">
-              <h2 className="text-sm font-semibold text-foreground">{batchName}</h2>
-              <Badge variant="secondary" className="text-xs">{items.length}</Badge>
-              {items[0]?.launch_date && (
-                <span className="text-xs text-muted-foreground">
-                  <CalendarDays className="inline h-3 w-3 mr-0.5" />
-                  {format(new Date(items[0].launch_date + "T00:00:00"), "MMM d, yyyy")}
-                </span>
-              )}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 ml-auto">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => {
-                    setEditKey(compositeKey);
-                    setEditBatchName(batchName === "Ungrouped" ? "" : batchName);
-                    setEditLaunchDate(items[0]?.launch_date ? new Date(items[0].launch_date + "T00:00:00") : undefined);
-                    setEditOpen(true);
-                  }}>
-                    <Pencil className="mr-2 h-3.5 w-3.5" /> Edit batch
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className="text-destructive" onClick={() => setDeleteConfirmKey(compositeKey)}>
-                    <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete batch
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            {/* Links */}
-            {items.filter(c => c.file_type === "link").map((creative) => (
-              <div key={creative.id} className="group flex items-center gap-3 py-1">
-                <a
-                  href={creative.file_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-primary underline underline-offset-2 hover:text-primary/80 truncate"
+        {/* Template grid */}
+        {!isLoading && templateGroups.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {templateGroups.map(({ name, previewImage, clients }) => (
+              <div
+                key={name}
+                className="rounded-xl border border-border bg-card overflow-hidden flex flex-col shadow-sm"
+              >
+                {/* Preview */}
+                <div
+                  className={cn(
+                    "aspect-video bg-muted flex items-center justify-center",
+                    previewImage && "cursor-pointer"
+                  )}
+                  onClick={() => previewImage && setLightboxUrl(previewImage)}
                 >
-                  {creative.file_name}
-                </a>
-                <span className="text-[11px] text-muted-foreground shrink-0">{creative.account_name}</span>
-                <button
-                  className="ml-auto rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => deleteCreative.mutate(creative.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                </button>
+                  {previewImage ? (
+                    <img
+                      src={previewImage}
+                      alt={name}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <ImageIcon className="h-10 w-10 text-muted-foreground/25" />
+                  )}
+                </div>
+
+                {/* Card body */}
+                <div className="p-4 flex flex-col gap-3 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-semibold text-sm leading-tight text-foreground">{name}</h3>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 -mt-0.5">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setEditTemplateName(name);
+                            setEditNewName(name);
+                            setEditOpen(true);
+                          }}
+                        >
+                          <Pencil className="mr-2 h-3.5 w-3.5" /> Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setAddTemplateName(name);
+                            setAddOpen(true);
+                          }}
+                        >
+                          <Plus className="mr-2 h-3.5 w-3.5" /> Add client
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => setDeleteTemplateName(name)}
+                        >
+                          <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete template
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  {/* Client pills */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {Object.entries(clients).map(([clientName, gdriveUrl]) => {
+                      const colorClass = accountColors[clientName] ?? CLIENT_COLORS[0];
+                      return (
+                        <span
+                          key={clientName}
+                          className={cn(
+                            "group/pill inline-flex items-center gap-0 rounded-full text-[11px] font-semibold transition-colors",
+                            colorClass
+                          )}
+                        >
+                          {gdriveUrl ? (
+                            <a
+                              href={gdriveUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="pl-2.5 pr-1 py-0.5 flex items-center gap-1"
+                            >
+                              {clientName}
+                              <ExternalLink className="h-2.5 w-2.5 opacity-50" />
+                            </a>
+                          ) : (
+                            <span className="pl-2.5 pr-1 py-0.5">{clientName}</span>
+                          )}
+                          <button
+                            className="pr-1.5 py-0.5 opacity-0 group-hover/pill:opacity-60 hover:!opacity-100 transition-opacity"
+                            title={`Remove ${clientName}`}
+                            onClick={() =>
+                              removeClientFromTemplate.mutate({ templateName: name, accountName: clientName })
+                            }
+                          >
+                            <X className="h-2.5 w-2.5" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground mt-auto">
+                    {Object.keys(clients).length} client{Object.keys(clients).length !== 1 ? "s" : ""}
+                  </p>
+                </div>
               </div>
             ))}
-            {/* Images in horizontal scroll */}
-            {items.filter(c => c.file_type !== "link").length > 0 && (
-              <div className="flex gap-3 overflow-x-auto pb-2 mt-2">
-                {items.filter(c => c.file_type !== "link").map((creative) => (
-                  <div key={creative.id} className="group relative shrink-0 w-48">
-                    <img
-                      src={creative.file_url}
-                      alt={creative.file_name}
-                      className="w-48 rounded-lg cursor-pointer"
-                      loading="lazy"
-                      onClick={() => setLightboxUrl(creative.file_url)}
-                    />
-                    <p className="mt-1 text-xs text-muted-foreground truncate">{creative.file_name}</p>
-                    <button
-                      className="absolute top-1.5 right-1.5 rounded-full bg-background/80 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => deleteCreative.mutate(creative.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
-          );
-        })}
+        )}
 
-        {/* Upload Dialog */}
-        <Dialog open={uploadOpen} onOpenChange={(open) => { if (!open) resetUploadForm(); else setUploadOpen(true); }}>
+        {/* Add Production Dialog */}
+        <Dialog open={addOpen} onOpenChange={(open) => { if (!open) resetAddForm(); }}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Upload Creatives</DialogTitle>
+              <DialogTitle>Add Client Production</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <Select value={uploadAccount} onValueChange={setUploadAccount}>
-                <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
-                <SelectContent>
-                  {accounts.map((a) => (
-                    <SelectItem key={a.id} value={a.account_name}>{a.account_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Input
-                placeholder="Batch name (e.g. Feb 2025 - Batch 1)"
-                value={uploadBatch}
-                onChange={(e) => setUploadBatch(e.target.value)}
-              />
-
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !uploadLaunchDate && "text-muted-foreground")}>
-                    <CalendarDays className="mr-2 h-4 w-4" />
-                    {uploadLaunchDate ? format(uploadLaunchDate, "MMM d, yyyy") : "Launch date (optional)"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar mode="single" selected={uploadLaunchDate} onSelect={setUploadLaunchDate} />
-                </PopoverContent>
-              </Popover>
-
-              {/* File drop zone */}
-              <div className="relative rounded-xl border-2 border-dashed border-border p-6 text-center">
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-                  onChange={handleFileSelect}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Template</label>
+                <Input
+                  list="template-list"
+                  placeholder="Template name (e.g. Showers, Skin & Hair)"
+                  value={addTemplateName}
+                  onChange={(e) => setAddTemplateName(e.target.value)}
                 />
-                <Upload className="mx-auto h-8 w-8 text-muted-foreground/40 mb-2" />
-                <p className="text-sm text-muted-foreground">Drop images or click to browse</p>
+                <datalist id="template-list">
+                  {existingTemplates.map((t) => (
+                    <option key={t} value={t} />
+                  ))}
+                </datalist>
               </div>
 
-              {/* Link input */}
-              <Input
-                placeholder="GDrive or external link (optional)"
-                value={linkUrl}
-                onChange={(e) => setLinkUrl(e.target.value)}
-              />
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Client</label>
+                <Select value={addClient} onValueChange={setAddClient}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((a) => (
+                      <SelectItem key={a.id} value={a.account_name}>
+                        {a.account_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-              {/* Preview grid */}
-              {filePreviews.length > 0 && (
-                <div className="grid grid-cols-4 gap-2">
-                  {filePreviews.map((src, i) => (
-                    <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-border">
-                      <img src={src} alt="Preview" className="w-full h-full object-cover" />
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Google Drive Link</label>
+                <Input
+                  placeholder="https://drive.google.com/…"
+                  value={addGdriveUrl}
+                  onChange={(e) => setAddGdriveUrl(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Preview Image <span className="text-muted-foreground/60">(optional)</span>
+                </label>
+                <div className="relative rounded-xl border-2 border-dashed border-border p-4 text-center">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setAddPreviewFile(file);
+                      setAddPreviewPreview(URL.createObjectURL(file));
+                    }}
+                  />
+                  {addPreviewPreview ? (
+                    <div className="relative inline-block">
+                      <img
+                        src={addPreviewPreview}
+                        alt="Preview"
+                        className="max-h-32 rounded-lg mx-auto"
+                      />
                       <button
-                        className="absolute top-0.5 right-0.5 bg-background/80 rounded-full p-0.5"
-                        onClick={() => removeFile(i)}
+                        className="absolute -top-1 -right-1 bg-background rounded-full border border-border p-0.5"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAddPreviewFile(null);
+                          setAddPreviewPreview(null);
+                        }}
                       >
                         <X className="h-3 w-3" />
                       </button>
                     </div>
-                  ))}
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Upload a thumbnail for this template</p>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={resetUploadForm}>Cancel</Button>
+              <Button variant="outline" onClick={resetAddForm}>
+                Cancel
+              </Button>
               <Button
-                onClick={() => uploadCreatives.mutate()}
-                disabled={!uploadAccount || (selectedFiles.length === 0 && !linkUrl.trim()) || uploading}
+                onClick={() => saveProduction.mutate()}
+                disabled={!addTemplateName.trim() || !addClient || !addGdriveUrl.trim() || saving}
               >
-                {uploading ? "Uploading…" : "Save"}
+                {saving ? "Saving…" : "Save"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Rename Template Dialog */}
+        <Dialog open={editOpen} onOpenChange={(open) => { if (!open) setEditOpen(false); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Rename Template</DialogTitle>
+            </DialogHeader>
+            <Input
+              placeholder="Template name"
+              value={editNewName}
+              onChange={(e) => setEditNewName(e.target.value)}
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() =>
+                  renameTemplate.mutate({ oldName: editTemplateName, newName: editNewName.trim() })
+                }
+                disabled={!editNewName.trim() || editNewName.trim() === editTemplateName}
+              >
+                Rename
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -494,66 +577,32 @@ const Creatives = () => {
         <Dialog open={!!lightboxUrl} onOpenChange={() => setLightboxUrl(null)}>
           <DialogContent className="max-w-4xl p-2">
             {lightboxUrl && (
-              <img src={lightboxUrl} alt="Creative" className="max-w-full max-h-[85vh] object-contain mx-auto rounded-lg" />
+              <img
+                src={lightboxUrl}
+                alt="Preview"
+                className="max-w-full max-h-[85vh] object-contain mx-auto rounded-lg"
+              />
             )}
           </DialogContent>
         </Dialog>
 
-        {/* Edit Batch Dialog */}
-        <Dialog open={editOpen} onOpenChange={(open) => { if (!open) { setEditOpen(false); setEditKey(null); } }}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Edit Batch</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <Input
-                placeholder="Batch name"
-                value={editBatchName}
-                onChange={(e) => setEditBatchName(e.target.value)}
-              />
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !editLaunchDate && "text-muted-foreground")}>
-                    <CalendarDays className="mr-2 h-4 w-4" />
-                    {editLaunchDate ? format(editLaunchDate, "MMM d, yyyy") : "Launch date (optional)"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar mode="single" selected={editLaunchDate} onSelect={setEditLaunchDate} />
-                </PopoverContent>
-              </Popover>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => { setEditOpen(false); setEditKey(null); }}>Cancel</Button>
-              <Button onClick={() => {
-                if (!editKey) return;
-                const items = groupedByBatch.find(([k]) => k === editKey)?.[1] ?? [];
-                updateBatchGroup.mutate({ items, newBatchName: editBatchName, newLaunchDate: editLaunchDate });
-              }}>
-                Save
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Delete Batch Confirmation */}
-        <AlertDialog open={!!deleteConfirmKey} onOpenChange={(open) => { if (!open) setDeleteConfirmKey(null); }}>
+        {/* Delete Template Confirmation */}
+        <AlertDialog
+          open={!!deleteTemplateName}
+          onOpenChange={(open) => { if (!open) setDeleteTemplateName(null); }}
+        >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete entire batch?</AlertDialogTitle>
+              <AlertDialogTitle>Delete "{deleteTemplateName}"?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will permanently delete all {deleteConfirmKey ? (groupedByBatch.find(([k]) => k === deleteConfirmKey)?.[1]?.length ?? 0) : 0} creatives in this batch. This action cannot be undone.
+                This will permanently delete this template and all client productions. This cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                onClick={() => {
-                  if (!deleteConfirmKey) return;
-                  const items = groupedByBatch.find(([k]) => k === deleteConfirmKey)?.[1] ?? [];
-                  deleteBatchGroup.mutate(items);
-                }}
+                onClick={() => deleteTemplateName && deleteTemplate.mutate(deleteTemplateName)}
               >
                 Delete
               </AlertDialogAction>
