@@ -135,7 +135,11 @@ const Index = () => {
         {/* Header */}
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Ad Accounts</h1>
+            <img
+              src="/Treat Engine Logo .png"
+              alt="Treat Engine"
+              className="h-8 sm:h-10 w-auto"
+            />
             <p className="mt-1 text-sm text-muted-foreground">Campaign performance &amp; change logs</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
