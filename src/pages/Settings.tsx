@@ -39,6 +39,8 @@ const Settings = () => {
   const [newSectionName, setNewSectionName] = useState("");
   const [newItemText, setNewItemText] = useState<Record<string, string>>({});
   const [expandedChecklistSections, setExpandedChecklistSections] = useState<Record<string, boolean>>({});
+  const [editingSection, setEditingSection] = useState<string | null>(null);
+  const [editingSectionValue, setEditingSectionValue] = useState("");
 
   // Full accounts list with IDs (needed for feature flag upserts)
   const { data: accountRows = [] } = useQuery({
@@ -197,6 +199,23 @@ const Settings = () => {
         s.section === sectionName ? { ...s, items: s.items.filter((i) => i.key !== itemKey) } : s
       )
     );
+  };
+
+  const renameChecklistSection = (oldName: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) { setEditingSection(null); return; }
+    if (currentChecklist.some((s) => s.section === trimmed)) {
+      toast.error("A section with that name already exists");
+      return;
+    }
+    saveChecklist(currentChecklist.map((s) => s.section === oldName ? { ...s, section: trimmed } : s));
+    setExpandedChecklistSections((prev) => {
+      const next = { ...prev };
+      next[`${checklistService}:${trimmed}`] = prev[`${checklistService}:${oldName}`] ?? true;
+      delete next[`${checklistService}:${oldName}`];
+      return next;
+    });
+    setEditingSection(null);
   };
 
   const moveChecklistSection = (sectionName: string, dir: -1 | 1) => {
@@ -529,15 +548,37 @@ const Settings = () => {
                   <Collapsible key={sectionKey} open={isExpanded} onOpenChange={() => toggleChecklistSection(sec.section)}>
                     <div className="rounded-lg border border-border">
                       <div className="flex items-center justify-between px-3 py-2.5">
-                        <CollapsibleTrigger asChild>
-                          <button className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors">
-                            {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                            {sec.section}
-                            <span className="text-xs font-normal normal-case">
-                              ({sec.items.length} item{sec.items.length !== 1 ? "s" : ""})
-                            </span>
-                          </button>
-                        </CollapsibleTrigger>
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <CollapsibleTrigger asChild>
+                            <button className="text-muted-foreground hover:text-foreground transition-colors shrink-0">
+                              {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                            </button>
+                          </CollapsibleTrigger>
+                          {editingSection === `${checklistService}:${sec.section}` ? (
+                            <input
+                              autoFocus
+                              value={editingSectionValue}
+                              onChange={(e) => setEditingSectionValue(e.target.value)}
+                              onBlur={() => renameChecklistSection(sec.section, editingSectionValue)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") renameChecklistSection(sec.section, editingSectionValue);
+                                if (e.key === "Escape") setEditingSection(null);
+                              }}
+                              className="text-sm font-semibold uppercase tracking-wide bg-transparent border-b border-primary outline-none w-full"
+                            />
+                          ) : (
+                            <button
+                              onClick={() => { setEditingSection(`${checklistService}:${sec.section}`); setEditingSectionValue(sec.section); }}
+                              className="text-sm font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors text-left truncate"
+                              title="Click to rename"
+                            >
+                              {sec.section}
+                            </button>
+                          )}
+                          <span className="text-xs text-muted-foreground font-normal normal-case shrink-0">
+                            ({sec.items.length} item{sec.items.length !== 1 ? "s" : ""})
+                          </span>
+                        </div>
                         <div className="flex items-center gap-0.5">
                           <button
                             onClick={() => moveChecklistSection(sec.section, -1)}
