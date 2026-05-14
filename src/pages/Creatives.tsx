@@ -18,6 +18,7 @@ import {
   Image as ImageIcon,
   ExternalLink,
   Search,
+  Info,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
@@ -73,6 +74,14 @@ const Creatives = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [editTemplateName, setEditTemplateName] = useState("");
   const [editNewName, setEditNewName] = useState("");
+
+  // Edit client production dialog
+  const [editProdOpen, setEditProdOpen] = useState(false);
+  const [editProdOriginalTemplate, setEditProdOriginalTemplate] = useState("");
+  const [editProdTemplateName, setEditProdTemplateName] = useState("");
+  const [editProdClient, setEditProdClient] = useState("");
+  const [editProdGdriveUrl, setEditProdGdriveUrl] = useState("");
+  const [editProdSaving, setEditProdSaving] = useState(false);
 
   // Delete template
   const [deleteTemplateName, setDeleteTemplateName] = useState<string | null>(null);
@@ -230,25 +239,46 @@ const Creatives = () => {
     onError: (err: Error) => toast.error(`Failed: ${err.message}`),
   });
 
-  // Remove one client from a template
-  const removeClientFromTemplate = useMutation({
-    mutationFn: async ({ templateName, accountName }: { templateName: string; accountName: string }) => {
+  // Update a client production's template name and/or GDrive link
+  const updateClientProduction = useMutation({
+    mutationFn: async ({
+      originalTemplate,
+      originalClient,
+      newTemplate,
+      newGdriveUrl,
+    }: {
+      originalTemplate: string;
+      originalClient: string;
+      newTemplate: string;
+      newGdriveUrl: string;
+    }) => {
+      setEditProdSaving(true);
       const items = creatives.filter(
-        (c) => (c.batch_name || "Uncategorized") === templateName && c.account_name === accountName
+        (c) => (c.batch_name || "Uncategorized") === originalTemplate && c.account_name === originalClient
       );
       for (const item of items) {
-        if (item.file_type !== "link" && item.file_url.includes("creatives/")) {
-          const path = item.file_url.split("/storage/v1/object/public/creatives/")[1];
-          if (path) await supabase.storage.from("creatives").remove([path]);
+        const updates: Record<string, string | null> = {};
+        if (newTemplate !== originalTemplate) updates.batch_name = newTemplate;
+        if (item.file_type === "link" && newGdriveUrl !== item.file_url) {
+          updates.file_url = newGdriveUrl;
+          updates.file_name = newGdriveUrl;
         }
-        await supabase.from("creatives").delete().eq("id", item.id);
+        if (Object.keys(updates).length > 0) {
+          const { error } = await supabase.from("creatives").update(updates).eq("id", item.id);
+          if (error) throw error;
+        }
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["creatives"] });
-      toast.success("Client removed");
+      setEditProdOpen(false);
+      setEditProdSaving(false);
+      toast.success("Production updated");
     },
-    onError: (err: Error) => toast.error(`Failed: ${err.message}`),
+    onError: (err: Error) => {
+      setEditProdSaving(false);
+      toast.error(`Failed: ${err.message}`);
+    },
   });
 
   const resetAddForm = () => {
@@ -424,12 +454,17 @@ const Creatives = () => {
                           )}
                           <button
                             className="pr-1.5 py-0.5 opacity-0 group-hover/pill:opacity-60 hover:!opacity-100 transition-opacity"
-                            title={`Remove ${clientName}`}
-                            onClick={() =>
-                              removeClientFromTemplate.mutate({ templateName: name, accountName: clientName })
-                            }
+                            title={`Edit ${clientName} production`}
+                            onClick={() => {
+                              const link = clients[clientName] ?? "";
+                              setEditProdOriginalTemplate(name);
+                              setEditProdTemplateName(name);
+                              setEditProdClient(clientName);
+                              setEditProdGdriveUrl(link);
+                              setEditProdOpen(true);
+                            }}
                           >
-                            <X className="h-2.5 w-2.5" />
+                            <Info className="h-2.5 w-2.5" />
                           </button>
                         </span>
                       );
@@ -541,6 +576,55 @@ const Creatives = () => {
                 disabled={!addTemplateName.trim() || !addClient || !addGdriveUrl.trim() || saving}
               >
                 {saving ? "Saving…" : "Save"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Client Production Dialog */}
+        <Dialog open={editProdOpen} onOpenChange={(open) => { if (!open) { setEditProdOpen(false); setEditProdSaving(false); } }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Edit Production — {editProdClient}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Template</label>
+                <Input
+                  list="edit-template-list"
+                  placeholder="Template name"
+                  value={editProdTemplateName}
+                  onChange={(e) => setEditProdTemplateName(e.target.value)}
+                />
+                <datalist id="edit-template-list">
+                  {existingTemplates.map((t) => (
+                    <option key={t} value={t} />
+                  ))}
+                </datalist>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Google Drive Link</label>
+                <Input
+                  placeholder="https://drive.google.com/…"
+                  value={editProdGdriveUrl}
+                  onChange={(e) => setEditProdGdriveUrl(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditProdOpen(false)}>Cancel</Button>
+              <Button
+                onClick={() =>
+                  updateClientProduction.mutate({
+                    originalTemplate: editProdOriginalTemplate,
+                    originalClient: editProdClient,
+                    newTemplate: editProdTemplateName.trim(),
+                    newGdriveUrl: editProdGdriveUrl.trim(),
+                  })
+                }
+                disabled={!editProdTemplateName.trim() || editProdSaving}
+              >
+                {editProdSaving ? "Saving…" : "Save"}
               </Button>
             </DialogFooter>
           </DialogContent>
