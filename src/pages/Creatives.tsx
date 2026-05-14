@@ -428,7 +428,7 @@ const Creatives = () => {
 
         {/* Loading */}
         {isLoading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {Array.from({ length: 6 }).map((_, i) => (
               <Skeleton key={i} className="aspect-[4/3] rounded-xl" />
             ))}
@@ -451,7 +451,7 @@ const Creatives = () => {
 
         {/* Template grid */}
         {!isLoading && templateGroups.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {templateGroups.map(({ name, previewImage, templateType, templateLink, typeMeta, clients, items }) => (
               <div
                 key={name}
