@@ -533,6 +533,39 @@ export type Database = {
           },
         ]
       }
+      tasks: {
+        Row: {
+          id: string
+          title: string
+          account_name: string | null
+          priority: string
+          completed: boolean
+          due_date: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          account_name?: string | null
+          priority?: string
+          completed?: boolean
+          due_date?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          account_name?: string | null
+          priority?: string
+          completed?: boolean
+          due_date?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       settings: {
         Row: {
           default_campaigns: Json

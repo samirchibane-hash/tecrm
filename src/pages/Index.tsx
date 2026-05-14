@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCouplerData } from "@/hooks/useCouplerData";
+import { TaskList } from "@/components/dashboard/TaskList";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertCircle,
@@ -540,6 +541,11 @@ const Index = () => {
             </div>
           </div>
         )}
+
+        {/* ── Task List ─────────────────────────────────────────────────────── */}
+        <div className="mt-8">
+          <TaskList accounts={dbAccounts} />
+        </div>
       </div>
     </div>
   );
