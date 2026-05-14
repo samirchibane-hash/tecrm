@@ -12,7 +12,6 @@ import {
   ArrowLeft,
   Plus,
   X,
-  Pencil,
   MoreVertical,
   Trash2,
   Image as ImageIcon,
@@ -70,10 +69,9 @@ const Creatives = () => {
   const [addPreviewPreview, setAddPreviewPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Rename template dialog
-  const [editOpen, setEditOpen] = useState(false);
-  const [editTemplateName, setEditTemplateName] = useState("");
-  const [editNewName, setEditNewName] = useState("");
+  // Inline rename state (keyed by template name)
+  const [inlineEditName, setInlineEditName] = useState<string | null>(null);
+  const [inlineEditValue, setInlineEditValue] = useState("");
 
   // Edit client production dialog
   const [editProdOpen, setEditProdOpen] = useState(false);
@@ -213,7 +211,7 @@ const Creatives = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["creatives"] });
-      setEditOpen(false);
+      setInlineEditName(null);
       toast.success("Template renamed");
     },
     onError: (err: Error) => toast.error(`Failed: ${err.message}`),
@@ -392,7 +390,37 @@ const Creatives = () => {
                 {/* Card body */}
                 <div className="p-4 flex flex-col gap-3 flex-1">
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold text-sm leading-tight text-foreground">{name}</h3>
+                    {inlineEditName === name ? (
+                      <input
+                        autoFocus
+                        className="flex-1 text-sm font-semibold bg-transparent border-b border-primary outline-none leading-tight text-foreground"
+                        value={inlineEditValue}
+                        onChange={(e) => setInlineEditValue(e.target.value)}
+                        onBlur={() => {
+                          const trimmed = inlineEditValue.trim();
+                          if (trimmed && trimmed !== name) {
+                            renameTemplate.mutate({ oldName: name, newName: trimmed });
+                          } else {
+                            setInlineEditName(null);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                          if (e.key === "Escape") setInlineEditName(null);
+                        }}
+                      />
+                    ) : (
+                      <h3
+                        className="font-semibold text-sm leading-tight text-foreground cursor-text hover:text-primary transition-colors"
+                        title="Click to rename"
+                        onClick={() => {
+                          setInlineEditName(name);
+                          setInlineEditValue(name);
+                        }}
+                      >
+                        {name}
+                      </h3>
+                    )}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 -mt-0.5">
@@ -400,15 +428,6 @@ const Creatives = () => {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setEditTemplateName(name);
-                            setEditNewName(name);
-                            setEditOpen(true);
-                          }}
-                        >
-                          <Pencil className="mr-2 h-3.5 w-3.5" /> Rename
-                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => {
                             setAddTemplateName(name);
@@ -625,33 +644,6 @@ const Creatives = () => {
                 disabled={!editProdTemplateName.trim() || editProdSaving}
               >
                 {editProdSaving ? "Saving…" : "Save"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Rename Template Dialog */}
-        <Dialog open={editOpen} onOpenChange={(open) => { if (!open) setEditOpen(false); }}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Rename Template</DialogTitle>
-            </DialogHeader>
-            <Input
-              placeholder="Template name"
-              value={editNewName}
-              onChange={(e) => setEditNewName(e.target.value)}
-            />
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setEditOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                onClick={() =>
-                  renameTemplate.mutate({ oldName: editTemplateName, newName: editNewName.trim() })
-                }
-                disabled={!editNewName.trim() || editNewName.trim() === editTemplateName}
-              >
-                Rename
               </Button>
             </DialogFooter>
           </DialogContent>
