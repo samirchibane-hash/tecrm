@@ -136,11 +136,19 @@ const Creatives = () => {
     return Object.entries(map)
       .map(([name, items]) => {
         // First uploaded image across any client = template preview
-        const previewImage = items.find((i) => i.file_type !== "link")?.file_url ?? null;
+        const previewImage = items.find((i) => i.file_type === "image")?.file_url ?? null;
+
+        // Template type meta row (stored as file_type: "template_type")
+        const typeMeta = items.find((i) => i.file_type === "template_type");
+        const templateType: "image" | "video" | null = typeMeta
+          ? (typeMeta.file_name as "image" | "video")
+          : null;
 
         // One entry per client; link takes priority over null
+        // Exclude meta rows from client map
         const clientMap: Record<string, string | null> = {};
         items.forEach((i) => {
+          if (i.file_type === "template_type") return;
           if (i.file_type === "link") {
             clientMap[i.account_name] = i.file_url;
           } else if (!(i.account_name in clientMap)) {
@@ -148,12 +156,12 @@ const Creatives = () => {
           }
         });
 
-        return { name, previewImage, clients: clientMap, items };
+        return { name, previewImage, templateType, typeMeta, clients: clientMap, items };
       })
       .filter(({ name, clients }) => {
         if (filterAccount !== "all" && !(filterAccount in clients)) return false;
         if (search && !name.toLowerCase().includes(search.toLowerCase())) return false;
-        return true;
+        return Object.keys(clients).length > 0 || true; // keep empty-client templates too
       })
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [creatives, filterAccount, search]);
@@ -285,6 +293,40 @@ const Creatives = () => {
     },
   });
 
+  const setTemplateType = useMutation({
+    mutationFn: async ({
+      templateName,
+      type,
+      existingMetaId,
+      accountName,
+    }: {
+      templateName: string;
+      type: "image" | "video";
+      existingMetaId: string | null;
+      accountName: string;
+    }) => {
+      if (existingMetaId) {
+        const { error } = await supabase
+          .from("creatives")
+          .update({ file_name: type })
+          .eq("id", existingMetaId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("creatives").insert({
+          account_name: accountName,
+          batch_name: templateName,
+          file_name: type,
+          file_url: "",
+          file_type: "template_type",
+          launch_date: null,
+        });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["creatives"] }),
+    onError: (err: Error) => toast.error(`Failed: ${err.message}`),
+  });
+
   const uploadThumbnail = useMutation({
     mutationFn: async ({ templateName, file, accountName }: { templateName: string; file: File; accountName: string }) => {
       setThumbnailUploading(true);
@@ -398,7 +440,7 @@ const Creatives = () => {
         {/* Template grid */}
         {!isLoading && templateGroups.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {templateGroups.map(({ name, previewImage, clients, items }) => (
+            {templateGroups.map(({ name, previewImage, templateType, typeMeta, clients, items }) => (
               <div
                 key={name}
                 className="rounded-xl border border-border bg-card overflow-hidden flex flex-col shadow-sm"
@@ -501,6 +543,33 @@ const Creatives = () => {
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
+                  </div>
+
+                  {/* Type badge */}
+                  <div className="flex gap-1.5">
+                    {(["image", "video"] as const).map((t) => (
+                      <button
+                        key={t}
+                        onClick={() =>
+                          setTemplateType.mutate({
+                            templateName: name,
+                            type: t,
+                            existingMetaId: typeMeta?.id ?? null,
+                            accountName: items[0]?.account_name ?? "_meta",
+                          })
+                        }
+                        className={cn(
+                          "rounded-full px-2.5 py-0.5 text-[11px] font-semibold border transition-colors",
+                          templateType === t
+                            ? t === "video"
+                              ? "bg-violet-100 text-violet-800 border-violet-200"
+                              : "bg-sky-100 text-sky-800 border-sky-200"
+                            : "bg-transparent text-muted-foreground border-border hover:border-muted-foreground"
+                        )}
+                      >
+                        {t === "video" ? "Video" : "Image"}
+                      </button>
+                    ))}
                   </div>
 
                   {/* Client pills */}
