@@ -1,21 +1,11 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import {
   ChevronDown,
-  ChevronRight,
-  Plus,
-  Trash2,
-  ClipboardList,
   DollarSign,
   MousePointerClick,
   Eye,
@@ -26,36 +16,16 @@ import {
   UserCheck,
   Target,
   PhoneCall,
-  ImagePlus,
-  ExternalLink,
   X,
-  Image as ImageIcon,
-  CalendarDays,
   SquareArrowOutUpRight,
   Trophy,
   Zap,
   Sparkles,
   ChevronUp,
-  Link2,
-  Mail,
-  Send,
-  Pencil,
-  CheckCircle2,
-  Settings2,
-  Clock,
   Phone,
+  Settings,
 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { Link as RouterLink } from "react-router-dom";
-import { CustomerPOCPanel } from "./CustomerPOCPanel";
-import { format } from "date-fns";
-import { toast } from "sonner";
 import type { AdRow } from "@/hooks/useCouplerData";
 import type { ChangeLogOption } from "@/hooks/useSettings";
 
@@ -188,9 +158,7 @@ interface AccountCardProps {
 }
 
 export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, visibleKpis, dateRange, changeLogOptions = [] }: AccountCardProps) {
-  const queryClient = useQueryClient();
   const isMobile = useIsMobile();
-  const [logPage, setLogPage] = useState(0);
   const [activeAdChart, setActiveAdChart] = useState<"leads" | "appts" | null>(null);
 
   // Auto-upsert account row to ensure a stable UUID exists
@@ -304,11 +272,6 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
           accountName,
           kpis,
           prevKpis,
-          updates: updates.slice(0, 10).map((u) => ({
-            date: new Date(u.created_at).toLocaleDateString(),
-            title: (u as any).title || u.category,
-            details: u.details,
-          })),
           dateLabel: dateRange?.from
             ? `${dateRange.from.toLocaleDateString()} – ${dateRange.to?.toLocaleDateString() ?? ""}`
             : "All time",
@@ -317,27 +280,11 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
       if (error) throw error;
       setAiSuggestions(data.suggestions ?? []);
     } catch {
-      toast.error("Failed to get AI suggestions");
       setAiOpen(false);
     } finally {
       setAiLoading(false);
     }
   };
-
-  const [showForm, setShowForm] = useState(false);
-  // selectedLogOption format: "ParentLabel||SubOption" or "CampaignName||" when no sub-option
-  const [selectedLogOption, setSelectedLogOption] = useState("");
-  const [details, setDetails] = useState("");
-  const [linkUrl, setLinkUrl] = useState("");
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [uploading, setUploading] = useState(false);
-
-  const campaigns = useMemo(() => {
-    const set = new Set<string>();
-    rows.forEach((r) => set.add(r["Campaign: Campaign name"]));
-    return Array.from(set).sort();
-  }, [rows]);
 
   const kpis = useMemo(() => {
     const empty: Record<KpiKey, number> = {
@@ -419,391 +366,20 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
   }, [ghlConversions]);
 
 
-  const { data: updates = [] } = useQuery({
-    queryKey: ["campaign-updates", accountName],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("campaign_updates")
-        .select("*")
-        .eq("account_name", accountName)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  // Timeline: campaign updates only (creatives are managed separately in the Creatives dashboard)
-  type TimelineItem = { type: "update"; date: string; data: (typeof updates)[number] };
-
-  const timeline = useMemo<TimelineItem[]>(() => {
-    return updates
-      .map((u) => ({ type: "update" as const, date: u.created_at, data: u }))
-      .sort((a, b) => b.date.localeCompare(a.date));
-  }, [updates]);
-
-  const filteredTimeline = useMemo(() => {
-    if (!dateRange?.from) return timeline;
-    const from = dateRange.from.getTime();
-    const to = dateRange.to ? dateRange.to.getTime() + 86400000 - 1 : Infinity;
-    return timeline.filter((item) => {
-      const t = new Date(item.date).getTime();
-      return t >= from && t <= to;
-    });
-  }, [timeline, dateRange]);
-
-  const totalLogCount = filteredTimeline.length;
-
-  // Reset page when date range or data changes
-  useEffect(() => { setLogPage(0); }, [dateRange, timeline]);
-
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    if (!files.length) return;
-    setImageFiles((prev) => [...prev, ...files]);
-    setImagePreviews((prev) => [...prev, ...files.map((f) => URL.createObjectURL(f))]);
-  };
-
-  const removeImage = (index: number) => {
-    setImageFiles((prev) => prev.filter((_, i) => i !== index));
-    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const addUpdate = useMutation({
-    mutationFn: async () => {
-      setUploading(true);
-      const uploadedUrls: string[] = [];
-
-      for (const file of imageFiles) {
-        const ext = file.name.split(".").pop();
-        const path = `${accountName}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error: uploadErr } = await supabase.storage
-          .from("changelog-attachments")
-          .upload(path, file);
-        if (uploadErr) throw uploadErr;
-        const { data: urlData } = supabase.storage
-          .from("changelog-attachments")
-          .getPublicUrl(path);
-        uploadedUrls.push(urlData.publicUrl);
-      }
-
-      // Parse "ParentLabel||SubOption" into campaign_name and title
-      const sepIdx = selectedLogOption.indexOf("||");
-      const campaignName = sepIdx >= 0 ? selectedLogOption.slice(0, sepIdx) : selectedLogOption;
-      const titleValue = sepIdx >= 0 ? selectedLogOption.slice(sepIdx + 2) : "";
-
-      const { error } = await supabase.from("campaign_updates").insert({
-        account_name: accountName,
-        campaign_name: campaignName,
-        category: "other" as any,
-        title: titleValue,
-        details: details || null,
-        link_url: linkUrl || null,
-        image_url: uploadedUrls.length > 0 ? uploadedUrls.join(",") : null,
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["campaign-updates", accountName] });
-      setSelectedLogOption("");
-      setDetails("");
-      setLinkUrl("");
-      setImageFiles([]);
-      setImagePreviews([]);
-      setShowForm(false);
-      setUploading(false);
-      toast.success("Update logged");
-    },
-    onError: () => { setUploading(false); toast.error("Failed to log update"); },
-  });
-
-  const deleteUpdate = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("campaign_updates").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["campaign-updates", accountName] });
-      toast.success("Update deleted");
-    },
-  });
-
-  const updateStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: "assigned" | "published" }) => {
-      const { error } = await supabase.from("campaign_updates").update({ status }).eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["campaign-updates", accountName] }),
-  });
-
-  // Account Links
-  const [linksOpen, setLinksOpen] = useState(false);
-  const [showLinkForm, setShowLinkForm] = useState(false);
-  const [newLinkLabel, setNewLinkLabel] = useState("");
-  const [newLinkUrl, setNewLinkUrl] = useState("");
-
-  const { data: accountLinks = [] } = useQuery({
-    queryKey: ["account-links", accountName],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("account_links")
-        .select("*")
-        .eq("account_name", accountName)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const addLink = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("account_links").insert({
-        account_name: accountName,
-        label: newLinkLabel.trim(),
-        url: newLinkUrl.trim(),
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["account-links", accountName] });
-      setNewLinkLabel("");
-      setNewLinkUrl("");
-      setShowLinkForm(false);
-      toast.success("Link saved");
-    },
-    onError: () => toast.error("Failed to save link"),
-  });
-
-  const deleteLink = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("account_links").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["account-links", accountName] });
-    },
-  });
-
-  // Client Email
-  const [emailOpen, setEmailOpen] = useState(false);
-  const [customNote, setCustomNote] = useState("");
-  const [emailDraft, setEmailDraft] = useState<{ subject: string; body: string } | null>(null);
-  const [emailLoading, setEmailLoading] = useState(false);
-  const [emailSending, setEmailSending] = useState(false);
-  const [editingEmail, setEditingEmail] = useState(false);
-  const [contactEmailInput, setContactEmailInput] = useState("");
-
-  const contactEmail: string = (account as any)?.contact_email ?? "";
-
-  // POC panel
-  const [pocOpen, setPocOpen] = useState(false);
-
-  // Fetch POCs for email recipient selection
-  const { data: pocs = [] } = useQuery({
-    queryKey: ["account-poc", accountId],
-    queryFn: async () => {
-      if (!accountId) return [];
-      const { data, error } = await (supabase as any)
-        .from("account_poc")
-        .select("id, name, email")
-        .eq("account_id", accountId)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return data as { id: string; name: string; email: string }[];
-    },
-    enabled: !!accountId,
-  });
-
-  const [selectedRecipient, setSelectedRecipient] = useState<string>("");
-
-  // Per-entry email modal state
-  const [modalUpdate, setModalUpdate] = useState<(typeof updates)[number] | null>(null);
-  const [modalDraft, setModalDraft] = useState<{ subject: string; body: string } | null>(null);
-  const [modalLoading, setModalLoading] = useState(false);
-  const [modalSending, setModalSending] = useState(false);
-
-  const saveContactEmail = useMutation({
-    mutationFn: async (email: string) => {
-      const { error } = await supabase
-        .from("accounts")
-        .update({ contact_email: email })
-        .eq("account_name", accountName);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["account", accountName] });
-      setEditingEmail(false);
-      toast.success("Email saved");
-    },
-    onError: () => toast.error("Failed to save email"),
-  });
-
-  const generateEmail = async () => {
-    setEmailLoading(true);
-    setEmailDraft(null);
-    try {
-      const { data, error } = await supabase.functions.invoke("send-client-update", {
-        body: {
-          accountName,
-          recipientEmail: contactEmail || "preview@example.com",
-          kpis,
-          recentUpdates: updates.slice(0, 5).map((u) => ({
-            date: new Date(u.created_at).toLocaleDateString(),
-            title: (u as any).title || u.category,
-            details: u.details,
-          })),
-          dateLabel: dateRange?.from
-            ? `${dateRange.from.toLocaleDateString()} – ${dateRange.to?.toLocaleDateString() ?? ""}`
-            : "All time",
-          customNote: customNote.trim() || undefined,
-          draftOnly: true,
-        },
-      });
-      if (error) throw error;
-      setEmailDraft({ subject: data.subject, body: data.body });
-    } catch {
-      toast.error("Failed to generate email");
-    } finally {
-      setEmailLoading(false);
-    }
-  };
-
-  const sendEmail = async () => {
-    if (!contactEmail || !emailDraft) return;
-    setEmailSending(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("send-client-update", {
-        body: {
-          accountName,
-          recipientEmail: contactEmail,
-          kpis,
-          recentUpdates: updates.slice(0, 5).map((u) => ({
-            date: new Date(u.created_at).toLocaleDateString(),
-            title: (u as any).title || u.category,
-            details: u.details,
-          })),
-          dateLabel: dateRange?.from
-            ? `${dateRange.from.toLocaleDateString()} – ${dateRange.to?.toLocaleDateString() ?? ""}`
-            : "All time",
-          customNote: customNote.trim() || undefined,
-        },
-      });
-      if (error) throw error;
-      toast.success(`Email sent to ${contactEmail}`);
-      setEmailOpen(false);
-      setEmailDraft(null);
-      setCustomNote("");
-    } catch {
-      toast.error("Failed to send email");
-    } finally {
-      setEmailSending(false);
-    }
-  };
-
-  const reportUrl = `https://reports.treatengine.com/report/${encodeURIComponent(accountName)}`;
-
-  const getRecipientName = (email: string) =>
-    pocs.find((p) => p.email === email)?.name || "";
-
-  const openEmailModal = async (update: (typeof updates)[number]) => {
-    setModalUpdate(update);
-    setModalDraft(null);
-    setModalLoading(true);
-    // Pre-select first available recipient
-    const firstEmail = contactEmail || pocs[0]?.email || "";
-    setSelectedRecipient(firstEmail);
-    try {
-      const { data, error } = await supabase.functions.invoke("send-client-update", {
-        body: {
-          accountName,
-          recipientEmail: firstEmail || "preview@example.com",
-          recipientName: getRecipientName(firstEmail),
-          reportUrl,
-          recentUpdates: [{
-            date: new Date(update.created_at).toLocaleDateString(),
-            title: (update as any).title || update.category,
-            details: update.details,
-          }],
-          dateLabel: dateRange?.from
-            ? `${dateRange.from.toLocaleDateString()} – ${dateRange.to?.toLocaleDateString() ?? ""}`
-            : "All time",
-          draftOnly: true,
-        },
-      });
-      if (error) throw error;
-      setModalDraft({ subject: data.subject, body: data.body });
-    } catch {
-      toast.error("Failed to generate email");
-      setModalUpdate(null);
-    } finally {
-      setModalLoading(false);
-    }
-  };
-
-  const sendModalEmail = async () => {
-    if (!modalUpdate || !modalDraft || !selectedRecipient) return;
-    setModalSending(true);
-    try {
-      const { data: sendData, error } = await supabase.functions.invoke("send-client-update", {
-        body: {
-          accountName,
-          recipientEmail: selectedRecipient,
-          recipientName: getRecipientName(selectedRecipient),
-          reportUrl,
-          recentUpdates: [{
-            date: new Date(modalUpdate.created_at).toLocaleDateString(),
-            title: (modalUpdate as any).title || modalUpdate.category,
-            details: modalUpdate.details,
-          }],
-          dateLabel: dateRange?.from
-            ? `${dateRange.from.toLocaleDateString()} – ${dateRange.to?.toLocaleDateString() ?? ""}`
-            : "All time",
-        },
-      });
-      if (error) {
-        const body = await (error as any)?.context?.json?.().catch(() => null);
-        throw new Error(body?.error || error?.message);
-      }
-      if (sendData?.error) throw new Error(sendData.error);
-      await supabase
-        .from("campaign_updates")
-        .update({ emailed_at: new Date().toISOString() } as any)
-        .eq("id", modalUpdate.id);
-      queryClient.invalidateQueries({ queryKey: ["campaign-updates", accountName] });
-      toast.success(`Email sent to ${selectedRecipient}`);
-      setModalUpdate(null);
-      setModalDraft(null);
-    } catch (err: any) {
-      const msg = err?.message || err?.error_description || JSON.stringify(err) || "Unknown error";
-      toast.error(`Failed to send email: ${msg}`);
-      console.error("sendModalEmail error", err);
-    } finally {
-      setModalSending(false);
-    }
-  };
-
   const displayedKpis = ALL_KPIS.filter((k) => visibleKpis.includes(k.key));
 
   return (
     <Card className="border-border/60 transition-all">
       <CardContent className="p-6 space-y-4">
-        {/* Two-column: KPIs left, Recent Changes right */}
-        <div className="flex flex-col gap-4 md:flex-row">
-          {/* Left: Account name + KPIs */}
-          <div className="w-full md:w-[42%] flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-foreground">{accountName}</h2>
-            <button
-              onClick={() => setPocOpen(true)}
-              title="Customer POC"
-              className="text-muted-foreground hover:text-primary transition-colors"
-            >
-              <Settings2 className="h-3.5 w-3.5" />
-            </button>
+        {/* Header: account name + action buttons */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
+            <h2 className="text-lg font-semibold text-foreground truncate">{accountName}</h2>
             <RouterLink
               to={`/report/${encodeURIComponent(accountName)}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-primary transition-colors"
+              className="text-muted-foreground hover:text-primary transition-colors shrink-0"
               title="Open client report"
             >
               <SquareArrowOutUpRight className="h-3.5 w-3.5" />
@@ -812,13 +388,23 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
               to={`/cc-report/${encodeURIComponent(accountName)}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-sky-600 transition-colors"
+              className="text-muted-foreground hover:text-sky-600 transition-colors shrink-0"
               title="Open call center report"
             >
               <Phone className="h-3.5 w-3.5" />
             </RouterLink>
           </div>
-          <div className="flex flex-col gap-2 items-start">
+          <RouterLink
+            to={`/account/${encodeURIComponent(accountName)}`}
+            className="flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors shrink-0"
+          >
+            <Settings className="h-3 w-3" />
+            Manage
+          </RouterLink>
+        </div>
+
+        {/* KPIs */}
+        <div className="flex flex-col gap-2 items-start">
             {/* Spend */}
             {visibleKpis.includes("totalSpend") && (() => {
               const d = prevKpis ? getDelta(kpis.totalSpend, prevKpis.totalSpend ?? 0) : null;
@@ -915,256 +501,6 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
               })}
           </div>
 
-          {/* Links — compact, under KPIs */}
-          <Collapsible open={linksOpen} onOpenChange={setLinksOpen}>
-            <div className="flex items-center gap-1">
-              <CollapsibleTrigger asChild>
-                <button className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
-                  {linksOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                  <Link2 className="h-3 w-3" />
-                  Links{accountLinks.length > 0 ? ` (${accountLinks.length})` : ""}
-                </button>
-              </CollapsibleTrigger>
-              {linksOpen && (
-                <button
-                  onClick={() => setShowLinkForm((v) => !v)}
-                  className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-primary transition-colors ml-1"
-                >
-                  <Plus className="h-3 w-3" /> Add
-                </button>
-              )}
-            </div>
-            <CollapsibleContent className="pt-1.5 space-y-1.5">
-              {showLinkForm && (
-                <div className="flex items-center gap-1.5 rounded-md border border-border p-1.5">
-                  <Input placeholder="Label" value={newLinkLabel} onChange={(e) => setNewLinkLabel(e.target.value)} className="h-6 text-xs flex-1" />
-                  <Input placeholder="https://..." value={newLinkUrl} onChange={(e) => setNewLinkUrl(e.target.value)} className="h-6 text-xs flex-1" />
-                  <Button size="sm" className="h-6 text-xs px-2" disabled={!newLinkLabel.trim() || !newLinkUrl.trim() || addLink.isPending} onClick={() => addLink.mutate()}>
-                    Save
-                  </Button>
-                </div>
-              )}
-              {accountLinks.length === 0 && !showLinkForm && (
-                <p className="text-[10px] text-muted-foreground">No links yet</p>
-              )}
-              <div className="flex flex-wrap gap-1">
-                {accountLinks.map((link) => (
-                  <div key={link.id} className="group flex items-center gap-1 rounded border border-border/60 bg-muted/30 px-1.5 py-0.5 text-[10px]">
-                    <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-foreground hover:text-primary transition-colors">
-                      <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-                      {link.label}
-                    </a>
-                    <button onClick={() => deleteLink.mutate(link.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive ml-0.5">
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-          </div>{/* end left column */}
-
-          {/* Right: Recent Changes */}
-          <div className="flex-1 border-t md:border-t-0 md:border-l border-border/60 pt-4 md:pt-0 md:pl-4 min-w-0 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                <ClipboardList className="h-3.5 w-3.5" /> Recent Changes
-              </p>
-              <div className="flex items-center gap-2">
-                {totalLogCount > 0 && (
-                  <span className="text-[10px] text-muted-foreground">
-                    {logPage * 3 + 1}–{Math.min(logPage * 3 + 3, totalLogCount)} of {totalLogCount}
-                  </span>
-                )}
-                <button
-                  onClick={() => setShowForm((v) => !v)}
-                  className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-primary transition-colors"
-                >
-                  <Plus className="h-3 w-3" /> Add
-                </button>
-              </div>
-            </div>
-
-            {/* Inline add form */}
-            {showForm && (
-              <div className="space-y-2 rounded-lg border border-border p-3">
-                <Select value={selectedLogOption} onValueChange={setSelectedLogOption}>
-                  <SelectTrigger className="h-7 text-xs">
-                    <SelectValue placeholder="Select campaign & change type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {changeLogOptions.map((opt) => {
-                      const pal = getPalette(opt.label, changeLogOptions);
-                      return (
-                        <SelectGroup key={opt.label}>
-                          <SelectLabel className={`flex items-center gap-1.5 ${pal.label}`}>
-                            <span className={`inline-block h-2 w-2 rounded-full ${pal.dot}`} />
-                            {opt.label}
-                          </SelectLabel>
-                          {opt.sub_options.length > 0
-                            ? opt.sub_options.map((sub) => (
-                                <SelectItem key={`${opt.label}||${sub}`} value={`${opt.label}||${sub}`}>
-                                  <span className="flex items-center gap-1.5">
-                                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${pal.dot} opacity-70`} />
-                                    {sub}
-                                  </span>
-                                </SelectItem>
-                              ))
-                            : (
-                                <SelectItem value={`${opt.label}||`}>{opt.label}</SelectItem>
-                              )
-                          }
-                        </SelectGroup>
-                      );
-                    })}
-                    {(() => {
-                      const coveredLabels = new Set(changeLogOptions.map((o) => o.label));
-                      const extra = campaigns.filter((c) => !coveredLabels.has(c));
-                      if (extra.length === 0) return null;
-                      return (
-                        <SelectGroup>
-                          <SelectLabel>Ad Campaigns</SelectLabel>
-                          {extra.map((c) => (
-                            <SelectItem key={`${c}||`} value={`${c}||`}>{c}</SelectItem>
-                          ))}
-                        </SelectGroup>
-                      );
-                    })()}
-                  </SelectContent>
-                </Select>
-                <Textarea placeholder="What changed? (details)" value={details} onChange={(e) => setDetails(e.target.value)} rows={2} className="text-xs" />
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <input type="file" accept="image/*" multiple className="absolute inset-0 opacity-0 w-full cursor-pointer" onChange={handleImageSelect} />
-                    <Button type="button" variant="outline" size="sm" className="gap-1 h-6 text-xs px-2">
-                      <ImagePlus className="h-3 w-3" /> Images
-                    </Button>
-                  </div>
-                  <Input placeholder="Link URL (optional)" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} className="h-6 text-xs flex-1" />
-                </div>
-                {imagePreviews.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {imagePreviews.map((src, i) => (
-                      <div key={i} className="relative w-12 h-12 rounded overflow-hidden border border-border">
-                        <img src={src} alt="Preview" className="w-full h-full object-cover" />
-                        <button className="absolute top-0.5 right-0.5 bg-background/80 rounded-full p-0.5" onClick={() => removeImage(i)}>
-                          <X className="h-2.5 w-2.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    className="h-6 text-xs px-2"
-                    onClick={() => addUpdate.mutate()}
-                    disabled={!selectedLogOption || (!details.trim() && !imageFiles.length && !linkUrl.trim()) || addUpdate.isPending || uploading}
-                  >
-                    {uploading ? "Uploading…" : "Log Update"}
-                  </Button>
-                  <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => setShowForm(false)}>
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {totalLogCount === 0 && !showForm ? (
-              <p className="text-xs text-muted-foreground py-2">
-                {dateRange?.from ? "No changes in range" : "No changes logged"}
-              </p>
-            ) : totalLogCount > 0 ? (
-              <div className="space-y-2">
-                {filteredTimeline.slice(logPage * 3, logPage * 3 + 3).map((item) => {
-                  if (item.type === "update") {
-                    const update = item.data;
-                    return (
-                      <div key={update.id} className="group rounded-md border border-border/50 p-2 space-y-1">
-                        <div className="flex items-center justify-between gap-1 flex-wrap">
-                          <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${getPalette(update.campaign_name, changeLogOptions).badge}`}>
-                            <span className={`inline-block h-1.5 w-1.5 rounded-full mr-1 ${getPalette(update.campaign_name, changeLogOptions).dot}`} />
-                            {(update as any).title || update.campaign_name || update.category}
-                          </Badge>
-                          <span className="text-[10px] text-muted-foreground shrink-0">
-                            {new Date(update.created_at).toLocaleDateString()}
-                          </span>
-                        </div>
-                        {update.details && (
-                          <p className="text-[11px] text-foreground leading-snug line-clamp-2">{update.details}</p>
-                        )}
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-muted-foreground truncate">{update.campaign_name}</span>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {/* Status toggle */}
-                            {(update as any).status === "published" ? (
-                              <button
-                                onClick={() => updateStatus.mutate({ id: update.id, status: "assigned" })}
-                                className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium hover:opacity-70 transition-opacity"
-                                title="Click to mark as Assigned"
-                              >
-                                <CheckCircle2 className="h-3 w-3" /> Published
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => updateStatus.mutate({ id: update.id, status: "published" })}
-                                className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-medium hover:opacity-70 transition-opacity"
-                                title="Click to mark as Published"
-                              >
-                                <Clock className="h-3 w-3" /> Assigned
-                              </button>
-                            )}
-                            {/* Email — only available when Published */}
-                            {(update as any).emailed_at ? (
-                              <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 font-medium">
-                                <CheckCircle2 className="h-3 w-3" /> Emailed
-                              </span>
-                            ) : (update as any).status === "published" ? (
-                              <button
-                                onClick={() => openEmailModal(update)}
-                                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary font-medium transition-colors"
-                              >
-                                <Mail className="h-3 w-3" /> Email
-                              </button>
-                            ) : null}
-                            <button
-                              onClick={() => deleteUpdate.mutate(update.id)}
-                              className="opacity-50 md:opacity-0 md:group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                })}
-              </div>
-            ) : null}
-
-            {/* Pagination */}
-            {totalLogCount > 3 && (
-              <div className="flex items-center justify-between mt-auto pt-1">
-                <button
-                  disabled={logPage === 0}
-                  onClick={() => setLogPage((p) => p - 1)}
-                  className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronUp className="h-3 w-3" /> Prev
-                </button>
-                <button
-                  disabled={(logPage + 1) * 3 >= totalLogCount}
-                  onClick={() => setLogPage((p) => p + 1)}
-                  className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next <ChevronDown className="h-3 w-3" />
-                </button>
-              </div>
-            )}
-          </div>{/* end right column */}
-        </div>{/* end two-column flex */}
-
         {/* Ad Breakdown Chart Panel */}
         {activeAdChart && (
           <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2">
@@ -1259,107 +595,6 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
         </div>
 
       </CardContent>
-
-      {/* Per-entry Email Modal */}
-      <Dialog open={!!modalUpdate} onOpenChange={(open) => { if (!open) { setModalUpdate(null); setModalDraft(null); } }}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Mail className="h-4 w-4 text-primary" />
-              Email Client
-            </DialogTitle>
-          </DialogHeader>
-
-          {/* Sender / Receiver info */}
-          <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-1.5 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground w-12 shrink-0">From</span>
-              <span className="font-medium text-foreground">Treat Engine &lt;info@treatengine.com&gt;</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground w-12 shrink-0">Reply-to</span>
-              <span className="text-foreground">info@treatleads.com</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground w-12 shrink-0">To</span>
-              {pocs.length > 0 || contactEmail ? (
-                <select
-                  value={selectedRecipient}
-                  onChange={(e) => setSelectedRecipient(e.target.value)}
-                  className="flex-1 bg-transparent text-foreground font-medium text-xs border-none outline-none cursor-pointer"
-                >
-                  {contactEmail && <option value={contactEmail}>{contactEmail}</option>}
-                  {pocs.map((poc) => (
-                    <option key={poc.id} value={poc.email}>{poc.name} — {poc.email}</option>
-                  ))}
-                </select>
-              ) : (
-                <span className="italic text-destructive">No contact email set — add one via the gear icon</span>
-              )}
-            </div>
-            {modalUpdate && (
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground w-12 shrink-0">Re</span>
-                <span className="text-foreground">{(modalUpdate as any).title || modalUpdate.category} — {modalUpdate.campaign_name}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Draft area */}
-          {modalLoading && (
-            <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-              <Sparkles className="h-4 w-4 animate-pulse text-violet-500" />
-              Drafting with AI…
-            </div>
-          )}
-
-          {modalDraft && !modalLoading && (
-            <div className="space-y-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Subject</p>
-                <Input
-                  value={modalDraft.subject}
-                  onChange={(e) => setModalDraft({ ...modalDraft, subject: e.target.value })}
-                  className="text-sm"
-                />
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Body</p>
-                <Textarea
-                  value={modalDraft.body}
-                  onChange={(e) => setModalDraft({ ...modalDraft, body: e.target.value })}
-                  rows={8}
-                  className="text-sm"
-                />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" size="sm" onClick={() => { setModalUpdate(null); setModalDraft(null); }}>
-              Cancel
-            </Button>
-            {modalDraft && (
-              <Button
-                size="sm"
-                className="gap-1.5"
-                disabled={!selectedRecipient || modalSending}
-                onClick={sendModalEmail}
-              >
-                <Send className="h-3.5 w-3.5" />
-                {modalSending ? "Sending…" : "Send Email"}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <CustomerPOCPanel
-        open={pocOpen}
-        onOpenChange={setPocOpen}
-        accountId={accountId}
-        accountName={accountName}
-      />
     </Card>
   );
 }
