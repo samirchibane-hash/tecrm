@@ -539,6 +539,7 @@ export type Database = {
           enabled_kpis: Json
           hidden_accounts: Json
           id: string
+          onboarding_checklists: Json
           updated_at: string
           visible_kpis: Json
         }
@@ -547,6 +548,7 @@ export type Database = {
           enabled_kpis?: Json
           hidden_accounts?: Json
           id?: string
+          onboarding_checklists?: Json
           updated_at?: string
           visible_kpis?: Json
         }
@@ -555,6 +557,7 @@ export type Database = {
           enabled_kpis?: Json
           hidden_accounts?: Json
           id?: string
+          onboarding_checklists?: Json
           updated_at?: string
           visible_kpis?: Json
         }

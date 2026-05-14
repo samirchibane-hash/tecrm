@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useSettings } from "@/hooks/useSettings";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -11,39 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, ExternalLink, Globe, Phone, Mail, MapPin, Clock, DollarSign, Tag, MessageSquare, CheckSquare } from "lucide-react";
 import { format } from "date-fns";
-
-type ChecklistSection = { section: string; items: { key: string; label: string }[] };
-
-const CHECKLISTS: Record<string, ChecklistSection[]> = {
-  leads: [
-    { section: "Access & Setup", items: [
-      { key: "fb_access", label: "Facebook Ad Account Access Granted" },
-      { key: "ghl_created", label: "GHL Sub-Account Created" },
-      { key: "ghl_integrations", label: "GHL Integrations Configured" },
-    ]},
-    { section: "Strategy", items: [
-      { key: "kickoff_scheduled", label: "Kickoff Call Scheduled" },
-      { key: "kickoff_completed", label: "Kickoff Call Completed" },
-      { key: "strategy_approved", label: "Campaign Strategy Approved" },
-    ]},
-    { section: "Creative", items: [
-      { key: "brief_sent", label: "Creative Brief Sent to Client" },
-      { key: "creatives_received", label: "First Creative Batch Received" },
-      { key: "creatives_uploaded", label: "Creatives Uploaded to Portal" },
-    ]},
-    { section: "Launch", items: [
-      { key: "campaigns_built", label: "Campaign Structure Built" },
-      { key: "campaigns_live", label: "Campaigns Live" },
-      { key: "first_report", label: "First Weekly Report Sent" },
-    ]},
-  ],
-  // websites: [...],   // TODO: add when first Websites client is onboarded
-  // cleardeals: [...], // TODO: add when first ClearDeals client is onboarded
-};
-
-function getChecklist(service: string | null): ChecklistSection[] {
-  return CHECKLISTS[service?.toLowerCase() ?? ""] ?? [];
-}
 
 const DAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -74,6 +42,7 @@ export default function ClientOnboarding() {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { settings: appSettings } = useSettings();
   const [newComment, setNewComment] = useState("");
   const [authorName, setAuthorName] = useState(() => localStorage.getItem("te_author") ?? "");
 
@@ -138,7 +107,7 @@ export default function ClientOnboarding() {
     },
   });
 
-  const checklist = getChecklist(client?.service ?? null);
+  const checklist = appSettings.onboarding_checklists[client?.service?.toLowerCase() ?? ""] ?? [];
   const completedKeys = new Set((progress ?? []).filter((p) => p.completed).map((p) => p.item_key));
   const totalItems = checklist.flatMap((s) => s.items).length;
   const completedCount = checklist.flatMap((s) => s.items).filter((i) => completedKeys.has(i.key)).length;

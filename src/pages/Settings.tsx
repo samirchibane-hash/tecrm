@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Settings as SettingsIcon, Plus, X, Eye, EyeOff, ChevronDown, ChevronRight, Phone } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, Plus, X, Eye, EyeOff, ChevronDown, ChevronRight, Phone, ClipboardList, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -10,10 +10,22 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ALL_KPIS, getPalette, type KpiKey } from "@/components/dashboard/AccountCard";
-import { useSettings, type ChangeLogOption } from "@/hooks/useSettings";
+import { useSettings, type ChangeLogOption, type OnboardingChecklists, type ChecklistSection, ONBOARDING_SERVICES } from "@/hooks/useSettings";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+
+function slugify(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/, "").slice(0, 40);
+}
+
+function makeItemKey(label: string, existingKeys: Set<string>): string {
+  const base = slugify(label) || "item";
+  if (!existingKeys.has(base)) return base;
+  let i = 2;
+  while (existingKeys.has(`${base}_${i}`)) i++;
+  return `${base}_${i}`;
+}
 
 const Settings = () => {
   const { settings, isLoading, updateSettings } = useSettings();
@@ -21,6 +33,12 @@ const Settings = () => {
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newSubOption, setNewSubOption] = useState<Record<string, string>>({});
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+
+  // Onboarding checklist editor state
+  const [checklistService, setChecklistService] = useState<string>("leads");
+  const [newSectionName, setNewSectionName] = useState("");
+  const [newItemText, setNewItemText] = useState<Record<string, string>>({});
+  const [expandedChecklistSections, setExpandedChecklistSections] = useState<Record<string, boolean>>({});
 
   // Full accounts list with IDs (needed for feature flag upserts)
   const { data: accountRows = [] } = useQuery({
@@ -132,6 +150,58 @@ const Settings = () => {
 
   const toggleExpanded = (label: string) => {
     setExpandedCategories((prev) => ({ ...prev, [label]: !prev[label] }));
+  };
+
+  // Onboarding checklist helpers
+  const currentChecklist: ChecklistSection[] = settings.onboarding_checklists[checklistService] ?? [];
+
+  const saveChecklist = (updated: ChecklistSection[]) => {
+    updateSettings({
+      onboarding_checklists: { ...settings.onboarding_checklists, [checklistService]: updated },
+    });
+  };
+
+  const addChecklistSection = () => {
+    const name = newSectionName.trim();
+    if (!name) return;
+    if (currentChecklist.some((s) => s.section === name)) {
+      toast.error("Section already exists");
+      return;
+    }
+    saveChecklist([...currentChecklist, { section: name, items: [] }]);
+    setNewSectionName("");
+    setExpandedChecklistSections((prev) => ({ ...prev, [`${checklistService}:${name}`]: true }));
+    toast.success(`Added "${name}"`);
+  };
+
+  const removeChecklistSection = (sectionName: string) => {
+    saveChecklist(currentChecklist.filter((s) => s.section !== sectionName));
+  };
+
+  const addChecklistItem = (sectionName: string) => {
+    const label = (newItemText[`${checklistService}:${sectionName}`] ?? "").trim();
+    if (!label) return;
+    const allKeys = new Set(currentChecklist.flatMap((s) => s.items.map((i) => i.key)));
+    const key = makeItemKey(label, allKeys);
+    saveChecklist(
+      currentChecklist.map((s) =>
+        s.section === sectionName ? { ...s, items: [...s.items, { key, label }] } : s
+      )
+    );
+    setNewItemText((prev) => ({ ...prev, [`${checklistService}:${sectionName}`]: "" }));
+  };
+
+  const removeChecklistItem = (sectionName: string, itemKey: string) => {
+    saveChecklist(
+      currentChecklist.map((s) =>
+        s.section === sectionName ? { ...s, items: s.items.filter((i) => i.key !== itemKey) } : s
+      )
+    );
+  };
+
+  const toggleChecklistSection = (sectionName: string) => {
+    const k = `${checklistService}:${sectionName}`;
+    setExpandedChecklistSections((prev) => ({ ...prev, [k]: !prev[k] }));
   };
 
   if (isLoading) {
@@ -386,6 +456,131 @@ const Settings = () => {
                   </div>
                 );
               })}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Onboarding Checklists */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <ClipboardList className="h-4 w-4 text-primary" />
+              Onboarding Checklists
+            </CardTitle>
+            <CardDescription>
+              Define the checklist steps shown when onboarding a new client. Each service has its own checklist.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Service tabs */}
+            <div className="flex gap-1 rounded-lg border border-border p-1 bg-muted w-fit">
+              {ONBOARDING_SERVICES.map((svc) => (
+                <button
+                  key={svc}
+                  onClick={() => setChecklistService(svc)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md capitalize transition-colors ${
+                    checklistService === svc
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {svc}
+                </button>
+              ))}
+            </div>
+
+            {/* Sections for the active service */}
+            {currentChecklist.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No sections yet. Add a section below to start building this checklist.
+              </p>
+            )}
+
+            <div className="space-y-2">
+              {currentChecklist.map((sec) => {
+                const sectionKey = `${checklistService}:${sec.section}`;
+                const isExpanded = expandedChecklistSections[sectionKey] !== false;
+                return (
+                  <Collapsible key={sectionKey} open={isExpanded} onOpenChange={() => toggleChecklistSection(sec.section)}>
+                    <div className="rounded-lg border border-border">
+                      <div className="flex items-center justify-between px-3 py-2.5">
+                        <CollapsibleTrigger asChild>
+                          <button className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors">
+                            {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                            {sec.section}
+                            <span className="text-xs font-normal normal-case">
+                              ({sec.items.length} item{sec.items.length !== 1 ? "s" : ""})
+                            </span>
+                          </button>
+                        </CollapsibleTrigger>
+                        <button
+                          onClick={() => removeChecklistSection(sec.section)}
+                          className="text-muted-foreground hover:text-destructive transition-colors p-0.5"
+                          title="Remove section"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      <CollapsibleContent>
+                        <div className="border-t border-border px-3 pb-3 pt-2 space-y-2">
+                          {sec.items.length > 0 && (
+                            <div className="space-y-1">
+                              {sec.items.map((item) => (
+                                <div key={item.key} className="flex items-center justify-between rounded-md px-2 py-1.5 bg-muted/50">
+                                  <span className="text-sm text-foreground">{item.label}</span>
+                                  <button
+                                    onClick={() => removeChecklistItem(sec.section, item.key)}
+                                    className="text-muted-foreground hover:text-destructive transition-colors p-0.5 shrink-0 ml-2"
+                                    title="Remove item"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="New checklist item…"
+                              value={newItemText[`${checklistService}:${sec.section}`] ?? ""}
+                              onChange={(e) =>
+                                setNewItemText((prev) => ({ ...prev, [`${checklistService}:${sec.section}`]: e.target.value }))
+                              }
+                              onKeyDown={(e) => e.key === "Enter" && addChecklistItem(sec.section)}
+                              className="h-7 text-xs flex-1"
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2"
+                              onClick={() => addChecklistItem(sec.section)}
+                              disabled={!(newItemText[`${checklistService}:${sec.section}`] ?? "").trim()}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                );
+              })}
+            </div>
+
+            {/* Add new section */}
+            <div className="flex gap-2">
+              <Input
+                placeholder="New section (e.g. Access & Setup, Launch)"
+                value={newSectionName}
+                onChange={(e) => setNewSectionName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addChecklistSection()}
+                className="flex-1"
+              />
+              <Button size="sm" onClick={addChecklistSection} disabled={!newSectionName.trim()}>
+                <Plus className="mr-1 h-4 w-4" /> Add Section
+              </Button>
             </div>
           </CardContent>
         </Card>
