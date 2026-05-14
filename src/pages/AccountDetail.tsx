@@ -55,6 +55,8 @@ import {
   Circle,
   ListTodo,
   Copy,
+  Image as ImageIcon,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, startOfDay, subDays, startOfMonth, endOfMonth, subMonths, max, isPast, isToday } from "date-fns";
@@ -391,6 +393,49 @@ const AccountDetail = () => {
     : null;
   const dateLabel = presetLabel && dateRangeStr ? `${presetLabel} (${dateRangeStr})` : dateRangeStr ?? "All time";
 
+  // ─── Creatives ────────────────────────────────────────────────────────────
+  type Creative = { id: string; account_name: string; batch_name: string | null; file_name: string; file_url: string; file_type: string; launch_date: string | null; created_at: string };
+
+  const { data: clientCreatives = [] } = useQuery({
+    queryKey: ["creatives", decodedName],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("creatives").select("*").eq("account_name", decodedName).order("created_at", { ascending: true });
+      if (error) throw error;
+      return data as Creative[];
+    },
+  });
+
+  // Also fetch template meta rows (stored under any account) for type/link info
+  const { data: allCreatives = [] } = useQuery({
+    queryKey: ["creatives"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("creatives").select("*").order("created_at", { ascending: true });
+      if (error) throw error;
+      return data as Creative[];
+    },
+  });
+
+  const creativeBatches = useMemo(() => {
+    const myBatchNames = new Set(
+      clientCreatives.filter((c) => c.file_type !== "template_type").map((c) => c.batch_name || "Uncategorized")
+    );
+    const map: Record<string, Creative[]> = {};
+    allCreatives.forEach((c) => {
+      const key = c.batch_name || "Uncategorized";
+      if (!myBatchNames.has(key)) return;
+      if (!map[key]) map[key] = [];
+      map[key].push(c);
+    });
+    return Object.entries(map).map(([name, items]) => {
+      const previewImage = items.find((i) => i.file_type === "image")?.file_url ?? null;
+      const typeMeta = items.find((i) => i.file_type === "template_type");
+      const templateType: "image" | "video" | null = typeMeta && (typeMeta.file_name === "image" || typeMeta.file_name === "video") ? typeMeta.file_name as "image" | "video" : null;
+      const templateLink = typeMeta?.file_url ?? "";
+      const myLink = clientCreatives.find((c) => c.batch_name === name && c.file_type === "link")?.file_url ?? null;
+      return { name, previewImage, templateType, templateLink, myLink };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allCreatives, clientCreatives, decodedName]);
+
   // ─── POC ──────────────────────────────────────────────────────────────────
   const [pocName, setPocName] = useState("");
   const [pocEmail, setPocEmail] = useState("");
@@ -719,7 +764,15 @@ const AccountDetail = () => {
         {/* ── Tabs ──────────────────────────────────────────────────────────── */}
         <Tabs defaultValue="profile">
           <TabsList className="mb-6">
-            <TabsTrigger value="profile">Profile</TabsTrigger>
+            <TabsTrigger value="profile">Overview</TabsTrigger>
+            <TabsTrigger value="creatives">
+              Creatives
+              {creativeBatches.length > 0 && (
+                <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  {creativeBatches.length}
+                </span>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="changelog">
               Change Log
               {totalLogCount > 0 && (
@@ -1014,6 +1067,71 @@ const AccountDetail = () => {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ── Creatives Tab ───────────────────────────────────────────────── */}
+          <TabsContent value="creatives">
+            {creativeBatches.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-14 text-center">
+                <Layers className="h-10 w-10 text-muted-foreground/30" />
+                <p className="text-sm text-muted-foreground">No creative templates produced for this client yet.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {creativeBatches.map(({ name, previewImage, templateType, templateLink, myLink }) => (
+                  <div key={name} className="rounded-xl border border-border/60 bg-card overflow-hidden flex flex-col shadow-sm">
+                    {/* Thumbnail */}
+                    <div className="aspect-video bg-muted flex items-center justify-center overflow-hidden">
+                      {previewImage ? (
+                        <img src={previewImage} alt={name} className="w-full h-full object-cover" loading="lazy" />
+                      ) : (
+                        <ImageIcon className="h-8 w-8 text-muted-foreground/25" />
+                      )}
+                    </div>
+                    {/* Info */}
+                    <div className="p-3 flex flex-col gap-2 flex-1">
+                      <div className="flex items-start gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-foreground leading-snug">{name}</p>
+                          {templateType && (
+                            <span className={cn(
+                              "inline-block mt-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                              templateType === "video" ? "bg-violet-100 text-violet-800" : "bg-sky-100 text-sky-800"
+                            )}>
+                              {templateType === "video" ? "Video" : "Image"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1 mt-auto">
+                        {myLink && (
+                          <a
+                            href={myLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors"
+                          >
+                            <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
+                            Open in Drive
+                          </a>
+                        )}
+                        {templateLink && (
+                          <a
+                            href={templateLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                            Template source
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </TabsContent>
 
           {/* ── Change Log Tab ───────────────────────────────────────────────── */}
