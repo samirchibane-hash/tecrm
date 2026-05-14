@@ -433,13 +433,13 @@ const Index = () => {
                       GHL Leads
                     </th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      CPL / Lead
+                      CPL
                     </th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       GHL Appts
                     </th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      CPA / Appt
+                      CPA
                     </th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       Last Change
