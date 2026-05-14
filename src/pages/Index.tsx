@@ -84,11 +84,22 @@ const Index = () => {
     return map;
   }, [dbAccounts]);
 
-  // All GHL conversions (one query, grouped client-side)
+  // GHL conversions — fetch a window covering current + previous period so deltas work.
+  // Date range is in the query key so this refetches when the picker changes.
+  const ghlFetchFrom = useMemo(() => {
+    if (!dateRange?.from) return startOfDay(subDays(new Date(), 180));
+    const periodMs =
+      ((dateRange.to ?? dateRange.from).getTime() - dateRange.from.getTime()) + 86400000;
+    return new Date(dateRange.from.getTime() - periodMs);
+  }, [dateRange]);
+
   const { data: allGhlConversions = [] } = useQuery({
-    queryKey: ["all-ghl-conversions"],
+    queryKey: ["all-ghl-conversions", format(ghlFetchFrom, "yyyy-MM-dd")],
     queryFn: async () => {
-      const { data } = await supabase.from("ghl_conversions").select("*");
+      const { data } = await supabase
+        .from("ghl_conversions")
+        .select("*")
+        .gte("created_on", format(ghlFetchFrom, "yyyy-MM-dd"));
       return data ?? [];
     },
   });
