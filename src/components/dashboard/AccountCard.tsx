@@ -432,47 +432,14 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
     },
   });
 
-  // Fetch creatives for this account
-  const { data: creatives = [] } = useQuery({
-    queryKey: ["creatives", accountName],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("creatives")
-        .select("*")
-        .eq("account_name", accountName)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  // Merge updates + creatives into a unified timeline
-  type TimelineItem =
-    | { type: "update"; date: string; data: (typeof updates)[number] }
-    | { type: "creative-batch"; date: string; batchName: string; items: (typeof creatives) };
+  // Timeline: campaign updates only (creatives are managed separately in the Creatives dashboard)
+  type TimelineItem = { type: "update"; date: string; data: (typeof updates)[number] };
 
   const timeline = useMemo<TimelineItem[]>(() => {
-    const items: TimelineItem[] = updates.map((u) => ({
-      type: "update" as const,
-      date: u.created_at,
-      data: u,
-    }));
-
-    // Group creatives by batch_name, sort by latest created_at in each batch
-    const batchMap: Record<string, typeof creatives> = {};
-    creatives.forEach((c) => {
-      const key = c.batch_name || "Ungrouped";
-      if (!batchMap[key]) batchMap[key] = [];
-      batchMap[key].push(c);
-    });
-    Object.entries(batchMap).forEach(([batchName, batchItems]) => {
-      const sortDate = batchItems.reduce((latest, c) => c.created_at > latest ? c.created_at : latest, batchItems[0]?.created_at ?? "");
-      items.push({ type: "creative-batch", date: sortDate, batchName, items: batchItems });
-    });
-
-    items.sort((a, b) => b.date.localeCompare(a.date));
-    return items;
-  }, [updates, creatives]);
+    return updates
+      .map((u) => ({ type: "update" as const, date: u.created_at, data: u }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [updates]);
 
   const filteredTimeline = useMemo(() => {
     if (!dateRange?.from) return timeline;
@@ -1171,35 +1138,7 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
                       </div>
                     );
                   }
-                  // Creative batch
-                  const { batchName, items: batchItems, date } = item;
-                  const images = batchItems.filter((c) => c.file_type !== "link");
-                  const links = batchItems.filter((c) => c.file_type === "link");
-                  return (
-                    <div key={`creative-${batchName}`} className="rounded-md border border-border/50 p-2 space-y-1">
-                      <div className="flex items-center justify-between gap-1 flex-wrap">
-                        <Badge variant="secondary" className="bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300 text-[10px] px-1.5 py-0">
-                          <ImageIcon className="h-3 w-3 mr-0.5" /> Creative
-                        </Badge>
-                        <span className="text-[10px] text-muted-foreground shrink-0">{new Date(date).toLocaleDateString()}</span>
-                      </div>
-                      <p className="text-[11px] text-foreground leading-snug truncate">{batchName}</p>
-                      {images.length > 0 && (
-                        <div className="flex gap-1 overflow-x-auto">
-                          {images.slice(0, 3).map((img) => (
-                            <a key={img.id} href={img.file_url} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                              <img src={img.file_url} alt={img.file_name} className="h-10 w-10 object-cover rounded border border-border hover:opacity-80 transition-opacity" loading="lazy" />
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                      {links.length > 0 && links.slice(0, 2).map((l) => (
-                        <a key={l.id} href={l.file_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline">
-                          <ExternalLink className="h-3 w-3" /> {l.file_name}
-                        </a>
-                      ))}
-                    </div>
-                  );
+                  return null;
                 })}
               </div>
             ) : null}
