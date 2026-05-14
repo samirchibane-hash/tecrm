@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Settings as SettingsIcon, Plus, X, Eye, EyeOff, ChevronDown, ChevronRight, Phone, ClipboardList, GripVertical } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, Plus, X, Eye, EyeOff, ChevronDown, ChevronRight, Phone, ClipboardList, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -196,6 +196,31 @@ const Settings = () => {
       currentChecklist.map((s) =>
         s.section === sectionName ? { ...s, items: s.items.filter((i) => i.key !== itemKey) } : s
       )
+    );
+  };
+
+  const moveChecklistSection = (sectionName: string, dir: -1 | 1) => {
+    const idx = currentChecklist.findIndex((s) => s.section === sectionName);
+    if (idx < 0) return;
+    const next = [...currentChecklist];
+    const swap = idx + dir;
+    if (swap < 0 || swap >= next.length) return;
+    [next[idx], next[swap]] = [next[swap], next[idx]];
+    saveChecklist(next);
+  };
+
+  const moveChecklistItem = (sectionName: string, itemKey: string, dir: -1 | 1) => {
+    saveChecklist(
+      currentChecklist.map((s) => {
+        if (s.section !== sectionName) return s;
+        const idx = s.items.findIndex((i) => i.key === itemKey);
+        if (idx < 0) return s;
+        const next = [...s.items];
+        const swap = idx + dir;
+        if (swap < 0 || swap >= next.length) return s;
+        [next[idx], next[swap]] = [next[swap], next[idx]];
+        return { ...s, items: next };
+      })
     );
   };
 
@@ -497,7 +522,7 @@ const Settings = () => {
             )}
 
             <div className="space-y-2">
-              {currentChecklist.map((sec) => {
+              {currentChecklist.map((sec, secIdx) => {
                 const sectionKey = `${checklistService}:${sec.section}`;
                 const isExpanded = expandedChecklistSections[sectionKey] !== false;
                 return (
@@ -513,29 +538,65 @@ const Settings = () => {
                             </span>
                           </button>
                         </CollapsibleTrigger>
-                        <button
-                          onClick={() => removeChecklistSection(sec.section)}
-                          className="text-muted-foreground hover:text-destructive transition-colors p-0.5"
-                          title="Remove section"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            onClick={() => moveChecklistSection(sec.section, -1)}
+                            disabled={secIdx === 0}
+                            className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors p-0.5"
+                            title="Move section up"
+                          >
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => moveChecklistSection(sec.section, 1)}
+                            disabled={secIdx === currentChecklist.length - 1}
+                            className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors p-0.5"
+                            title="Move section down"
+                          >
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => removeChecklistSection(sec.section)}
+                            className="text-muted-foreground hover:text-destructive transition-colors p-0.5 ml-1"
+                            title="Remove section"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
 
                       <CollapsibleContent>
                         <div className="border-t border-border px-3 pb-3 pt-2 space-y-2">
                           {sec.items.length > 0 && (
                             <div className="space-y-1">
-                              {sec.items.map((item) => (
+                              {sec.items.map((item, itemIdx) => (
                                 <div key={item.key} className="flex items-center justify-between rounded-md px-2 py-1.5 bg-muted/50">
                                   <span className="text-sm text-foreground">{item.label}</span>
-                                  <button
-                                    onClick={() => removeChecklistItem(sec.section, item.key)}
-                                    className="text-muted-foreground hover:text-destructive transition-colors p-0.5 shrink-0 ml-2"
-                                    title="Remove item"
-                                  >
-                                    <X className="h-3.5 w-3.5" />
-                                  </button>
+                                  <div className="flex items-center gap-0.5 shrink-0 ml-2">
+                                    <button
+                                      onClick={() => moveChecklistItem(sec.section, item.key, -1)}
+                                      disabled={itemIdx === 0}
+                                      className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors p-0.5"
+                                      title="Move item up"
+                                    >
+                                      <ArrowUp className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => moveChecklistItem(sec.section, item.key, 1)}
+                                      disabled={itemIdx === sec.items.length - 1}
+                                      className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors p-0.5"
+                                      title="Move item down"
+                                    >
+                                      <ArrowDown className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => removeChecklistItem(sec.section, item.key)}
+                                      className="text-muted-foreground hover:text-destructive transition-colors p-0.5 ml-0.5"
+                                      title="Remove item"
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
                                 </div>
                               ))}
                             </div>
