@@ -10,6 +10,7 @@ import CompetitorAnalysis from "./pages/CompetitorAnalysis";
 import Settings from "./pages/Settings";
 import ClientReport from "./pages/ClientReport";
 import CallCenterReport from "./pages/CallCenterReport";
+import ClientOnboarding from "./pages/ClientOnboarding";
 import NotFound from "./pages/NotFound";
 import { PasscodeGate } from "./components/PasscodeGate";
 
@@ -32,6 +33,7 @@ const App = () => (
           <Route path="/creatives" element={<PasscodeGate><Creatives /></PasscodeGate>} />
           <Route path="/competitor-analysis" element={<PasscodeGate><CompetitorAnalysis /></PasscodeGate>} />
           <Route path="/settings" element={<PasscodeGate><Settings /></PasscodeGate>} />
+          <Route path="/onboarding/:clientId" element={<PasscodeGate><ClientOnboarding /></PasscodeGate>} />
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

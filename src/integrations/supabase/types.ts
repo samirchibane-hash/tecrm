@@ -14,6 +14,159 @@ export type Database = {
   }
   public: {
     Tables: {
+      clients: {
+        Row: {
+          id: string
+          session_id: string | null
+          service: string | null
+          plan: string | null
+          full_name: string | null
+          email: string | null
+          phone: string | null
+          business_name: string | null
+          city: string | null
+          state: string | null
+          service_area: string | null
+          website_url: string | null
+          brands: string[] | null
+          has_facebook: boolean | null
+          facebook_url: string | null
+          ad_budget: string | null
+          offers: string[] | null
+          additional_notes: string | null
+          business_hours: Json | null
+          owner_name: string | null
+          owner_email: string | null
+          owner_cell: string | null
+          legal_business_name: string | null
+          business_email: string | null
+          business_phone: string | null
+          business_type: string | null
+          ein: string | null
+          amount_paid: number | null
+          currency: string | null
+          status: string | null
+          submitted_at: string
+        }
+        Insert: {
+          id?: string
+          session_id?: string | null
+          service?: string | null
+          plan?: string | null
+          full_name?: string | null
+          email?: string | null
+          phone?: string | null
+          business_name?: string | null
+          city?: string | null
+          state?: string | null
+          service_area?: string | null
+          website_url?: string | null
+          brands?: string[] | null
+          has_facebook?: boolean | null
+          facebook_url?: string | null
+          ad_budget?: string | null
+          offers?: string[] | null
+          additional_notes?: string | null
+          business_hours?: Json | null
+          owner_name?: string | null
+          owner_email?: string | null
+          owner_cell?: string | null
+          legal_business_name?: string | null
+          business_email?: string | null
+          business_phone?: string | null
+          business_type?: string | null
+          ein?: string | null
+          amount_paid?: number | null
+          currency?: string | null
+          status?: string | null
+          submitted_at?: string
+        }
+        Update: {
+          id?: string
+          session_id?: string | null
+          service?: string | null
+          plan?: string | null
+          full_name?: string | null
+          email?: string | null
+          phone?: string | null
+          business_name?: string | null
+          city?: string | null
+          state?: string | null
+          service_area?: string | null
+          website_url?: string | null
+          brands?: string[] | null
+          has_facebook?: boolean | null
+          facebook_url?: string | null
+          ad_budget?: string | null
+          offers?: string[] | null
+          additional_notes?: string | null
+          business_hours?: Json | null
+          owner_name?: string | null
+          owner_email?: string | null
+          owner_cell?: string | null
+          legal_business_name?: string | null
+          business_email?: string | null
+          business_phone?: string | null
+          business_type?: string | null
+          ein?: string | null
+          amount_paid?: number | null
+          currency?: string | null
+          status?: string | null
+          submitted_at?: string
+        }
+        Relationships: []
+      }
+      onboarding_progress: {
+        Row: {
+          id: string
+          client_id: string
+          item_key: string
+          completed: boolean
+          completed_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          item_key: string
+          completed?: boolean
+          completed_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string
+          item_key?: string
+          completed?: boolean
+          completed_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      onboarding_comments: {
+        Row: {
+          id: string
+          client_id: string
+          author: string
+          content: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          author: string
+          content: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string
+          author?: string
+          content?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       accounts: {
         Row: {
           account_name: string

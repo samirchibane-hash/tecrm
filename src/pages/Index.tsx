@@ -1,9 +1,12 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { useCouplerData } from "@/hooks/useCouplerData";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, RefreshCw, CalendarDays, SlidersHorizontal, Settings, Image as ImageIcon, Crosshair } from "lucide-react";
+import { AlertCircle, RefreshCw, CalendarDays, SlidersHorizontal, Settings, Image as ImageIcon, Crosshair, Sparkles, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatDistanceToNow } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -17,6 +20,19 @@ import type { DateRange } from "react-day-picker";
 
 const Index = () => {
   const { data, isLoading, isError, error, refetch, isFetching } = useCouplerData();
+
+  const { data: newClients } = useQuery({
+    queryKey: ["new_clients"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, full_name, business_name, service, plan, submitted_at")
+        .order("submitted_at", { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
   const { settings, updateSettings } = useSettings();
 
   const enabledKpis = settings.enabled_kpis;
@@ -223,6 +239,41 @@ const Index = () => {
             </Button>
           </div>
         </div>
+
+        {/* New Clients */}
+        {newClients && newClients.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">New Clients</h2>
+              <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">{newClients.length}</span>
+            </div>
+            <div className="space-y-2">
+              {newClients.map((client) => (
+                <Link
+                  key={client.id}
+                  to={`/onboarding/${client.id}`}
+                  className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3 hover:bg-muted/50 transition-colors group"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">
+                      {client.business_name ?? client.full_name}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5 capitalize">
+                      {[client.service, client.plan].filter(Boolean).join(" · ")}
+                      {client.submitted_at && (
+                        <span className="ml-2">
+                          · {formatDistanceToNow(new Date(client.submitted_at), { addSuffix: true })}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0 ml-3 group-hover:translate-x-0.5 transition-transform" />
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Loading */}
         {isLoading && (
