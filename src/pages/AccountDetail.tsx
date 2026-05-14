@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ChartContainer } from "@/components/ui/chart";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from "recharts";
 import {
   Select,
   SelectContent,
@@ -73,15 +73,39 @@ const CHARTABLE_KEYS = new Set<KpiKey>([
   "ghlLeads", "ghlAppointments", "ghlCostPerLead", "ghlCostPerAppt",
 ]);
 
-// ─── Inline area chart ────────────────────────────────────────────────────────
+// Hex colours matching the PALETTE dot colours in AccountCard
+const PALETTE_HEX = [
+  "#3b82f6", "#10b981", "#a855f7", "#f59e0b", "#f43f5e",
+  "#06b6d4", "#f97316", "#6366f1", "#14b8a6", "#ec4899",
+];
 
-function KpiAreaChart({ data, label, formatValue }: {
+type ChartAnnotation = {
+  date: string;
+  updates: { campaign_name: string; details: string | null }[];
+  color: string;
+};
+
+// ─── Inline area chart (with change-log annotations) ─────────────────────────
+
+function KpiAreaChart({ data, label, formatValue, annotations = [] }: {
   data: { date: string; value: number }[];
   label: string;
   formatValue: (v: number) => string;
+  annotations?: ChartAnnotation[];
 }) {
   const gradId = `grad-acct-${label.replace(/\s+/g, "")}`;
-  if (data.length === 0) {
+
+  const mergedData = useMemo(() => {
+    if (annotations.length === 0) return data;
+    const dateSet = new Set(data.map((d) => d.date));
+    const extras = annotations
+      .filter((a) => !dateSet.has(a.date))
+      .map((a) => ({ date: a.date, value: null as unknown as number }));
+    if (extras.length === 0) return data;
+    return [...data, ...extras].sort((a, b) => a.date.localeCompare(b.date));
+  }, [data, annotations]);
+
+  if (data.length === 0 && annotations.length === 0) {
     return (
       <Card className="border-border/50 bg-card shadow-sm">
         <CardContent className="flex h-[160px] items-center justify-center text-sm text-muted-foreground">
@@ -94,7 +118,7 @@ function KpiAreaChart({ data, label, formatValue }: {
     <Card className="border-border/50 bg-card shadow-sm">
       <CardContent className="px-4 pb-3 pt-4">
         <ChartContainer config={{ value: { label, color: "hsl(var(--chart-1))" } }} className="h-[200px] w-full">
-          <AreaChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+          <AreaChart data={mergedData} margin={{ top: 18, right: 8, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3} />
@@ -110,9 +134,55 @@ function KpiAreaChart({ data, label, formatValue }: {
             <YAxis tick={{ fontSize: 11 }} tickFormatter={formatValue} width={60} />
             <Tooltip
               contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid hsl(var(--border))", background: "hsl(var(--background))", color: "hsl(var(--foreground))" }}
-              formatter={(v) => [formatValue(v as number), label]}
-              labelStyle={{ color: "hsl(var(--muted-foreground))", marginBottom: 2 }}
+              content={({ active, payload, label: hoverDate }) => {
+                if (!active) return null;
+                const val = payload?.[0]?.value as number | null | undefined;
+                const dayAnn = annotations.find((a) => a.date === hoverDate);
+                if (val == null && !dayAnn) return null;
+                return (
+                  <div className="rounded-lg border border-border bg-background p-2.5 shadow-md text-xs min-w-[160px] max-w-[240px]">
+                    <p className="text-muted-foreground mb-1">{hoverDate}</p>
+                    {val != null && <p className="font-semibold mb-1">{formatValue(val)} <span className="font-normal text-muted-foreground">{label}</span></p>}
+                    {dayAnn && (
+                      <div className={cn("space-y-1", val != null && "mt-1.5 pt-1.5 border-t border-border")}>
+                        {dayAnn.updates.map((u, i) => (
+                          <div key={i} className="flex items-start gap-1.5">
+                            <div className="mt-0.5 h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: dayAnn.color }} />
+                            <span className="text-muted-foreground leading-tight">
+                              <span className="font-medium text-foreground">{u.campaign_name}</span>
+                              {u.details ? ` — ${u.details.slice(0, 70)}${u.details.length > 70 ? "…" : ""}` : ""}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }}
             />
+            {annotations.map((ann) => (
+              <ReferenceLine
+                key={ann.date}
+                x={ann.date}
+                stroke={ann.color}
+                strokeDasharray="3 3"
+                strokeWidth={1.5}
+                strokeOpacity={0.8}
+                label={({ viewBox }: { viewBox?: { x?: number; y?: number } }) => {
+                  const x = viewBox?.x;
+                  const y = (viewBox?.y ?? 0) + 8;
+                  if (x == null) return <g />;
+                  return (
+                    <g>
+                      <circle cx={x} cy={y} r={5} fill={ann.color} stroke="white" strokeWidth={1.5} />
+                      {ann.updates.length > 1 && (
+                        <text x={x} y={y + 3.5} textAnchor="middle" fontSize={7} fill="white" fontWeight="bold">{ann.updates.length}</text>
+                      )}
+                    </g>
+                  );
+                }}
+              />
+            ))}
             <Area type="monotone" dataKey="value" stroke="hsl(var(--chart-1))" strokeWidth={2} fill={`url(#${gradId})`} connectNulls dot={false} />
           </AreaChart>
         </ChartContainer>
@@ -344,6 +414,34 @@ const AccountDetail = () => {
       ghlCostPerAppt: [...new Set([...adDates, ...ghlDates])].sort().map((date) => ({ date, value: (ghlByDate[date]?.appts ?? 0) > 0 ? +((adByDate[date]?.spend ?? 0) / ghlByDate[date].appts).toFixed(2) : 0 })),
     } as Partial<Record<KpiKey, { date: string; value: number }[]>>;
   }, [filteredAdData, ghlConversions]);
+
+  // ─── Chart annotations from change log ───────────────────────────────────
+  const chartAnnotations = useMemo((): ChartAnnotation[] => {
+    const grouped: Record<string, { campaign_name: string; details: string | null }[]> = {};
+    updates.forEach((u) => {
+      const date = format(new Date(u.created_at), "yyyy-MM-dd");
+      if (dateRange?.from && new Date(date) < startOfDay(dateRange.from)) return;
+      if (dateRange?.to && new Date(date) > startOfDay(dateRange.to)) return;
+      if (!grouped[date]) grouped[date] = [];
+      grouped[date].push({ campaign_name: (u as any).title || u.campaign_name, details: u.details });
+    });
+    return Object.entries(grouped).map(([date, upds], i) => ({
+      date,
+      updates: upds,
+      color: PALETTE_HEX[i % PALETTE_HEX.length],
+    }));
+  }, [updates, dateRange]);
+
+  // ─── Change log entries filtered to current date range ───────────────────
+  const filteredUpdates = useMemo(() => {
+    if (!dateRange?.from) return updates;
+    const from = startOfDay(dateRange.from);
+    const to = dateRange.to ? startOfDay(dateRange.to) : from;
+    return updates.filter((u) => {
+      const d = startOfDay(new Date(u.created_at));
+      return d >= from && d <= to;
+    });
+  }, [updates, dateRange]);
 
   // ─── Account tasks ────────────────────────────────────────────────────────
   const { data: accountTasks = [], refetch: refetchTasks } = useQuery({
@@ -786,70 +884,6 @@ const AccountDetail = () => {
           {/* ── Overview Tab ────────────────────────────────────────────────── */}
           <TabsContent value="profile" className="space-y-6">
 
-            {/* ── KPIs + Chart ── */}
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Key Metrics</h2>
-                <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
-                  <PopoverTrigger asChild>
-                    <button className="flex items-center gap-1.5 rounded-md border border-border/60 bg-card px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
-                      <CalendarDays className="h-3.5 w-3.5 text-primary shrink-0" />
-                      {dateLabel}
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-44 p-1.5" align="end">
-                    <div className="flex flex-col gap-0.5">
-                      {[
-                        { label: "Last 7 days", range: { from: max([startOfDay(subDays(new Date(), 7)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
-                        { label: "Last 30 days", range: { from: max([startOfDay(subDays(new Date(), 29)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
-                        { label: "Last month", range: { from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) } },
-                        { label: "Month to Date", range: { from: max([startOfMonth(new Date()), MIN_DATE]), to: startOfDay(new Date()) } },
-                        { label: "All time", range: { from: undefined, to: undefined } },
-                      ].map((p) => (
-                        <Button
-                          key={p.label}
-                          variant={presetLabel === p.label ? "secondary" : "ghost"}
-                          size="sm"
-                          className="justify-start text-xs h-8 rounded-sm"
-                          onClick={() => { setDateRange(p.range.from ? p.range as DateRange : undefined); setPresetLabel(p.label); setDatePickerOpen(false); }}
-                        >
-                          {p.label}
-                        </Button>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              {enabledKpis.length > 0 ? (
-                <>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {enabledKpis.map(({ key, label, icon, format: fmt }) => (
-                      <StatCard
-                        key={key}
-                        label={label}
-                        value={fmt(kpis[key])}
-                        icon={icon}
-                        isActive={selectedChart === key}
-                        onClick={CHARTABLE_KEYS.has(key) ? () => setSelectedChart(key) : undefined}
-                      />
-                    ))}
-                  </div>
-                  {selectedKpi && CHARTABLE_KEYS.has(selectedChart) && (
-                    <div className="mt-3">
-                      <KpiAreaChart
-                        data={chartSeriesData[selectedChart] ?? []}
-                        label={selectedKpi.label}
-                        formatValue={selectedKpi.format}
-                      />
-                    </div>
-                  )}
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground py-4">No KPIs enabled — configure them in Settings.</p>
-              )}
-            </section>
-
             {/* ── Tasks ── */}
             <section>
               <div className="rounded-xl border border-border/60 overflow-hidden">
@@ -930,6 +964,106 @@ const AccountDetail = () => {
                   </button>
                 )}
               </div>
+            </section>
+
+            {/* ── KPIs + Chart + Change Log ── */}
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Key Metrics</h2>
+                <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                  <PopoverTrigger asChild>
+                    <button className="flex items-center gap-1.5 rounded-md border border-border/60 bg-card px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
+                      <CalendarDays className="h-3.5 w-3.5 text-primary shrink-0" />
+                      {dateLabel}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-44 p-1.5" align="end">
+                    <div className="flex flex-col gap-0.5">
+                      {[
+                        { label: "Last 7 days", range: { from: max([startOfDay(subDays(new Date(), 7)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
+                        { label: "Last 30 days", range: { from: max([startOfDay(subDays(new Date(), 29)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
+                        { label: "Last month", range: { from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) } },
+                        { label: "Month to Date", range: { from: max([startOfMonth(new Date()), MIN_DATE]), to: startOfDay(new Date()) } },
+                        { label: "All time", range: { from: undefined, to: undefined } },
+                      ].map((p) => (
+                        <Button key={p.label} variant={presetLabel === p.label ? "secondary" : "ghost"} size="sm" className="justify-start text-xs h-8 rounded-sm"
+                          onClick={() => { setDateRange(p.range.from ? p.range as DateRange : undefined); setPresetLabel(p.label); setDatePickerOpen(false); }}>
+                          {p.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {enabledKpis.length > 0 ? (
+                <>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {enabledKpis.map(({ key, label, icon, format: fmt }) => (
+                      <StatCard key={key} label={label} value={fmt(kpis[key])} icon={icon}
+                        isActive={selectedChart === key}
+                        onClick={CHARTABLE_KEYS.has(key) ? () => setSelectedChart(key) : undefined}
+                      />
+                    ))}
+                  </div>
+                  {selectedKpi && CHARTABLE_KEYS.has(selectedChart) && (
+                    <div className="mt-3">
+                      <KpiAreaChart
+                        data={chartSeriesData[selectedChart] ?? []}
+                        label={selectedKpi.label}
+                        formatValue={selectedKpi.format}
+                        annotations={chartAnnotations}
+                      />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground py-4">No KPIs enabled — configure them in Settings.</p>
+              )}
+
+              {/* ── Change Log timeline (date-synced) ── */}
+              {filteredUpdates.length > 0 && (
+                <div className="mt-5">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                    Change Log <span className="font-normal text-muted-foreground/60">({filteredUpdates.length})</span>
+                  </h3>
+                  <div className="relative">
+                    <div className="absolute left-[9px] top-2 bottom-2 w-px bg-border" />
+                    <div className="space-y-3 pl-6">
+                      {filteredUpdates.map((u, i) => {
+                        const pal = getPalette(u.campaign_name, changeLogOptions);
+                        const annColor = chartAnnotations.find((a) => a.date === format(new Date(u.created_at), "yyyy-MM-dd"))?.color ?? PALETTE_HEX[i % PALETTE_HEX.length];
+                        return (
+                          <div key={u.id} className="relative">
+                            <div className="absolute -left-[23px] top-3 h-2.5 w-2.5 rounded-full border-2 border-background" style={{ backgroundColor: annColor }} />
+                            <Card className="border-border/50 bg-card shadow-sm">
+                              <CardContent className="p-3 space-y-1.5">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="secondary" className={`text-xs px-2 py-0.5 ${pal.badge}`}>
+                                    <span className={`inline-block h-1.5 w-1.5 rounded-full mr-1 ${pal.dot}`} />
+                                    {(u as any).title || u.campaign_name}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">{u.campaign_name}</span>
+                                  <span className="ml-auto text-xs text-muted-foreground shrink-0">
+                                    {format(new Date(u.created_at), "MMM d, yyyy")}
+                                  </span>
+                                </div>
+                                {u.details && <p className="text-sm text-foreground leading-relaxed">{u.details}</p>}
+                                {(u as any).link_url && (
+                                  <a href={(u as any).link_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                                    <ExternalLink className="h-3 w-3" />
+                                    {(() => { try { return new URL((u as any).link_url).hostname.replace(/^www\./, ""); } catch { return "View link"; } })()}
+                                  </a>
+                                )}
+                              </CardContent>
+                            </Card>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
             </section>
 
             {/* ── Funnel Pages ── */}
