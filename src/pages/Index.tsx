@@ -14,8 +14,6 @@ import {
   Sparkles,
   ArrowRight,
   ChevronRight,
-  TrendingUp,
-  TrendingDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
@@ -93,6 +91,26 @@ const Index = () => {
       return data ?? [];
     },
   });
+
+  // Most recent change log date per account
+  const { data: lastChanges = [] } = useQuery({
+    queryKey: ["last-changes"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("campaign_updates")
+        .select("account_name, created_at")
+        .order("created_at", { ascending: false });
+      return data ?? [];
+    },
+  });
+
+  const lastChangeMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    lastChanges.forEach((r) => {
+      if (!map[r.account_name]) map[r.account_name] = r.created_at;
+    });
+    return map;
+  }, [lastChanges]);
 
   // ─── Date range ────────────────────────────────────────────────────────────
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -198,11 +216,6 @@ const Index = () => {
       ).length;
       const ghlCostPerLead = ghlLeads > 0 ? totalSpend / ghlLeads : 0;
       const ghlCostPerAppt = ghlAppointments > 0 ? totalSpend / ghlAppointments : 0;
-      const soldCount = ghl.filter((c) => c.appointment_status === "sold").length;
-      const totalRevenue = ghl
-        .filter((c) => c.appointment_status === "sold")
-        .reduce((s, c) => s + (c.deal_value ?? 0), 0);
-
       const prevGhlLeads = prevGhl.filter((c) =>
         c.type?.toLowerCase() === "lead" || c.type?.toLowerCase() === "water test"
       ).length;
@@ -219,10 +232,10 @@ const Index = () => {
         ghlCostPerLead, prevGhlCostPerLead,
         ghlAppointments, prevGhlAppointments,
         ghlCostPerAppt, prevGhlCostPerAppt,
-        soldCount, totalRevenue,
+        lastChange: lastChangeMap[name] ?? null,
       };
     });
-  }, [accountGroups, accountIdMap, allGhlConversions, dateRange, prevDateRange, prevGroupMap]);
+  }, [accountGroups, accountIdMap, allGhlConversions, dateRange, prevDateRange, prevGroupMap, lastChangeMap]);
 
   const dateRangeStr = dateRange?.from
     ? dateRange.to
@@ -409,7 +422,7 @@ const Index = () => {
                       CPA
                     </th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Sold
+                      Last Change
                     </th>
                     <th className="py-3 px-4 w-8" />
                   </tr>
@@ -501,10 +514,15 @@ const Index = () => {
                           )}
                         </td>
 
-                        {/* Sold */}
-                        <td className="py-3.5 px-4 text-right tabular-nums">
-                          {row.soldCount > 0 ? (
-                            <span className="font-medium text-foreground">{row.soldCount}</span>
+                        {/* Last Change */}
+                        <td className="py-3.5 px-4 text-right">
+                          {row.lastChange ? (
+                            <span
+                              className="text-xs text-muted-foreground"
+                              title={new Date(row.lastChange).toLocaleString()}
+                            >
+                              {formatDistanceToNow(new Date(row.lastChange), { addSuffix: true })}
+                            </span>
                           ) : (
                             <span className="text-muted-foreground">–</span>
                           )}
