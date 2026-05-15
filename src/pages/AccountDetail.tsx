@@ -1014,11 +1014,15 @@ const AccountDetail = () => {
               )}
 
               {/* ── Change Log timeline (date-synced) ── */}
-              {filteredUpdates.length > 0 && (
-                <div className="mt-5">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                    Change Log <span className="font-normal text-muted-foreground/60">({filteredUpdates.length})</span>
-                  </h3>
+              <div className="mt-5">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                  Change Log <span className="font-normal text-muted-foreground/60">({filteredUpdates.length})</span>
+                </h3>
+                {filteredUpdates.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    No updates logged for this period.
+                  </p>
+                ) : (
                   <div className="relative">
                     <div className="absolute left-[9px] top-2 bottom-2 w-px bg-border" />
                     <div className="space-y-3 pl-6">
@@ -1054,8 +1058,8 @@ const AccountDetail = () => {
                       })}
                     </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </section>
 
             {/* ── Funnel Pages ── */}
