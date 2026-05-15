@@ -415,34 +415,6 @@ const AccountDetail = () => {
     } as Partial<Record<KpiKey, { date: string; value: number }[]>>;
   }, [filteredAdData, ghlConversions]);
 
-  // ─── Chart annotations from change log ───────────────────────────────────
-  const chartAnnotations = useMemo((): ChartAnnotation[] => {
-    const grouped: Record<string, { campaign_name: string; details: string | null }[]> = {};
-    updates.forEach((u) => {
-      const date = format(new Date(u.created_at), "yyyy-MM-dd");
-      if (dateRange?.from && new Date(date) < startOfDay(dateRange.from)) return;
-      if (dateRange?.to && new Date(date) > startOfDay(dateRange.to)) return;
-      if (!grouped[date]) grouped[date] = [];
-      grouped[date].push({ campaign_name: (u as any).title || u.campaign_name, details: u.details });
-    });
-    return Object.entries(grouped).map(([date, upds], i) => ({
-      date,
-      updates: upds,
-      color: PALETTE_HEX[i % PALETTE_HEX.length],
-    }));
-  }, [updates, dateRange]);
-
-  // ─── Change log entries filtered to current date range ───────────────────
-  const filteredUpdates = useMemo(() => {
-    if (!dateRange?.from) return updates;
-    const from = startOfDay(dateRange.from);
-    const to = dateRange.to ? startOfDay(dateRange.to) : from;
-    return updates.filter((u) => {
-      const d = startOfDay(new Date(u.created_at));
-      return d >= from && d <= to;
-    });
-  }, [updates, dateRange]);
-
   // ─── Account tasks ────────────────────────────────────────────────────────
   const { data: accountTasks = [], refetch: refetchTasks } = useQuery({
     queryKey: ["tasks", decodedName],
@@ -659,6 +631,34 @@ const AccountDetail = () => {
   });
 
   useEffect(() => { setLogPage(0); }, [updates.length]);
+
+  // ─── Chart annotations from change log ───────────────────────────────────
+  const chartAnnotations = useMemo((): ChartAnnotation[] => {
+    const grouped: Record<string, { campaign_name: string; details: string | null }[]> = {};
+    updates.forEach((u) => {
+      const date = format(new Date(u.created_at), "yyyy-MM-dd");
+      if (dateRange?.from && new Date(date) < startOfDay(dateRange.from)) return;
+      if (dateRange?.to && new Date(date) > startOfDay(dateRange.to)) return;
+      if (!grouped[date]) grouped[date] = [];
+      grouped[date].push({ campaign_name: (u as any).title || u.campaign_name, details: u.details });
+    });
+    return Object.entries(grouped).map(([date, upds], i) => ({
+      date,
+      updates: upds,
+      color: PALETTE_HEX[i % PALETTE_HEX.length],
+    }));
+  }, [updates, dateRange]);
+
+  // ─── Change log entries filtered to current date range ───────────────────
+  const filteredUpdates = useMemo(() => {
+    if (!dateRange?.from) return updates;
+    const from = startOfDay(dateRange.from);
+    const to = dateRange.to ? startOfDay(dateRange.to) : from;
+    return updates.filter((u) => {
+      const d = startOfDay(new Date(u.created_at));
+      return d >= from && d <= to;
+    });
+  }, [updates, dateRange]);
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
