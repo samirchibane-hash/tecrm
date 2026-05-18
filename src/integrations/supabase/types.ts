@@ -566,6 +566,38 @@ export type Database = {
         }
         Relationships: []
       }
+      task_comments: {
+        Row: {
+          id: string
+          task_id: string
+          body: string
+          attachments: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          task_id: string
+          body?: string
+          attachments?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          task_id?: string
+          body?: string
+          attachments?: Json
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_comments_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       settings: {
         Row: {
           default_campaigns: Json

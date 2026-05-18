@@ -1,7 +1,17 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format, isPast, isToday } from "date-fns";
-import { CheckCircle2, Circle, ListTodo, Plus, Trash2 } from "lucide-react";
+import { format, formatDistanceToNow, isPast, isToday } from "date-fns";
+import {
+  CheckCircle2,
+  Circle,
+  File as FileIcon,
+  ListTodo,
+  MessageSquare,
+  Paperclip,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +30,21 @@ interface Task {
   created_at: string;
 }
 
+interface CommentAttachment {
+  name: string;
+  url: string;
+  size: number;
+  type: string;
+}
+
+interface TaskComment {
+  id: string;
+  task_id: string;
+  body: string;
+  attachments: CommentAttachment[];
+  created_at: string;
+}
+
 const PRIORITY = {
   high: { label: "High", dot: "bg-red-500", ring: "bg-red-100 dark:bg-red-950 border-red-300 dark:border-red-700 text-red-700 dark:text-red-300" },
   medium: { label: "Med", dot: "bg-amber-500", ring: "bg-amber-100 dark:bg-amber-950 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300" },
@@ -28,6 +53,37 @@ const PRIORITY = {
 
 interface TaskListProps {
   accounts: { account_name: string }[];
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function renderWithLinks(text: string): React.ReactNode[] {
+  const urlPattern = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g;
+  const parts = text.split(urlPattern);
+  const urls = text.match(urlPattern) ?? [];
+  const result: React.ReactNode[] = [];
+  parts.forEach((part, i) => {
+    if (part) result.push(part);
+    if (urls[i]) {
+      result.push(
+        <a
+          key={i}
+          href={urls[i]}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="text-blue-500 underline hover:text-blue-600 dark:text-blue-400 break-all"
+        >
+          {urls[i]}
+        </a>
+      );
+    }
+  });
+  return result;
 }
 
 export function TaskList({ accounts }: TaskListProps) {
@@ -50,6 +106,21 @@ export function TaskList({ accounts }: TaskListProps) {
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as Task[];
+    },
+  });
+
+  const { data: commentCounts = {}, refetch: refetchCounts } = useQuery({
+    queryKey: ["task-comment-counts"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("task_comments")
+        .select("task_id");
+      if (error) throw error;
+      const counts: Record<string, number> = {};
+      (data ?? []).forEach(({ task_id }) => {
+        counts[task_id] = (counts[task_id] ?? 0) + 1;
+      });
+      return counts;
     },
   });
 
@@ -151,8 +222,10 @@ export function TaskList({ accounts }: TaskListProps) {
           <TaskRow
             key={task.id}
             task={task}
+            commentCount={commentCounts[task.id] ?? 0}
             onToggle={handleToggle}
             onDelete={handleDelete}
+            onCommentCountChange={refetchCounts}
           />
         ))}
 
@@ -171,7 +244,6 @@ export function TaskList({ accounts }: TaskListProps) {
               className="h-8 text-sm"
             />
             <div className="flex flex-wrap items-center gap-2">
-              {/* Priority selector */}
               <div className="flex items-center gap-1">
                 {(["low", "medium", "high"] as Priority[]).map((p) => (
                   <button
@@ -187,7 +259,6 @@ export function TaskList({ accounts }: TaskListProps) {
                 ))}
               </div>
 
-              {/* Account selector */}
               {accounts.length > 0 && (
                 <select
                   value={newAccount}
@@ -203,7 +274,6 @@ export function TaskList({ accounts }: TaskListProps) {
                 </select>
               )}
 
-              {/* Due date */}
               <input
                 type="date"
                 value={newDueDate}
@@ -245,14 +315,19 @@ export function TaskList({ accounts }: TaskListProps) {
 
 function TaskRow({
   task,
+  commentCount,
   onToggle,
   onDelete,
+  onCommentCountChange,
 }: {
   task: Task;
+  commentCount: number;
   onToggle: (t: Task) => void;
   onDelete: (id: string) => void;
+  onCommentCountChange: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const [showComments, setShowComments] = useState(false);
 
   const priority = PRIORITY[(task.priority as Priority) ?? "medium"];
 
@@ -268,60 +343,279 @@ function TaskRow({
 
   return (
     <div
-      className={cn(
-        "flex items-center gap-3 px-4 py-2.5 transition-colors",
-        hovered && "bg-muted/20",
-        task.completed && "opacity-55"
-      )}
+      className={cn("transition-colors", showComments && "bg-muted/10")}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <button
-        onClick={() => onToggle(task)}
-        className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
-      >
-        {task.completed ? (
-          <CheckCircle2 className="h-4 w-4 text-primary" />
-        ) : (
-          <Circle className="h-4 w-4" />
-        )}
-      </button>
+      {/* Main task row */}
+      <div className={cn("flex items-center gap-3 px-4 py-2.5 transition-colors", hovered && !showComments && "bg-muted/20")}>
+        <button
+          onClick={() => onToggle(task)}
+          className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
+        >
+          {task.completed ? (
+            <CheckCircle2 className="h-4 w-4 text-primary" />
+          ) : (
+            <Circle className="h-4 w-4" />
+          )}
+        </button>
 
-      <span
-        className={cn(
-          "flex-1 text-sm min-w-0 truncate",
-          task.completed ? "line-through text-muted-foreground" : "text-foreground"
-        )}
-      >
-        {task.title}
-      </span>
-
-      <div className="flex items-center gap-2 shrink-0 text-xs">
-        {task.account_name && (
-          <span className="px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground text-[11px] font-medium max-w-[110px] truncate">
-            {task.account_name}
-          </span>
-        )}
         <span
-          className={cn("inline-block h-2 w-2 rounded-full shrink-0", priority.dot)}
-          title={`${priority.label} priority`}
-        />
-        {dueDateInfo && (
-          <span className={cn("text-[11px] tabular-nums", dueDateInfo.cls)}>
-            {dueDateInfo.label}
-          </span>
-        )}
+          className={cn(
+            "flex-1 text-sm min-w-0 truncate",
+            task.completed ? "line-through text-muted-foreground opacity-55" : "text-foreground"
+          )}
+        >
+          {task.title}
+        </span>
+
+        <div className="flex items-center gap-2 shrink-0 text-xs">
+          {task.account_name && (
+            <span className="px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground text-[11px] font-medium max-w-[110px] truncate">
+              {task.account_name}
+            </span>
+          )}
+          <span
+            className={cn("inline-block h-2 w-2 rounded-full shrink-0", priority.dot)}
+            title={`${priority.label} priority`}
+          />
+          {dueDateInfo && (
+            <span className={cn("text-[11px] tabular-nums", dueDateInfo.cls)}>
+              {dueDateInfo.label}
+            </span>
+          )}
+
+          {/* Comment toggle */}
+          <button
+            onClick={() => setShowComments((v) => !v)}
+            className={cn(
+              "flex items-center gap-1 rounded px-1 py-0.5 transition-colors",
+              showComments
+                ? "text-primary"
+                : commentCount > 0
+                ? "text-muted-foreground hover:text-foreground"
+                : "text-muted-foreground/40 hover:text-muted-foreground"
+            )}
+            title={showComments ? "Hide comments" : "Show comments"}
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            {commentCount > 0 && (
+              <span className="text-[10px] font-semibold tabular-nums leading-none">{commentCount}</span>
+            )}
+          </button>
+        </div>
+
+        <button
+          onClick={() => onDelete(task.id)}
+          className={cn(
+            "shrink-0 text-muted-foreground hover:text-destructive transition-all",
+            hovered ? "opacity-100" : "opacity-0 pointer-events-none"
+          )}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
       </div>
 
-      <button
-        onClick={() => onDelete(task.id)}
-        className={cn(
-          "shrink-0 text-muted-foreground hover:text-destructive transition-all",
-          hovered ? "opacity-100" : "opacity-0 pointer-events-none"
+      {/* Inline comments panel */}
+      {showComments && (
+        <CommentsPanel taskId={task.id} onCommentAdded={onCommentCountChange} />
+      )}
+    </div>
+  );
+}
+
+function CommentsPanel({
+  taskId,
+  onCommentAdded,
+}: {
+  taskId: string;
+  onCommentAdded: () => void;
+}) {
+  const [comments, setComments] = useState<TaskComment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [body, setBody] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [isPosting, setIsPosting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    loadComments();
+    setTimeout(() => textareaRef.current?.focus(), 60);
+  }, [taskId]);
+
+  async function loadComments() {
+    setIsLoading(true);
+    const { data } = await supabase
+      .from("task_comments")
+      .select("*")
+      .eq("task_id", taskId)
+      .order("created_at", { ascending: true });
+    setComments(
+      (data ?? []).map((c) => ({
+        ...c,
+        attachments: Array.isArray(c.attachments) ? (c.attachments as CommentAttachment[]) : [],
+      }))
+    );
+    setIsLoading(false);
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    setPendingFiles((prev) => [...prev, ...files]);
+    e.target.value = "";
+  }
+
+  async function postComment() {
+    if (!body.trim() && pendingFiles.length === 0) return;
+    setIsPosting(true);
+
+    const attachments: CommentAttachment[] = [];
+    for (const file of pendingFiles) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${taskId}/${Date.now()}_${safeName}`;
+      const { data, error } = await supabase.storage
+        .from("task-attachments")
+        .upload(path, file, { cacheControl: "3600", upsert: false });
+      if (!error && data) {
+        const { data: urlData } = supabase.storage
+          .from("task-attachments")
+          .getPublicUrl(data.path);
+        attachments.push({ name: file.name, url: urlData.publicUrl, size: file.size, type: file.type });
+      }
+    }
+
+    await supabase.from("task_comments").insert({
+      task_id: taskId,
+      body: body.trim(),
+      attachments,
+    });
+
+    setBody("");
+    setPendingFiles([]);
+    setIsPosting(false);
+    loadComments();
+    onCommentAdded();
+  }
+
+  const canPost = (body.trim().length > 0 || pendingFiles.length > 0) && !isPosting;
+
+  return (
+    <div className="border-t border-border/40 bg-muted/5 px-4 pt-3 pb-3 space-y-3">
+      {/* Comment list */}
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground">Loading…</p>
+      ) : comments.length > 0 ? (
+        <div className="space-y-3">
+          {comments.map((c) => (
+            <CommentBubble key={c.id} comment={c} />
+          ))}
+        </div>
+      ) : null}
+
+      {/* Composer */}
+      <div className="rounded-lg border border-border/60 bg-background overflow-hidden focus-within:ring-1 focus-within:ring-ring/50 transition-shadow">
+        <textarea
+          ref={textareaRef}
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) postComment();
+          }}
+          placeholder="Add a note or comment… paste a link and it'll be clickable"
+          rows={2}
+          className="w-full resize-none px-3 pt-2.5 pb-1.5 text-sm bg-transparent text-foreground placeholder:text-muted-foreground/50 focus:outline-none leading-relaxed"
+        />
+
+        {/* Queued file chips */}
+        {pendingFiles.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 px-3 pb-2">
+            {pendingFiles.map((f, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-1.5 text-[11px] bg-muted rounded-md px-2 py-1 text-muted-foreground border border-border/50"
+              >
+                <FileIcon className="h-3 w-3 shrink-0 text-blue-500" />
+                <span className="max-w-[120px] truncate font-medium">{f.name}</span>
+                <span className="text-muted-foreground/60">{formatFileSize(f.size)}</span>
+                <button
+                  onClick={() => setPendingFiles((prev) => prev.filter((_, j) => j !== i))}
+                  className="hover:text-destructive ml-0.5 transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
         )}
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
+
+        {/* Toolbar */}
+        <div className="flex items-center justify-between px-2 py-1.5 border-t border-border/40 bg-muted/20">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1.5 py-1 rounded hover:bg-muted"
+            title="Attach a file"
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+            <span>Attach</span>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-muted-foreground/40 hidden sm:block select-none">⌘↵ to post</span>
+            <Button
+              size="sm"
+              className="h-6 text-xs px-3"
+              onClick={postComment}
+              disabled={!canPost}
+            >
+              {isPosting ? "Posting…" : "Post"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CommentBubble({ comment }: { comment: TaskComment }) {
+  const timeLabel = formatDistanceToNow(new Date(comment.created_at), { addSuffix: true });
+
+  return (
+    <div className="flex gap-2.5">
+      <div className="shrink-0 mt-0.5 h-5 w-5 rounded-full bg-muted border border-border/60 flex items-center justify-center">
+        <MessageSquare className="h-2.5 w-2.5 text-muted-foreground" />
+      </div>
+      <div className="flex-1 min-w-0 space-y-1">
+        <span className="text-[11px] text-muted-foreground/70 tabular-nums">{timeLabel}</span>
+        {comment.body && (
+          <p className="text-sm text-foreground leading-relaxed break-words whitespace-pre-wrap">
+            {renderWithLinks(comment.body)}
+          </p>
+        )}
+        {comment.attachments.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-0.5">
+            {comment.attachments.map((att, i) => (
+              <a
+                key={i}
+                href={att.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-[11px] bg-muted hover:bg-muted/70 text-muted-foreground hover:text-foreground rounded-md px-2 py-1 transition-colors border border-border/40"
+              >
+                <FileIcon className="h-3 w-3 shrink-0 text-blue-500" />
+                <span className="max-w-[160px] truncate font-medium">{att.name}</span>
+                <span className="text-muted-foreground/50">{formatFileSize(att.size)}</span>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
