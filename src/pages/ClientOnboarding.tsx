@@ -10,7 +10,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, ExternalLink, Globe, Phone, Mail, MapPin, Clock, DollarSign, Tag, MessageSquare, CheckSquare } from "lucide-react";
+import { ArrowLeft, ExternalLink, Globe, Phone, Mail, MapPin, Clock, DollarSign, Tag, MessageSquare, CheckSquare, Copy, Link2 } from "lucide-react";
+import { toast } from "sonner";
 import { format } from "date-fns";
 
 const DAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -281,6 +282,40 @@ export default function ClientOnboarding() {
 
           {/* ── Onboarding Tab ── */}
           <TabsContent value="onboarding" className="space-y-6">
+
+            {/* Onboarding link */}
+            {client.session_id && (() => {
+              const onboardingUrl = `https://treatengine.com/ads/onboarding?session_id=${client.session_id}`;
+              return (
+                <div className="rounded-xl border border-border bg-card p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Link2 className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-semibold text-foreground">Onboarding Link</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(onboardingUrl); toast.success("Link copied"); }}
+                        className="flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                      >
+                        <Copy className="h-3 w-3" />
+                        Copy
+                      </button>
+                      <a
+                        href={onboardingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Open
+                      </a>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">{onboardingUrl}</p>
+                </div>
+              );
+            })()}
 
             {/* Progress bar */}
             {totalItems > 0 && (
