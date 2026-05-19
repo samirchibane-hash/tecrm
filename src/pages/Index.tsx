@@ -15,6 +15,7 @@ import {
   Sparkles,
   ArrowRight,
   ChevronRight,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
@@ -301,9 +302,17 @@ const Index = () => {
                   className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3 hover:bg-muted/50 transition-colors group"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground truncate">
-                      {client.business_name ?? client.full_name}
-                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold text-foreground truncate">
+                        {client.business_name ?? client.full_name}
+                      </p>
+                      {!client.business_name && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400 shrink-0">
+                          <Clock className="h-2.5 w-2.5" />
+                          Awaiting onboarding
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground mt-0.5 capitalize">
                       {[client.service, client.plan].filter(Boolean).join(" · ")}
                       {client.submitted_at && (
