@@ -14,162 +14,80 @@ export type Database = {
   }
   public: {
     Tables: {
-      clients: {
+      account_features: {
         Row: {
+          account_id: string
+          call_center_enabled: boolean
           id: string
-          session_id: string | null
-          service: string | null
-          plan: string | null
-          full_name: string | null
-          email: string | null
-          phone: string | null
-          business_name: string | null
-          city: string | null
-          state: string | null
-          service_area: string | null
-          website_url: string | null
-          brands: string[] | null
-          has_facebook: boolean | null
-          facebook_url: string | null
-          ad_budget: string | null
-          offers: string[] | null
-          additional_notes: string | null
-          business_hours: Json | null
-          owner_name: string | null
-          owner_email: string | null
-          owner_cell: string | null
-          legal_business_name: string | null
-          business_email: string | null
-          business_phone: string | null
-          business_type: string | null
-          ein: string | null
-          amount_paid: number | null
-          currency: string | null
-          status: string | null
-          submitted_at: string
-          account_id: string | null
-          gdrive_folder_url: string | null
-        }
-        Insert: {
-          id?: string
-          session_id?: string | null
-          service?: string | null
-          plan?: string | null
-          full_name?: string | null
-          email?: string | null
-          phone?: string | null
-          business_name?: string | null
-          city?: string | null
-          state?: string | null
-          service_area?: string | null
-          website_url?: string | null
-          brands?: string[] | null
-          has_facebook?: boolean | null
-          facebook_url?: string | null
-          ad_budget?: string | null
-          offers?: string[] | null
-          additional_notes?: string | null
-          business_hours?: Json | null
-          owner_name?: string | null
-          owner_email?: string | null
-          owner_cell?: string | null
-          legal_business_name?: string | null
-          business_email?: string | null
-          business_phone?: string | null
-          business_type?: string | null
-          ein?: string | null
-          amount_paid?: number | null
-          currency?: string | null
-          status?: string | null
-          submitted_at?: string
-          account_id?: string | null
-          gdrive_folder_url?: string | null
-        }
-        Update: {
-          id?: string
-          session_id?: string | null
-          service?: string | null
-          plan?: string | null
-          full_name?: string | null
-          email?: string | null
-          phone?: string | null
-          business_name?: string | null
-          city?: string | null
-          state?: string | null
-          service_area?: string | null
-          website_url?: string | null
-          brands?: string[] | null
-          has_facebook?: boolean | null
-          facebook_url?: string | null
-          ad_budget?: string | null
-          offers?: string[] | null
-          additional_notes?: string | null
-          business_hours?: Json | null
-          owner_name?: string | null
-          owner_email?: string | null
-          owner_cell?: string | null
-          legal_business_name?: string | null
-          business_email?: string | null
-          business_phone?: string | null
-          business_type?: string | null
-          ein?: string | null
-          amount_paid?: number | null
-          currency?: string | null
-          status?: string | null
-          submitted_at?: string
-          account_id?: string | null
-          gdrive_folder_url?: string | null
-        }
-        Relationships: []
-      }
-      onboarding_progress: {
-        Row: {
-          id: string
-          client_id: string
-          item_key: string
-          completed: boolean
-          completed_at: string | null
           updated_at: string
         }
         Insert: {
+          account_id: string
+          call_center_enabled?: boolean
           id?: string
-          client_id: string
-          item_key: string
-          completed?: boolean
-          completed_at?: string | null
           updated_at?: string
         }
         Update: {
+          account_id?: string
+          call_center_enabled?: boolean
           id?: string
-          client_id?: string
-          item_key?: string
-          completed?: boolean
-          completed_at?: string | null
           updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_features_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: true
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      account_links: {
+        Row: {
+          account_name: string
+          created_at: string | null
+          id: string
+          label: string
+          url: string
+        }
+        Insert: {
+          account_name: string
+          created_at?: string | null
+          id?: string
+          label: string
+          url: string
+        }
+        Update: {
+          account_name?: string
+          created_at?: string | null
+          id?: string
+          label?: string
+          url?: string
         }
         Relationships: []
       }
-      onboarding_comments: {
+      account_poc: {
         Row: {
-          id: string
-          client_id: string
-          author: string
-          content: string
+          account_id: string
           created_at: string
+          email: string
+          id: string
+          name: string
         }
         Insert: {
-          id?: string
-          client_id: string
-          author: string
-          content: string
+          account_id: string
           created_at?: string
+          email: string
+          id?: string
+          name: string
         }
         Update: {
-          id?: string
-          client_id?: string
-          author?: string
-          content?: string
+          account_id?: string
           created_at?: string
+          email?: string
+          id?: string
+          name?: string
         }
         Relationships: []
       }
@@ -177,19 +95,164 @@ export type Database = {
         Row: {
           account_name: string
           created_at: string
+          fb_ad_account_id: string | null
+          ghl_location_id: string | null
           id: string
         }
         Insert: {
           account_name: string
           created_at?: string
+          fb_ad_account_id?: string | null
+          ghl_location_id?: string | null
           id?: string
         }
         Update: {
           account_name?: string
           created_at?: string
+          fb_ad_account_id?: string | null
+          ghl_location_id?: string | null
           id?: string
         }
         Relationships: []
+      }
+      call_center_incentives: {
+        Row: {
+          account_id: string
+          bonus_amount: number | null
+          bonus_description: string | null
+          created_at: string
+          deadline: string
+          description: string | null
+          id: string
+          is_active: boolean
+          metric_type: string
+          participant_ids: Json | null
+          target_type: string
+          target_value: number | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          bonus_amount?: number | null
+          bonus_description?: string | null
+          created_at?: string
+          deadline: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          metric_type: string
+          participant_ids?: Json | null
+          target_type?: string
+          target_value?: number | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          bonus_amount?: number | null
+          bonus_description?: string | null
+          created_at?: string
+          deadline?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          metric_type?: string
+          participant_ids?: Json | null
+          target_type?: string
+          target_value?: number | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_center_incentives_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      call_center_metrics: {
+        Row: {
+          account_id: string
+          appointments_set: number
+          calls_made: number
+          id: string
+          installs_generated: number
+          metric_date: string
+          setter_id: string
+          unique_leads: number
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          appointments_set?: number
+          calls_made?: number
+          id?: string
+          installs_generated?: number
+          metric_date: string
+          setter_id: string
+          unique_leads?: number
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          appointments_set?: number
+          calls_made?: number
+          id?: string
+          installs_generated?: number
+          metric_date?: string
+          setter_id?: string
+          unique_leads?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_center_metrics_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_center_metrics_setter_id_fkey"
+            columns: ["setter_id"]
+            isOneToOne: false
+            referencedRelation: "call_center_setters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      call_center_setters: {
+        Row: {
+          account_id: string
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_center_setters_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       campaign_notes: {
         Row: {
@@ -234,9 +297,11 @@ export type Database = {
           category: Database["public"]["Enums"]["update_category"]
           created_at: string
           details: string | null
+          emailed_at: string | null
           id: string
           image_url: string | null
           link_url: string | null
+          status: string
           title: string | null
         }
         Insert: {
@@ -246,9 +311,11 @@ export type Database = {
           category?: Database["public"]["Enums"]["update_category"]
           created_at?: string
           details?: string | null
+          emailed_at?: string | null
           id?: string
           image_url?: string | null
           link_url?: string | null
+          status?: string
           title?: string | null
         }
         Update: {
@@ -258,9 +325,11 @@ export type Database = {
           category?: Database["public"]["Enums"]["update_category"]
           created_at?: string
           details?: string | null
+          emailed_at?: string | null
           id?: string
           image_url?: string | null
           link_url?: string | null
+          status?: string
           title?: string | null
         }
         Relationships: [
@@ -269,6 +338,214 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clients: {
+        Row: {
+          account_id: string | null
+          ad_budget: string | null
+          additional_notes: string | null
+          amount_paid: number | null
+          brands: Json | null
+          business_email: string | null
+          business_hours: Json | null
+          business_name: string | null
+          business_phone: string | null
+          business_type: string | null
+          city: string | null
+          currency: string | null
+          ein: string | null
+          email: string | null
+          facebook_url: string | null
+          full_name: string | null
+          gdrive_folder_url: string | null
+          has_facebook: boolean | null
+          id: string
+          legal_business_name: string | null
+          offers: Json | null
+          onboarding_link: string | null
+          owner_cell: string | null
+          owner_email: string | null
+          owner_name: string | null
+          phone: string | null
+          plan: string | null
+          service: string | null
+          service_area: string | null
+          session_id: string
+          state: string | null
+          status: string | null
+          submitted_at: string | null
+          website_url: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          ad_budget?: string | null
+          additional_notes?: string | null
+          amount_paid?: number | null
+          brands?: Json | null
+          business_email?: string | null
+          business_hours?: Json | null
+          business_name?: string | null
+          business_phone?: string | null
+          business_type?: string | null
+          city?: string | null
+          currency?: string | null
+          ein?: string | null
+          email?: string | null
+          facebook_url?: string | null
+          full_name?: string | null
+          gdrive_folder_url?: string | null
+          has_facebook?: boolean | null
+          id?: string
+          legal_business_name?: string | null
+          offers?: Json | null
+          onboarding_link?: string | null
+          owner_cell?: string | null
+          owner_email?: string | null
+          owner_name?: string | null
+          phone?: string | null
+          plan?: string | null
+          service?: string | null
+          service_area?: string | null
+          session_id: string
+          state?: string | null
+          status?: string | null
+          submitted_at?: string | null
+          website_url?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          ad_budget?: string | null
+          additional_notes?: string | null
+          amount_paid?: number | null
+          brands?: Json | null
+          business_email?: string | null
+          business_hours?: Json | null
+          business_name?: string | null
+          business_phone?: string | null
+          business_type?: string | null
+          city?: string | null
+          currency?: string | null
+          ein?: string | null
+          email?: string | null
+          facebook_url?: string | null
+          full_name?: string | null
+          gdrive_folder_url?: string | null
+          has_facebook?: boolean | null
+          id?: string
+          legal_business_name?: string | null
+          offers?: Json | null
+          onboarding_link?: string | null
+          owner_cell?: string | null
+          owner_email?: string | null
+          owner_name?: string | null
+          phone?: string | null
+          plan?: string | null
+          service?: string | null
+          service_area?: string | null
+          session_id?: string
+          state?: string | null
+          status?: string | null
+          submitted_at?: string | null
+          website_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clients_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      creative_batches: {
+        Row: {
+          account_name: string
+          ad_angle: string
+          ad_type: string
+          created_at: string
+          file_count: number
+          gdrive_folder_id: string | null
+          gdrive_folder_url: string | null
+          id: string
+          notes: string | null
+          offer_type: string
+          template_name: string
+        }
+        Insert: {
+          account_name: string
+          ad_angle: string
+          ad_type: string
+          created_at?: string
+          file_count?: number
+          gdrive_folder_id?: string | null
+          gdrive_folder_url?: string | null
+          id?: string
+          notes?: string | null
+          offer_type: string
+          template_name: string
+        }
+        Update: {
+          account_name?: string
+          ad_angle?: string
+          ad_type?: string
+          created_at?: string
+          file_count?: number
+          gdrive_folder_id?: string | null
+          gdrive_folder_url?: string | null
+          id?: string
+          notes?: string | null
+          offer_type?: string
+          template_name?: string
+        }
+        Relationships: []
+      }
+      creative_uploads: {
+        Row: {
+          batch_id: string
+          created_at: string
+          file_name: string
+          file_size: number | null
+          gdrive_file_id: string | null
+          gdrive_view_url: string | null
+          id: string
+          mime_type: string | null
+          storage_path: string | null
+          storage_url: string | null
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          file_name: string
+          file_size?: number | null
+          gdrive_file_id?: string | null
+          gdrive_view_url?: string | null
+          id?: string
+          mime_type?: string | null
+          storage_path?: string | null
+          storage_url?: string | null
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          file_name?: string
+          file_size?: number | null
+          gdrive_file_id?: string | null
+          gdrive_view_url?: string | null
+          id?: string
+          mime_type?: string | null
+          storage_path?: string | null
+          storage_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creative_uploads_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "creative_batches"
             referencedColumns: ["id"]
           },
         ]
@@ -371,228 +648,108 @@ export type Database = {
         }
         Relationships: []
       }
-      account_features: {
+      onboarding_comments: {
         Row: {
-          id: string
-          account_id: string
-          call_center_enabled: boolean
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          account_id: string
-          call_center_enabled?: boolean
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          account_id?: string
-          call_center_enabled?: boolean
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "account_features_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: true
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      call_center_setters: {
-        Row: {
-          id: string
-          account_id: string
-          name: string
+          author: string
+          client_id: string
+          content: string
           created_at: string
+          id: string
         }
         Insert: {
-          id?: string
-          account_id: string
-          name: string
+          author: string
+          client_id: string
+          content: string
           created_at?: string
+          id?: string
         }
         Update: {
-          id?: string
-          account_id?: string
-          name?: string
+          author?: string
+          client_id?: string
+          content?: string
           created_at?: string
+          id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "call_center_setters_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
-      call_center_metrics: {
+      onboarding_progress: {
         Row: {
-          id: string
-          setter_id: string
-          account_id: string
-          metric_date: string
-          calls_made: number
-          appointments_set: number
-          installs_generated: number
-          unique_leads: number
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          setter_id: string
-          account_id: string
-          metric_date: string
-          calls_made?: number
-          appointments_set?: number
-          installs_generated?: number
-          unique_leads?: number
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          setter_id?: string
-          account_id?: string
-          metric_date?: string
-          calls_made?: number
-          appointments_set?: number
-          installs_generated?: number
-          unique_leads?: number
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "call_center_metrics_setter_id_fkey"
-            columns: ["setter_id"]
-            isOneToOne: false
-            referencedRelation: "call_center_setters"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "call_center_metrics_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      call_center_incentives: {
-        Row: {
-          id: string
-          account_id: string
-          title: string
-          description: string | null
-          metric_type: string
-          target_type: string
-          target_value: number | null
-          bonus_amount: number | null
-          bonus_description: string | null
-          participant_ids: string[] | null
-          deadline: string
-          is_active: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          account_id: string
-          title: string
-          description?: string | null
-          metric_type: string
-          target_type?: string
-          target_value?: number | null
-          bonus_amount?: number | null
-          bonus_description?: string | null
-          participant_ids?: string[] | null
-          deadline: string
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          account_id?: string
-          title?: string
-          description?: string | null
-          metric_type?: string
-          target_type?: string
-          target_value?: number | null
-          bonus_amount?: number | null
-          bonus_description?: string | null
-          participant_ids?: string[] | null
-          deadline?: string
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "call_center_incentives_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      tasks: {
-        Row: {
-          id: string
-          title: string
-          account_name: string | null
-          priority: string
+          client_id: string
           completed: boolean
-          due_date: string | null
-          created_at: string
+          completed_at: string | null
+          id: string
+          item_key: string
           updated_at: string
         }
         Insert: {
-          id?: string
-          title: string
-          account_name?: string | null
-          priority?: string
+          client_id: string
           completed?: boolean
-          due_date?: string | null
-          created_at?: string
+          completed_at?: string | null
+          id?: string
+          item_key: string
           updated_at?: string
         }
         Update: {
-          id?: string
-          title?: string
-          account_name?: string | null
-          priority?: string
+          client_id?: string
           completed?: boolean
-          due_date?: string | null
-          created_at?: string
+          completed_at?: string | null
+          id?: string
+          item_key?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      settings: {
+        Row: {
+          default_campaigns: Json
+          enabled_kpis: Json
+          hidden_accounts: Json
+          id: string
+          onboarding_checklists: Json | null
+          updated_at: string
+          visible_kpis: Json
+        }
+        Insert: {
+          default_campaigns?: Json
+          enabled_kpis?: Json
+          hidden_accounts?: Json
+          id?: string
+          onboarding_checklists?: Json | null
+          updated_at?: string
+          visible_kpis?: Json
+        }
+        Update: {
+          default_campaigns?: Json
+          enabled_kpis?: Json
+          hidden_accounts?: Json
+          id?: string
+          onboarding_checklists?: Json | null
+          updated_at?: string
+          visible_kpis?: Json
         }
         Relationships: []
       }
       task_comments: {
         Row: {
+          attachments: Json
+          body: string
+          created_at: string
           id: string
           task_id: string
-          body: string
-          attachments: Json
-          created_at: string
         }
         Insert: {
+          attachments?: Json
+          body?: string
+          created_at?: string
           id?: string
           task_id: string
-          body?: string
-          attachments?: Json
-          created_at?: string
         }
         Update: {
+          attachments?: Json
+          body?: string
+          created_at?: string
           id?: string
           task_id?: string
-          body?: string
-          attachments?: Json
-          created_at?: string
         }
         Relationships: [
           {
@@ -604,33 +761,36 @@ export type Database = {
           },
         ]
       }
-      settings: {
+      tasks: {
         Row: {
-          default_campaigns: Json
-          enabled_kpis: Json
-          hidden_accounts: Json
+          account_name: string | null
+          completed: boolean
+          created_at: string
+          due_date: string | null
           id: string
-          onboarding_checklists: Json
+          priority: string
+          title: string
           updated_at: string
-          visible_kpis: Json
         }
         Insert: {
-          default_campaigns?: Json
-          enabled_kpis?: Json
-          hidden_accounts?: Json
+          account_name?: string | null
+          completed?: boolean
+          created_at?: string
+          due_date?: string | null
           id?: string
-          onboarding_checklists?: Json
+          priority?: string
+          title: string
           updated_at?: string
-          visible_kpis?: Json
         }
         Update: {
-          default_campaigns?: Json
-          enabled_kpis?: Json
-          hidden_accounts?: Json
+          account_name?: string | null
+          completed?: boolean
+          created_at?: string
+          due_date?: string | null
           id?: string
-          onboarding_checklists?: Json
+          priority?: string
+          title?: string
           updated_at?: string
-          visible_kpis?: Json
         }
         Relationships: []
       }
