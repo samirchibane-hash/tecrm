@@ -57,6 +57,7 @@ import {
   Copy,
   Image as ImageIcon,
   Layers,
+  FolderOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, startOfDay, subDays, startOfMonth, endOfMonth, subMonths, max, isPast, isToday } from "date-fns";
@@ -760,12 +761,13 @@ const AccountDetail = () => {
 
   const [driveUrlInput, setDriveUrlInput] = useState((account as any)?.gdrive_folder_url ?? "");
   const [driveSaving, setDriveSaving] = useState(false);
+  const [drivePopoverOpen, setDrivePopoverOpen] = useState(false);
 
   useEffect(() => {
     setDriveUrlInput((account as any)?.gdrive_folder_url ?? "");
   }, [(account as any)?.gdrive_folder_url]);
 
-  async function saveDriveUrl() {
+  async function saveDriveUrl(onSuccess?: () => void) {
     if (!accountId) return;
     setDriveSaving(true);
     const { error } = await supabase
@@ -776,6 +778,7 @@ const AccountDetail = () => {
     else {
       queryClient.invalidateQueries({ queryKey: ["account", decodedName] });
       toast.success("Drive folder saved");
+      onSuccess?.();
     }
     setDriveSaving(false);
   }
@@ -876,6 +879,63 @@ const AccountDetail = () => {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {(account as any)?.gdrive_folder_url ? (
+              <a
+                href={(account as any).gdrive_folder_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 rounded-md border border-border/60 bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-emerald-600 hover:border-emerald-300/70 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/30 transition-colors"
+              >
+                <FolderOpen className="h-3.5 w-3.5" />
+                Drive
+              </a>
+            ) : (
+              <Popover open={drivePopoverOpen} onOpenChange={setDrivePopoverOpen}>
+                <PopoverTrigger asChild>
+                  <button className="flex items-center gap-1.5 rounded-md border border-dashed border-border/60 bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:border-border hover:bg-muted/40 transition-colors">
+                    <Plus className="h-3 w-3" />
+                    Add Drive
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" sideOffset={6} className="w-80 p-4">
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Google Drive folder</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Paste the client's shared folder URL</p>
+                    </div>
+                    <Input
+                      autoFocus
+                      value={driveUrlInput}
+                      onChange={(e) => setDriveUrlInput(e.target.value)}
+                      placeholder="https://drive.google.com/drive/folders/…"
+                      className="text-xs h-8"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && driveUrlInput.trim() && !driveSaving)
+                          saveDriveUrl(() => setDrivePopoverOpen(false));
+                      }}
+                    />
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => { setDrivePopoverOpen(false); setDriveUrlInput(""); }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs"
+                        disabled={!driveUrlInput.trim() || driveSaving}
+                        onClick={() => saveDriveUrl(() => setDrivePopoverOpen(false))}
+                      >
+                        {driveSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+                      </Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
             <RouterLink
               to={`/report/${encodeURIComponent(decodedName)}`}
               target="_blank"
