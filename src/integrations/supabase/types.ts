@@ -461,6 +461,27 @@ export type Database = {
           },
         ]
       }
+      creative_options: {
+        Row: {
+          id: string
+          type: string
+          value: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          type: string
+          value: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          type?: string
+          value?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       creative_request_comments: {
         Row: {
           author: string
