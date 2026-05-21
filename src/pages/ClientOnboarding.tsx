@@ -155,14 +155,17 @@ export default function ClientOnboarding() {
       if (!metaPreview || !client) return;
       const accountName = client.business_name ?? client.full_name ?? "New Client";
 
-      // Create the account row
+      // Upsert on account_name so re-activation updates rather than duplicates
       const { data: newAccount, error: accountError } = await supabase
         .from("accounts")
-        .insert({
-          account_name: accountName,
-          fb_ad_account_id: metaPreview.id,
-          ghl_location_id: ghlLocationId.trim() || null,
-        })
+        .upsert(
+          {
+            account_name: accountName,
+            fb_ad_account_id: metaPreview.id,
+            ghl_location_id: ghlLocationId.trim() || null,
+          },
+          { onConflict: "account_name" }
+        )
         .select("id")
         .single();
       if (accountError) throw new Error(accountError.message);
