@@ -461,6 +461,86 @@ export type Database = {
           },
         ]
       }
+      creative_request_comments: {
+        Row: {
+          author: string
+          body: string
+          created_at: string
+          id: string
+          request_id: string
+        }
+        Insert: {
+          author: string
+          body: string
+          created_at?: string
+          id?: string
+          request_id: string
+        }
+        Update: {
+          author?: string
+          body?: string
+          created_at?: string
+          id?: string
+          request_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creative_request_comments_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "creative_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      creative_requests: {
+        Row: {
+          account_name: string
+          ad_angle: string
+          ad_type: string
+          assigned_to: string | null
+          created_at: string
+          created_by: string | null
+          gdrive_folder_url: string | null
+          id: string
+          notes: string | null
+          offer_type: string
+          status: string
+          template_name: string
+          updated_at: string
+        }
+        Insert: {
+          account_name: string
+          ad_angle: string
+          ad_type: string
+          assigned_to?: string | null
+          created_at?: string
+          created_by?: string | null
+          gdrive_folder_url?: string | null
+          id?: string
+          notes?: string | null
+          offer_type: string
+          status?: string
+          template_name: string
+          updated_at?: string
+        }
+        Update: {
+          account_name?: string
+          ad_angle?: string
+          ad_type?: string
+          assigned_to?: string | null
+          created_at?: string
+          created_by?: string | null
+          gdrive_folder_url?: string | null
+          id?: string
+          notes?: string | null
+          offer_type?: string
+          status?: string
+          template_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       creative_batches: {
         Row: {
           account_name: string
