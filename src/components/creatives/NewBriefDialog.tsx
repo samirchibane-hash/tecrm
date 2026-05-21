@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useSettings } from "@/hooks/useSettings";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -203,6 +204,7 @@ function ManagePanel({
 
 export function NewBriefDialog({ open, onOpenChange }: Props) {
   const queryClient = useQueryClient();
+  const { settings } = useSettings();
   const [view, setView] = useState<View>("form");
 
   const [client, setClient] = useState("");
@@ -229,6 +231,10 @@ export function NewBriefDialog({ open, onOpenChange }: Props) {
       return data as { id: string; account_name: string }[];
     },
   });
+
+  const visibleAccounts = accounts.filter(
+    (a) => !settings.hidden_accounts.includes(a.account_name)
+  );
 
   const { data: templates = [] } = useQuery({
     queryKey: ["templates-by-adtype", adType],
@@ -315,7 +321,7 @@ export function NewBriefDialog({ open, onOpenChange }: Props) {
                 <Select value={client} onValueChange={setClient}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select client" /></SelectTrigger>
                   <SelectContent>
-                    {accounts.map((a) => <SelectItem key={a.id} value={a.account_name}>{a.account_name}</SelectItem>)}
+                    {visibleAccounts.map((a) => <SelectItem key={a.id} value={a.account_name}>{a.account_name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
