@@ -166,14 +166,6 @@ const Creatives = () => {
     },
   });
 
-  const { data: clients = [] } = useQuery({
-    queryKey: ["clients-gdrive"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("clients").select("id, account_id, business_name, full_name, gdrive_folder_url");
-      if (error) throw error;
-      return data;
-    },
-  });
 
   const { data: creatives = [], isLoading: creativesLoading } = useQuery({
     queryKey: ["creatives"],
@@ -214,11 +206,10 @@ const Creatives = () => {
   const accountDriveMap = useMemo(() => {
     const map: Record<string, string | null> = {};
     accounts.forEach((a) => {
-      const client = clients.find((c) => c.account_id === a.id);
-      map[a.account_name] = client?.gdrive_folder_url ?? null;
+      map[a.account_name] = (a as any).gdrive_folder_url ?? null;
     });
     return map;
-  }, [accounts, clients]);
+  }, [accounts]);
 
   const accountColors = useMemo(() => {
     const map: Record<string, string> = {};

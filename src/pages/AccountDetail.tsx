@@ -246,14 +246,14 @@ const AccountDetail = () => {
     queryFn: async () => {
       const { data: existing } = await supabase
         .from("accounts")
-        .select("id, account_name")
+        .select("id, account_name, gdrive_folder_url")
         .eq("account_name", decodedName)
         .maybeSingle();
       if (existing) return existing;
       const { data: inserted, error } = await supabase
         .from("accounts")
         .insert({ account_name: decodedName })
-        .select("id, account_name")
+        .select("id, account_name, gdrive_folder_url")
         .single();
       if (error) throw error;
       return inserted;
@@ -758,6 +758,28 @@ const AccountDetail = () => {
   const [modalLoading, setModalLoading] = useState(false);
   const [modalSending, setModalSending] = useState(false);
 
+  const [driveUrlInput, setDriveUrlInput] = useState((account as any)?.gdrive_folder_url ?? "");
+  const [driveSaving, setDriveSaving] = useState(false);
+
+  useEffect(() => {
+    setDriveUrlInput((account as any)?.gdrive_folder_url ?? "");
+  }, [(account as any)?.gdrive_folder_url]);
+
+  async function saveDriveUrl() {
+    if (!accountId) return;
+    setDriveSaving(true);
+    const { error } = await supabase
+      .from("accounts")
+      .update({ gdrive_folder_url: driveUrlInput || null })
+      .eq("id", accountId);
+    if (error) toast.error("Failed to save Drive folder");
+    else {
+      queryClient.invalidateQueries({ queryKey: ["account", decodedName] });
+      toast.success("Drive folder saved");
+    }
+    setDriveSaving(false);
+  }
+
   const reportUrl = `https://reports.treatengine.com/report/${encodeURIComponent(decodedName)}`;
   const contactEmail: string = (account as any)?.contact_email ?? "";
   const getRecipientName = (email: string) => pocs.find((p) => p.email === email)?.name || "";
@@ -1163,6 +1185,45 @@ const AccountDetail = () => {
                     ))}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* ── Google Drive ── */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                  Google Drive
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {(account as any)?.gdrive_folder_url && (
+                  <a
+                    href={(account as any).gdrive_folder_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                    Open Client Folder
+                  </a>
+                )}
+                <div className="flex gap-2 items-center">
+                  <Input
+                    value={driveUrlInput}
+                    onChange={(e) => setDriveUrlInput(e.target.value)}
+                    placeholder="Paste Google Drive folder URL…"
+                    className="text-xs h-8"
+                  />
+                  <Button
+                    size="sm"
+                    className="h-8 shrink-0"
+                    disabled={driveSaving || driveUrlInput === ((account as any)?.gdrive_folder_url ?? "")}
+                    onClick={saveDriveUrl}
+                  >
+                    {driveSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
