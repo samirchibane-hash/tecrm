@@ -20,6 +20,7 @@ import {
   Upload,
   FolderOpen,
   ExternalLink,
+  ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
@@ -594,6 +595,9 @@ const Index = () => {
         {/* ── Ad Outputs ───────────────────────────────────────────────────── */}
         <AdOutputsSection />
 
+        {/* ── Creative Requests ─────────────────────────────────────────────── */}
+        <CreativeRequestsSection />
+
         {/* ── Task List ─────────────────────────────────────────────────────── */}
         <div className="mt-8">
           <TaskList accounts={dbAccounts} />
@@ -602,6 +606,126 @@ const Index = () => {
     </div>
   );
 };
+
+// ── Creative Requests dashboard section ──────────────────────────────────────
+
+type OpenRequest = {
+  id: string;
+  account_name: string;
+  ad_type: string;
+  template_name: string;
+  ad_angle: string;
+  offer_type: string;
+  status: string;
+  assigned_to: string | null;
+  created_at: string;
+};
+
+const REQ_STATUS_BADGE: Record<string, string> = {
+  requested: "bg-blue-100 text-blue-800",
+  in_progress: "bg-amber-100 text-amber-800",
+  in_review: "bg-orange-100 text-orange-800",
+};
+const REQ_STATUS_LABEL: Record<string, string> = {
+  requested: "Requested",
+  in_progress: "In Progress",
+  in_review: "In Review",
+};
+
+function CreativeRequestsSection() {
+  const navigate = useNavigate();
+
+  const { data: openRequests = [], isLoading } = useQuery({
+    queryKey: ["dashboard-creative-requests"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("creative_requests")
+        .select("id, account_name, ad_type, template_name, ad_angle, offer_type, status, assigned_to, created_at")
+        .neq("status", "done")
+        .order("created_at", { ascending: false })
+        .limit(5);
+      if (error) throw error;
+      return data as OpenRequest[];
+    },
+  });
+
+  if (!isLoading && openRequests.length === 0) return null;
+
+  return (
+    <div className="mt-8">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <ClipboardList className="h-4 w-4 text-primary" />
+          <h2 className="text-sm font-semibold text-foreground">Creative Requests</h2>
+          {openRequests.length > 0 && (
+            <span className="text-xs font-semibold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full">
+              {openRequests.length} open
+            </span>
+          )}
+        </div>
+        <Link
+          to="/creatives?tab=requests"
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+        >
+          View all <ArrowRight className="h-3 w-3" />
+        </Link>
+      </div>
+
+      {isLoading && (
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-12 rounded-xl bg-muted animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && openRequests.length > 0 && (
+        <div className="rounded-xl border border-border/60 overflow-hidden">
+          {openRequests.map((req, i) => {
+            const isVideo = req.ad_type === "video_ads";
+            const isLast = i === openRequests.length - 1;
+            return (
+              <div
+                key={req.id}
+                className={cn(
+                  "flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors group cursor-pointer",
+                  !isLast && "border-b border-border/40"
+                )}
+                onClick={() => navigate("/creatives?tab=requests")}
+              >
+                <div className={cn("shrink-0 rounded-lg p-1.5", isVideo ? "bg-violet-50" : "bg-sky-50")}>
+                  {isVideo
+                    ? <Film className="h-3.5 w-3.5 text-violet-600" />
+                    : <ImageIcon className="h-3.5 w-3.5 text-sky-600" />
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground">{req.account_name}</span>
+                    <span className={cn(
+                      "rounded-full px-1.5 py-0.5 text-[10px] font-semibold shrink-0",
+                      REQ_STATUS_BADGE[req.status] ?? "bg-muted text-muted-foreground"
+                    )}>
+                      {REQ_STATUS_LABEL[req.status] ?? req.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate mt-0.5">
+                    {req.template_name} · {req.ad_angle} · {req.offer_type}
+                    {req.assigned_to && <span className="text-muted-foreground/60"> — {req.assigned_to}</span>}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right hidden sm:block">
+                  <p className="text-xs text-muted-foreground">{format(new Date(req.created_at), "MMM d")}</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Ad Outputs dashboard section ─────────────────────────────────────────────
 
