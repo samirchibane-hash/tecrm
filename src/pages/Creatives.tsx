@@ -1,5 +1,5 @@
-import { useState, useMemo, useRef, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
@@ -126,7 +126,10 @@ function isImageMime(mime: string | null): boolean {
 
 const Creatives = () => {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<"library" | "outputs">("library");
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<"library" | "outputs">(
+    searchParams.get("tab") === "outputs" ? "outputs" : "library"
+  );
 
   // ── Template Library state ──
   const [filterAccount, setFilterAccount] = useState<string>("all");
@@ -173,6 +176,15 @@ const Creatives = () => {
   const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set());
   const [deleteBatchId, setDeleteBatchId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Open upload dialog immediately if deep-linked with ?upload=1
+  useEffect(() => {
+    if (searchParams.get("upload") === "1") {
+      setActiveTab("outputs");
+      setUploadOpen(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Queries ──────────────────────────────────────────────────────────────
 

@@ -16,6 +16,10 @@ import {
   ArrowRight,
   ChevronRight,
   Clock,
+  Film,
+  Upload,
+  FolderOpen,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
@@ -587,6 +591,9 @@ const Index = () => {
           </div>
         )}
 
+        {/* ── Ad Outputs ───────────────────────────────────────────────────── */}
+        <AdOutputsSection />
+
         {/* ── Task List ─────────────────────────────────────────────────────── */}
         <div className="mt-8">
           <TaskList accounts={dbAccounts} />
@@ -595,5 +602,148 @@ const Index = () => {
     </div>
   );
 };
+
+// ── Ad Outputs dashboard section ─────────────────────────────────────────────
+
+type RecentBatch = {
+  id: string;
+  account_name: string;
+  ad_type: string;
+  template_name: string;
+  ad_angle: string;
+  offer_type: string;
+  file_count: number;
+  gdrive_folder_url: string | null;
+  created_at: string;
+};
+
+function AdOutputsSection() {
+  const navigate = useNavigate();
+
+  const { data: recentBatches = [], isLoading } = useQuery({
+    queryKey: ["recent-creative-batches"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("creative_batches")
+        .select("id, account_name, ad_type, template_name, ad_angle, offer_type, file_count, gdrive_folder_url, created_at")
+        .order("created_at", { ascending: false })
+        .limit(5);
+      if (error) throw error;
+      return data as RecentBatch[];
+    },
+  });
+
+  return (
+    <div className="mt-8">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <ImageIcon className="h-4 w-4 text-primary" />
+          <h2 className="text-sm font-semibold text-foreground">Ad Outputs</h2>
+          {recentBatches.length > 0 && (
+            <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
+              {recentBatches.length} recent
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/creatives?tab=outputs"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+          >
+            View all <ArrowRight className="h-3 w-3" />
+          </Link>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 text-xs"
+            onClick={() => navigate("/creatives?tab=outputs&upload=1")}
+          >
+            <Upload className="h-3 w-3" /> Upload
+          </Button>
+        </div>
+      </div>
+
+      {isLoading && (
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-12 rounded-xl bg-muted animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && recentBatches.length === 0 && (
+        <div className="rounded-xl border border-dashed border-border bg-card px-4 py-8 text-center">
+          <FolderOpen className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">No creative batches uploaded yet</p>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="mt-2 gap-1.5 text-xs"
+            onClick={() => navigate("/creatives?tab=outputs&upload=1")}
+          >
+            <Upload className="h-3 w-3" /> Upload your first batch
+          </Button>
+        </div>
+      )}
+
+      {!isLoading && recentBatches.length > 0 && (
+        <div className="rounded-xl border border-border/60 overflow-hidden">
+          {recentBatches.map((batch, i) => {
+            const isVideo = batch.ad_type === "video_ads";
+            const isLast = i === recentBatches.length - 1;
+            return (
+              <div
+                key={batch.id}
+                className={cn(
+                  "flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors group cursor-pointer",
+                  !isLast && "border-b border-border/40"
+                )}
+                onClick={() => navigate("/creatives?tab=outputs")}
+              >
+                <div className={cn("shrink-0 rounded-lg p-1.5", isVideo ? "bg-violet-50" : "bg-sky-50")}>
+                  {isVideo
+                    ? <Film className="h-3.5 w-3.5 text-violet-600" />
+                    : <ImageIcon className="h-3.5 w-3.5 text-sky-600" />
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground">{batch.account_name}</span>
+                    <span className={cn(
+                      "rounded-full px-1.5 py-0.5 text-[10px] font-semibold shrink-0",
+                      isVideo ? "bg-violet-100 text-violet-800" : "bg-sky-100 text-sky-800"
+                    )}>
+                      {isVideo ? "Video Ads" : "Image Ads"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate mt-0.5">
+                    {batch.template_name} · {batch.ad_angle} · {batch.offer_type}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right hidden sm:block">
+                  <p className="text-xs text-muted-foreground">{format(new Date(batch.created_at), "MMM d")}</p>
+                  <p className="text-[11px] text-muted-foreground/60">{batch.file_count} file{batch.file_count !== 1 ? "s" : ""}</p>
+                </div>
+                {batch.gdrive_folder_url && (
+                  <a
+                    href={batch.gdrive_folder_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Open in Drive"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+                  </a>
+                )}
+                <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default Index;
