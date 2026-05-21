@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCouplerData } from "@/hooks/useCouplerData";
 import { NewBriefDialog } from "@/components/creatives/NewBriefDialog";
+import { RequestDetailSheet } from "@/components/creatives/RequestDetailSheet";
+import { type CreativeRequest } from "@/components/creatives/types";
 import { TaskList } from "@/components/dashboard/TaskList";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -610,18 +612,6 @@ const Index = () => {
 
 // ── Creative Requests dashboard section ──────────────────────────────────────
 
-type OpenRequest = {
-  id: string;
-  account_name: string;
-  ad_type: string;
-  template_name: string;
-  ad_angle: string;
-  offer_type: string;
-  status: string;
-  assigned_to: string | null;
-  created_at: string;
-};
-
 const REQ_STATUS_BADGE: Record<string, string> = {
   requested: "bg-blue-100 text-blue-800",
   in_progress: "bg-amber-100 text-amber-800",
@@ -634,20 +624,20 @@ const REQ_STATUS_LABEL: Record<string, string> = {
 };
 
 function CreativeRequestsSection() {
-  const navigate = useNavigate();
   const [briefOpen, setBriefOpen] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<CreativeRequest | null>(null);
 
   const { data: openRequests = [], isLoading } = useQuery({
     queryKey: ["dashboard-creative-requests"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("creative_requests")
-        .select("id, account_name, ad_type, template_name, ad_angle, offer_type, status, assigned_to, created_at")
+        .select("*")
         .neq("status", "done")
         .order("created_at", { ascending: false })
         .limit(5);
       if (error) throw error;
-      return data as OpenRequest[];
+      return data as CreativeRequest[];
     },
   });
 
@@ -680,8 +670,6 @@ function CreativeRequestsSection() {
           </Button>
         </div>
       </div>
-
-      <NewBriefDialog open={briefOpen} onOpenChange={setBriefOpen} />
 
       {isLoading && (
         <div className="space-y-2">
@@ -718,7 +706,7 @@ function CreativeRequestsSection() {
                   "flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors group cursor-pointer",
                   !isLast && "border-b border-border/40"
                 )}
-                onClick={() => navigate("/creatives?tab=requests")}
+                onClick={() => setSelectedRequest(req)}
               >
                 <div className={cn("shrink-0 rounded-lg p-1.5", isVideo ? "bg-violet-50" : "bg-sky-50")}>
                   {isVideo
@@ -750,6 +738,13 @@ function CreativeRequestsSection() {
           })}
         </div>
       )}
+
+      <RequestDetailSheet
+        request={selectedRequest}
+        onClose={() => setSelectedRequest(null)}
+        onRequestChange={(updated) => setSelectedRequest(updated)}
+      />
+      <NewBriefDialog open={briefOpen} onOpenChange={setBriefOpen} />
     </div>
   );
 }

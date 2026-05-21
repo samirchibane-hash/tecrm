@@ -3,6 +3,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { NewBriefDialog } from "@/components/creatives/NewBriefDialog";
+import { RequestDetailSheet } from "@/components/creatives/RequestDetailSheet";
+import { type CreativeRequest, type RequestStatus, STATUS_STEPS, STATUS_LABEL, STATUS_BADGE, STATUS_DOT } from "@/components/creatives/types";
 import { format, formatDistanceToNow } from "date-fns";
 
 import { Button } from "@/components/ui/button";
@@ -35,17 +37,6 @@ type Creative = {
   launch_date: string | null; created_at: string;
 };
 
-type CreativeRequest = {
-  id: string; account_name: string; ad_type: string;
-  template_name: string; ad_angle: string; offer_type: string;
-  notes: string | null; status: string; assigned_to: string | null;
-  created_by: string | null; gdrive_folder_url: string | null;
-  created_at: string; updated_at: string;
-};
-
-type RequestComment = {
-  id: string; request_id: string; author: string; body: string; created_at: string;
-};
 
 type CreativeBatch = {
   id: string; account_name: string; ad_type: string; template_name: string;
@@ -66,28 +57,6 @@ type QueuedFile = {
   storageUrl?: string; storagePath?: string;
 };
 
-// ── Status config ─────────────────────────────────────────────────────────────
-
-const STATUS_STEPS = ["requested", "in_progress", "in_review", "done"] as const;
-type RequestStatus = typeof STATUS_STEPS[number];
-
-const STATUS_LABEL: Record<RequestStatus, string> = {
-  requested: "Requested", in_progress: "In Progress", in_review: "In Review", done: "Done",
-};
-
-const STATUS_BADGE: Record<RequestStatus, string> = {
-  requested:  "bg-blue-100 text-blue-800",
-  in_progress: "bg-amber-100 text-amber-800",
-  in_review:  "bg-orange-100 text-orange-800",
-  done:       "bg-emerald-100 text-emerald-800",
-};
-
-const STATUS_DOT: Record<RequestStatus, string> = {
-  requested:  "bg-blue-400",
-  in_progress: "bg-amber-400",
-  in_review:  "bg-orange-400",
-  done:       "bg-emerald-500",
-};
 
 // ── Misc helpers ─────────────────────────────────────────────────────────────
 
@@ -158,15 +127,6 @@ const Creatives = () => {
   const [newBriefOpen, setNewBriefOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<CreativeRequest | null>(null);
   const [deleteRequestId, setDeleteRequestId] = useState<string | null>(null);
-  // Detail sheet state
-  const [sheetDriveLink, setSheetDriveLink] = useState("");
-  const [sheetDriveSaving, setSheetDriveSaving] = useState(false);
-  const [sheetAssignedTo, setSheetAssignedTo] = useState("");
-  const [sheetAssignSaving, setSheetAssignSaving] = useState(false);
-  const [commentAuthor, setCommentAuthor] = useState(() => localStorage.getItem("te_username") ?? "");
-  const [commentBody, setCommentBody] = useState("");
-  const [commentSending, setCommentSending] = useState(false);
-  const commentsEndRef = useRef<HTMLDivElement>(null);
 
   // ── Ad Uploads state ────────────────────────────────────────────────────
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -194,18 +154,6 @@ const Creatives = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync drive link field when selected request changes
-  useEffect(() => {
-    if (selectedRequest) {
-      setSheetDriveLink(selectedRequest.gdrive_folder_url ?? "");
-      setSheetAssignedTo(selectedRequest.assigned_to ?? "");
-    }
-  }, [selectedRequest]);
-
-  // Scroll comments to bottom when new ones arrive
-  useEffect(() => {
-    commentsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [selectedRequest?.id]);
 
   // ── Queries ──────────────────────────────────────────────────────────────
 
@@ -248,20 +196,6 @@ const Creatives = () => {
     },
   });
 
-  const { data: comments = [], isLoading: commentsLoading } = useQuery({
-    queryKey: ["creative-request-comments", selectedRequest?.id],
-    queryFn: async () => {
-      if (!selectedRequest) return [];
-      const { data, error } = await supabase
-        .from("creative_request_comments")
-        .select("*")
-        .eq("request_id", selectedRequest.id)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return data as RequestComment[];
-    },
-    enabled: !!selectedRequest,
-  });
 
   const { data: batches = [], isLoading: batchesLoading } = useQuery({
     queryKey: ["creative-batches"],
@@ -351,78 +285,6 @@ const Creatives = () => {
 
   const openRequestCount = useMemo(() =>
     requests.filter((r) => r.status !== "done").length, [requests]);
-
-  // ── Creative Request mutations ────────────────────────────────────────────
-
-  const updateRequestStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase.from("creative_requests")
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: (_, { id, status }) => {
-      queryClient.invalidateQueries({ queryKey: ["creative-requests"] });
-      setSelectedRequest((prev) => prev?.id === id ? { ...prev, status } : prev);
-      toast.success(`Status updated to ${STATUS_LABEL[status as RequestStatus]}`);
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
-
-  const saveDriveLink = useMutation({
-    mutationFn: async ({ id, url }: { id: string; url: string }) => {
-      setSheetDriveSaving(true);
-      const { error } = await supabase.from("creative_requests")
-        .update({ gdrive_folder_url: url || null, updated_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: (_, { id, url }) => {
-      queryClient.invalidateQueries({ queryKey: ["creative-requests"] });
-      setSelectedRequest((prev) => prev?.id === id ? { ...prev, gdrive_folder_url: url || null } : prev);
-      setSheetDriveSaving(false);
-      toast.success("Drive link saved");
-    },
-    onError: (err: Error) => { setSheetDriveSaving(false); toast.error(err.message); },
-  });
-
-  const saveAssignee = useMutation({
-    mutationFn: async ({ id, name }: { id: string; name: string }) => {
-      setSheetAssignSaving(true);
-      const { error } = await supabase.from("creative_requests")
-        .update({ assigned_to: name.trim() || null, updated_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: (_, { id, name }) => {
-      queryClient.invalidateQueries({ queryKey: ["creative-requests"] });
-      setSelectedRequest((prev) => prev?.id === id ? { ...prev, assigned_to: name.trim() || null } : prev);
-      setSheetAssignSaving(false);
-      toast.success("Assigned to updated");
-    },
-    onError: (err: Error) => { setSheetAssignSaving(false); toast.error(err.message); },
-  });
-
-  const sendComment = useMutation({
-    mutationFn: async () => {
-      if (!selectedRequest || !commentBody.trim() || !commentAuthor.trim()) return;
-      setCommentSending(true);
-      const { error } = await supabase.from("creative_request_comments").insert({
-        request_id: selectedRequest.id,
-        author: commentAuthor.trim(),
-        body: commentBody.trim(),
-      });
-      if (error) throw error;
-      if (commentAuthor.trim()) localStorage.setItem("te_username", commentAuthor.trim());
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["creative-request-comments", selectedRequest?.id] });
-      setCommentBody("");
-      setCommentSending(false);
-      setTimeout(() => commentsEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-    },
-    onError: (err: Error) => { setCommentSending(false); toast.error(err.message); },
-  });
 
   const deleteRequest = useMutation({
     mutationFn: async (id: string) => {
@@ -578,19 +440,6 @@ const Creatives = () => {
 
   const canUpload = !!uploadClient && !!uploadTemplate.trim() && !!uploadAngle.trim() && !!uploadOffer.trim() && queuedFiles.length > 0 && !uploading;
 
-  // Status action button logic
-  const nextStatus = (s: string): RequestStatus | null => {
-    if (s === "requested") return "in_progress";
-    if (s === "in_progress") return "in_review";
-    if (s === "in_review") return "done";
-    return null;
-  };
-  const nextStatusLabel = (s: string) => {
-    if (s === "requested") return "Start Working";
-    if (s === "in_progress") return "Submit for Review";
-    if (s === "in_review") return "Approve";
-    return null;
-  };
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -885,241 +734,11 @@ const Creatives = () => {
         </Tabs>
 
         {/* ── Creative Request Detail Sheet ──────────────────────────────────── */}
-        <Sheet open={!!selectedRequest} onOpenChange={(open) => { if (!open) setSelectedRequest(null); }}>
-          <SheetContent side="right" className="w-full sm:max-w-xl p-0 flex flex-col overflow-hidden">
-            {selectedRequest && (
-              <>
-                {/* Sheet header */}
-                <div className="px-6 pt-6 pb-4 border-b border-border shrink-0">
-                  <div className="flex items-start gap-3 pr-6">
-                    <div className={cn("rounded-lg p-2 mt-0.5 shrink-0", selectedRequest.ad_type === "image_ads" ? "bg-sky-50" : "bg-violet-50")}>
-                      {selectedRequest.ad_type === "image_ads" ? <ImageIcon className="h-4 w-4 text-sky-600" /> : <Film className="h-4 w-4 text-violet-600" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h2 className="text-base font-semibold text-foreground">{selectedRequest.account_name}</h2>
-                        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", selectedRequest.ad_type === "image_ads" ? "bg-sky-100 text-sky-800" : "bg-violet-100 text-violet-800")}>
-                          {selectedRequest.ad_type === "image_ads" ? "Image Ads" : "Video Ads"}
-                        </span>
-                        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", STATUS_BADGE[selectedRequest.status as RequestStatus])}>
-                          {STATUS_LABEL[selectedRequest.status as RequestStatus]}
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1 truncate">
-                        {selectedRequest.template_name} · {selectedRequest.ad_angle} · {selectedRequest.offer_type}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Status progress bar */}
-                  <div className="flex items-center gap-0 mt-4">
-                    {STATUS_STEPS.map((step, i) => {
-                      const stepIdx = STATUS_STEPS.indexOf(selectedRequest.status as RequestStatus);
-                      const isActive = step === selectedRequest.status;
-                      const isPast = i < stepIdx;
-                      return (
-                        <div key={step} className="flex items-center flex-1 min-w-0">
-                          <div className="flex flex-col items-center gap-1 min-w-0">
-                            <div className={cn("h-2 w-2 rounded-full shrink-0 transition-colors", isActive ? STATUS_DOT[step] : isPast ? "bg-emerald-400" : "bg-muted-foreground/20")} />
-                            <span className={cn("text-[10px] leading-none truncate max-w-[60px] text-center", isActive ? "font-semibold text-foreground" : isPast ? "text-muted-foreground" : "text-muted-foreground/40")}>
-                              {STATUS_LABEL[step]}
-                            </span>
-                          </div>
-                          {i < STATUS_STEPS.length - 1 && (
-                            <div className={cn("h-px flex-1 mx-1 transition-colors", isPast || isActive ? "bg-muted-foreground/30" : "bg-muted-foreground/10")} />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Scrollable body */}
-                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
-
-                  {/* Brief */}
-                  <section>
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Brief</h3>
-                    <div className="rounded-xl border border-border bg-muted/30 divide-y divide-border">
-                      {[
-                        ["Template", selectedRequest.template_name],
-                        ["Ad Angle", selectedRequest.ad_angle],
-                        ["Offer Type", selectedRequest.offer_type],
-                        ["Created by", selectedRequest.created_by ?? "—"],
-                        ["Requested", format(new Date(selectedRequest.created_at), "MMM d, yyyy · h:mm a")],
-                      ].map(([label, value]) => (
-                        <div key={label} className="flex items-center gap-4 px-4 py-2.5">
-                          <span className="text-xs text-muted-foreground w-24 shrink-0">{label}</span>
-                          <span className="text-xs font-medium text-foreground">{value}</span>
-                        </div>
-                      ))}
-                      {selectedRequest.notes && (
-                        <div className="px-4 py-2.5">
-                          <span className="text-xs text-muted-foreground block mb-1">Notes</span>
-                          <p className="text-xs text-foreground leading-relaxed">{selectedRequest.notes}</p>
-                        </div>
-                      )}
-                    </div>
-                  </section>
-
-                  {/* Assigned to */}
-                  <section>
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Assigned To</h3>
-                    <div className="flex gap-2">
-                      <Input
-                        className="text-sm h-9"
-                        placeholder="Name of creative editor…"
-                        value={sheetAssignedTo}
-                        onChange={(e) => setSheetAssignedTo(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") saveAssignee.mutate({ id: selectedRequest.id, name: sheetAssignedTo }); }}
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="shrink-0"
-                        disabled={sheetAssignedTo === (selectedRequest.assigned_to ?? "") || sheetAssignSaving}
-                        onClick={() => saveAssignee.mutate({ id: selectedRequest.id, name: sheetAssignedTo })}
-                      >
-                        {sheetAssignSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                      </Button>
-                    </div>
-                  </section>
-
-                  {/* Drive folder */}
-                  <section>
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Drive Folder</h3>
-                    {selectedRequest.gdrive_folder_url && (
-                      <a href={selectedRequest.gdrive_folder_url} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 mb-2 text-xs font-medium text-emerald-800 hover:bg-emerald-100 transition-colors">
-                        <FolderOpen className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">{selectedRequest.gdrive_folder_url}</span>
-                        <ExternalLink className="h-3 w-3 shrink-0 ml-auto opacity-60" />
-                      </a>
-                    )}
-                    <div className="flex gap-2">
-                      <Input
-                        className="text-sm h-9 text-xs"
-                        placeholder="Paste Google Drive folder link…"
-                        value={sheetDriveLink}
-                        onChange={(e) => setSheetDriveLink(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") saveDriveLink.mutate({ id: selectedRequest.id, url: sheetDriveLink }); }}
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="shrink-0"
-                        disabled={sheetDriveLink === (selectedRequest.gdrive_folder_url ?? "") || sheetDriveSaving}
-                        onClick={() => saveDriveLink.mutate({ id: selectedRequest.id, url: sheetDriveLink })}
-                      >
-                        {sheetDriveSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                      </Button>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-1.5">Creative editors work directly in Drive. Paste the folder link here once created.</p>
-                  </section>
-
-                  {/* Status actions */}
-                  {selectedRequest.status !== "done" && (
-                    <section>
-                      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Actions</h3>
-                      <div className="flex flex-wrap gap-2">
-                        {nextStatus(selectedRequest.status) && (
-                          <Button
-                            size="sm"
-                            className="gap-1.5"
-                            onClick={() => updateRequestStatus.mutate({ id: selectedRequest.id, status: nextStatus(selectedRequest.status)! })}
-                            disabled={updateRequestStatus.isPending}
-                          >
-                            {updateRequestStatus.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                            {nextStatusLabel(selectedRequest.status)}
-                          </Button>
-                        )}
-                        {selectedRequest.status === "in_review" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="gap-1.5"
-                            onClick={() => updateRequestStatus.mutate({ id: selectedRequest.id, status: "in_progress" })}
-                            disabled={updateRequestStatus.isPending}
-                          >
-                            <RotateCcw className="h-3.5 w-3.5" /> Request Changes
-                          </Button>
-                        )}
-                      </div>
-                    </section>
-                  )}
-
-                  {selectedRequest.status === "done" && (
-                    <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                      <span className="text-sm font-medium text-emerald-800">Completed</span>
-                      <Button size="sm" variant="ghost" className="ml-auto h-7 text-xs text-muted-foreground"
-                        onClick={() => updateRequestStatus.mutate({ id: selectedRequest.id, status: "in_review" })}>
-                        Reopen
-                      </Button>
-                    </div>
-                  )}
-
-                  {/* Comments */}
-                  <section className="pb-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-1.5">
-                      <MessageSquare className="h-3.5 w-3.5" /> Comments
-                    </h3>
-
-                    {commentsLoading && <div className="space-y-2">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-lg" />)}</div>}
-
-                    {!commentsLoading && comments.length === 0 && (
-                      <p className="text-xs text-muted-foreground text-center py-4">No comments yet. Start the conversation.</p>
-                    )}
-
-                    {!commentsLoading && comments.length > 0 && (
-                      <div className="space-y-3">
-                        {comments.map((c) => (
-                          <div key={c.id} className="rounded-xl border border-border bg-muted/30 px-4 py-3">
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-xs font-semibold text-foreground">{c.author}</span>
-                              <span className="text-[10px] text-muted-foreground">{format(new Date(c.created_at), "MMM d, h:mm a")}</span>
-                            </div>
-                            <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{c.body}</p>
-                          </div>
-                        ))}
-                        <div ref={commentsEndRef} />
-                      </div>
-                    )}
-
-                    {/* Comment input */}
-                    <div className="mt-4 space-y-2">
-                      <Input
-                        className="text-xs h-8"
-                        placeholder="Your name"
-                        value={commentAuthor}
-                        onChange={(e) => setCommentAuthor(e.target.value)}
-                      />
-                      <div className="flex gap-2">
-                        <Textarea
-                          className="text-sm resize-none"
-                          rows={3}
-                          placeholder="Write a comment…"
-                          value={commentBody}
-                          onChange={(e) => setCommentBody(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) sendComment.mutate(); }}
-                        />
-                      </div>
-                      <Button
-                        size="sm"
-                        className="gap-1.5 w-full"
-                        disabled={!commentBody.trim() || !commentAuthor.trim() || commentSending}
-                        onClick={() => sendComment.mutate()}
-                      >
-                        {commentSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                        {commentSending ? "Sending…" : "Send"}
-                      </Button>
-                    </div>
-                  </section>
-                </div>
-              </>
-            )}
-          </SheetContent>
-        </Sheet>
+        <RequestDetailSheet
+          request={selectedRequest}
+          onClose={() => setSelectedRequest(null)}
+          onRequestChange={(updated) => setSelectedRequest(updated)}
+        />
 
         {/* ── New Brief Dialog ──────────────────────────────────────────────── */}
         <NewBriefDialog open={newBriefOpen} onOpenChange={setNewBriefOpen} />
