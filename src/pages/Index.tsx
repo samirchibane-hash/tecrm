@@ -62,7 +62,8 @@ const Index = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("id, full_name, business_name, service, plan, submitted_at")
+        .select("id, full_name, business_name, service, plan, submitted_at, account_id")
+        .is("account_id", null)
         .order("submitted_at", { ascending: false })
         .limit(10);
       if (error) throw error;

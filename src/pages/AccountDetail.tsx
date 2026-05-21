@@ -262,6 +262,22 @@ const AccountDetail = () => {
   });
   const accountId = account?.id ?? "";
 
+  // ─── Linked onboarding client ─────────────────────────────────────────────
+  const { data: linkedClient } = useQuery({
+    queryKey: ["linked-client", accountId],
+    queryFn: async () => {
+      if (!accountId) return null;
+      const { data } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("account_id", accountId)
+        .maybeSingle();
+      return data ?? null;
+    },
+    enabled: !!accountId,
+    staleTime: 5 * 60 * 1000,
+  });
+
   // ─── Campaigns (for change log dropdown) ─────────────────────────────────
   const campaigns = useMemo(() => {
     if (!couplerData) return [];
@@ -871,6 +887,9 @@ const AccountDetail = () => {
                 </span>
               )}
             </TabsTrigger>
+            {linkedClient && (
+              <TabsTrigger value="client-profile">Client Profile</TabsTrigger>
+            )}
           </TabsList>
 
           {/* ── Overview Tab ────────────────────────────────────────────────── */}
@@ -1263,6 +1282,141 @@ const AccountDetail = () => {
               </div>
             )}
           </TabsContent>
+
+          {/* ── Client Profile Tab ──────────────────────────────────────────── */}
+          {linkedClient && (
+            <TabsContent value="client-profile" className="space-y-5">
+
+              {(() => {
+                const c = linkedClient as any;
+                const bh = c.business_hours as Record<string, { open: string; close: string; status: string }> | null;
+                const DAY_ORDER = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+                const amountFormatted = c.amount_paid ? `$${(c.amount_paid / 100).toLocaleString()}` : null;
+
+                function ProfileSection({ title, children }: { title: string; children: React.ReactNode }) {
+                  return (
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">{title}</h3>
+                      <div className="rounded-xl border border-border bg-card p-4 space-y-3">{children}</div>
+                    </div>
+                  );
+                }
+                function Field({ label, value }: { label: string; value: React.ReactNode }) {
+                  if (!value && value !== 0) return null;
+                  return (
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4">
+                      <span className="text-xs text-muted-foreground w-36 shrink-0 pt-0.5">{label}</span>
+                      <span className="text-sm font-medium text-foreground">{value}</span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <>
+                    <ProfileSection title="Business">
+                      <Field label="Business Name" value={c.business_name} />
+                      <Field label="Legal Name" value={c.legal_business_name} />
+                      <Field label="Business Type" value={c.business_type} />
+                      <Field label="EIN" value={c.ein} />
+                      <Field label="Location" value={c.city && c.state ? `${c.city}, ${c.state}` : null} />
+                      <Field label="Service Area" value={c.service_area} />
+                      {c.website_url && (
+                        <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4">
+                          <span className="text-xs text-muted-foreground w-36 shrink-0 pt-0.5">Website</span>
+                          <a href={c.website_url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary flex items-center gap-1 hover:underline">
+                            {c.website_url}
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      )}
+                      <Field label="Business Phone" value={c.business_phone} />
+                      <Field label="Business Email" value={c.business_email} />
+                    </ProfileSection>
+
+                    <ProfileSection title="Owner / Point of Contact">
+                      <Field label="Owner Name" value={c.owner_name} />
+                      <Field label="Owner Email" value={c.owner_email} />
+                      <Field label="Owner Cell" value={c.owner_cell} />
+                    </ProfileSection>
+
+                    <ProfileSection title="Service & Budget">
+                      <Field label="Service" value={c.service} />
+                      <Field label="Plan" value={c.plan} />
+                      <Field label="Ad Budget" value={c.ad_budget} />
+                      <Field label="Amount Paid" value={amountFormatted} />
+                      {c.brands && c.brands.length > 0 && (
+                        <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4">
+                          <span className="text-xs text-muted-foreground w-36 shrink-0 pt-0.5">Brands</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {c.brands.map((b: string) => (
+                              <Badge key={b} variant="secondary" className="text-xs">{b}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </ProfileSection>
+
+                    {c.offers && c.offers.length > 0 && (
+                      <ProfileSection title="Offers">
+                        <ul className="space-y-2">
+                          {c.offers.map((offer: string, i: number) => (
+                            <li key={i} className="text-sm text-foreground">• {offer}</li>
+                          ))}
+                        </ul>
+                      </ProfileSection>
+                    )}
+
+                    {bh && (
+                      <ProfileSection title="Business Hours">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {DAY_ORDER.map((day) => {
+                            const h = bh[day];
+                            if (!h) return null;
+                            const closed = h.status === "closed";
+                            return (
+                              <div key={day} className="flex items-center justify-between text-sm">
+                                <span className="text-muted-foreground w-24">{day}</span>
+                                {closed ? (
+                                  <span className="text-muted-foreground italic text-xs">Closed</span>
+                                ) : (
+                                  <span className="font-medium">{h.open} – {h.close}</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </ProfileSection>
+                    )}
+
+                    {c.additional_notes && (
+                      <ProfileSection title="Additional Notes">
+                        <p className="text-sm text-foreground whitespace-pre-wrap">{c.additional_notes}</p>
+                      </ProfileSection>
+                    )}
+
+                    <ProfileSection title="Social & Ads">
+                      <Field label="Has Facebook" value={c.has_facebook ? "Yes" : "No"} />
+                      {c.facebook_url && (
+                        <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4">
+                          <span className="text-xs text-muted-foreground w-36 shrink-0 pt-0.5">Facebook URL</span>
+                          <a href={c.facebook_url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary flex items-center gap-1 hover:underline">
+                            {c.facebook_url}
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      )}
+                    </ProfileSection>
+
+                    <div className="text-xs text-muted-foreground pt-1">
+                      Submitted {c.submitted_at ? format(new Date(c.submitted_at), "MMM d, yyyy 'at' h:mm a") : "—"}
+                      {amountFormatted && <span className="ml-3 text-green-600 font-medium">{amountFormatted}</span>}
+                    </div>
+                  </>
+                );
+              })()}
+
+            </TabsContent>
+          )}
 
         </Tabs>
       </div>
