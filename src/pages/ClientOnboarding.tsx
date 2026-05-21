@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { ArrowLeft, ExternalLink, Globe, Tag, MessageSquare, CheckSquare, Copy, Link2, Zap, CheckCircle2, Loader2, ArrowRight, AlertCircle } from "lucide-react";
+import { ArrowLeft, ExternalLink, Globe, Tag, MessageSquare, CheckSquare, Copy, Link2, Zap, CheckCircle2, Loader2, ArrowRight, AlertCircle, FolderOpen } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -126,6 +126,23 @@ export default function ClientOnboarding() {
       setNewComment("");
       qc.invalidateQueries({ queryKey: ["onboarding_comments", clientId] });
     },
+  });
+
+  const createDriveFolder = useMutation({
+    mutationFn: async () => {
+      if (!client) return;
+      const clientName = client.business_name ?? client.full_name ?? "New Client";
+      const { data, error } = await supabase.functions.invoke("create-gdrive-folder", {
+        body: { client_id: clientId, client_name: clientName },
+      });
+      if (error || data?.error) throw new Error(data?.error ?? error?.message ?? "Failed to create folder");
+      return data as { folder_url: string };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["client", clientId] });
+      toast.success("Google Drive folder created!");
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   // Check if this client is already activated (has an account_id)
@@ -417,6 +434,62 @@ export default function ClientOnboarding() {
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground truncate">{onboardingUrl}</p>
+                </div>
+              );
+            })()}
+
+            {/* Google Drive folder */}
+            {(() => {
+              const driveUrl = (client as any).gdrive_folder_url as string | null;
+              return (
+                <div className="rounded-xl border border-border bg-card p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-semibold text-foreground">Google Drive Folder</span>
+                    </div>
+                    {driveUrl ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(driveUrl); toast.success("Link copied"); }}
+                          className="flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                        >
+                          <Copy className="h-3 w-3" />
+                          Copy
+                        </button>
+                        <a
+                          href={driveUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Open
+                        </a>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="gap-1.5 text-xs h-7"
+                        onClick={() => createDriveFolder.mutate()}
+                        disabled={createDriveFolder.isPending}
+                      >
+                        {createDriveFolder.isPending ? (
+                          <><Loader2 className="h-3 w-3 animate-spin" /> Creating…</>
+                        ) : (
+                          <><FolderOpen className="h-3 w-3" /> Create Folder</>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                  {driveUrl ? (
+                    <p className="text-xs text-muted-foreground truncate">{driveUrl}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Creates a client folder with <span className="font-medium">Video Ads</span>, <span className="font-medium">Image Ads</span>, and <span className="font-medium">Brand & Systems</span> sub-folders.
+                    </p>
+                  )}
                 </div>
               );
             })()}

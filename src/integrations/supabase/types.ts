@@ -47,6 +47,8 @@ export type Database = {
           currency: string | null
           status: string | null
           submitted_at: string
+          account_id: string | null
+          gdrive_folder_url: string | null
         }
         Insert: {
           id?: string
@@ -80,6 +82,8 @@ export type Database = {
           currency?: string | null
           status?: string | null
           submitted_at?: string
+          account_id?: string | null
+          gdrive_folder_url?: string | null
         }
         Update: {
           id?: string
@@ -113,6 +117,8 @@ export type Database = {
           currency?: string | null
           status?: string | null
           submitted_at?: string
+          account_id?: string | null
+          gdrive_folder_url?: string | null
         }
         Relationships: []
       }
