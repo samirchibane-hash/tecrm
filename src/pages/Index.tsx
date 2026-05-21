@@ -315,7 +315,7 @@ const Index = () => {
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5 capitalize">
-                      {[client.service, client.plan].filter(Boolean).join(" · ")}
+                      {client.service}
                       {client.submitted_at && (
                         <span className="ml-2">· {formatDistanceToNow(new Date(client.submitted_at), { addSuffix: true })}</span>
                       )}
