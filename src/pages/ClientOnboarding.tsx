@@ -10,9 +10,21 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, ExternalLink, Globe, Phone, Mail, MapPin, Clock, DollarSign, Tag, MessageSquare, CheckSquare, Copy, Link2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ArrowLeft, ExternalLink, Globe, Tag, MessageSquare, CheckSquare, Copy, Link2, Zap, CheckCircle2, Loader2, ArrowRight, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+
+type ActivationStep = "idle" | "meta" | "ghl" | "confirm" | "done";
+
+interface MetaPreview {
+  id: string;
+  name: string;
+  currency: string;
+  timezone: string;
+  status: string;
+  status_code: number;
+}
 
 const DAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -46,6 +58,14 @@ export default function ClientOnboarding() {
   const { settings: appSettings } = useSettings();
   const [newComment, setNewComment] = useState("");
   const [authorName, setAuthorName] = useState(() => localStorage.getItem("te_author") ?? "");
+
+  // Activation modal state
+  const [activationStep, setActivationStep] = useState<ActivationStep>("idle");
+  const [adAccountInput, setAdAccountInput] = useState("");
+  const [metaPreview, setMetaPreview] = useState<MetaPreview | null>(null);
+  const [metaError, setMetaError] = useState("");
+  const [ghlLocationId, setGhlLocationId] = useState("");
+  const [isValidating, setIsValidating] = useState(false);
 
   const { data: client, isLoading } = useQuery({
     queryKey: ["client", clientId],
@@ -108,6 +128,71 @@ export default function ClientOnboarding() {
     },
   });
 
+  // Check if this client is already activated (has an account_id)
+  const isActivated = !!(client as any)?.account_id;
+
+  async function validateMetaAccount() {
+    setMetaError("");
+    setIsValidating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("validate-meta-ad-account", {
+        body: { ad_account_id: adAccountInput.trim() },
+      });
+      if (error || data?.error) {
+        setMetaError(data?.error ?? error?.message ?? "Validation failed");
+      } else {
+        setMetaPreview(data as MetaPreview);
+      }
+    } catch {
+      setMetaError("Could not reach validation service");
+    } finally {
+      setIsValidating(false);
+    }
+  }
+
+  const activateClient = useMutation({
+    mutationFn: async () => {
+      if (!metaPreview || !client) return;
+      const accountName = client.business_name ?? client.full_name ?? "New Client";
+
+      // Create the account row
+      const { data: newAccount, error: accountError } = await supabase
+        .from("accounts")
+        .insert({
+          account_name: accountName,
+          fb_ad_account_id: metaPreview.id,
+          ghl_location_id: ghlLocationId.trim() || null,
+        })
+        .select("id")
+        .single();
+      if (accountError) throw new Error(accountError.message);
+
+      // Link client to account
+      const { error: linkError } = await supabase
+        .from("clients")
+        .update({ account_id: newAccount.id })
+        .eq("id", clientId!);
+      if (linkError) throw new Error(linkError.message);
+    },
+    onSuccess: () => {
+      setActivationStep("done");
+      qc.invalidateQueries({ queryKey: ["client", clientId] });
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+      toast.success("Client activated in CRM!");
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
+    },
+  });
+
+  function resetActivation() {
+    setActivationStep("idle");
+    setAdAccountInput("");
+    setMetaPreview(null);
+    setMetaError("");
+    setGhlLocationId("");
+  }
+
   const checklist = appSettings.onboarding_checklists[client?.service?.toLowerCase() ?? ""] ?? [];
   const completedKeys = new Set((progress ?? []).filter((p) => p.completed).map((p) => p.item_key));
   const totalItems = checklist.flatMap((s) => s.items).length;
@@ -158,12 +243,28 @@ export default function ClientOnboarding() {
               {client.plan && (
                 <Badge variant="outline" className="capitalize">{client.plan}</Badge>
               )}
+              {isActivated && (
+                <Badge className="bg-green-500/15 text-green-600 border-green-500/30 gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Active in CRM
+                </Badge>
+              )}
             </div>
             <p className="text-sm text-muted-foreground">
               Onboarded {client.submitted_at ? format(new Date(client.submitted_at), "MMM d, yyyy 'at' h:mm a") : "—"}
               {amountFormatted && <span className="ml-3 text-green-600 font-medium">{amountFormatted}</span>}
             </p>
           </div>
+          {!isActivated && (
+            <Button
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={() => setActivationStep("meta")}
+            >
+              <Zap className="h-3.5 w-3.5" />
+              Activate in CRM
+            </Button>
+          )}
         </div>
 
         <Tabs defaultValue="profile">
@@ -422,6 +523,195 @@ export default function ClientOnboarding() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* ── Activation Modal ── */}
+      <Dialog open={activationStep !== "idle"} onOpenChange={(open) => { if (!open) resetActivation(); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-primary" />
+              Activate in CRM
+            </DialogTitle>
+            <DialogDescription>
+              Link {client?.business_name ?? client?.full_name} to a Meta ad account to start tracking spend, leads, and appointments.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Step indicator */}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+            <span className={activationStep === "meta" ? "text-foreground font-semibold" : activationStep === "ghl" || activationStep === "confirm" || activationStep === "done" ? "text-green-600" : ""}>
+              1. Meta Account
+            </span>
+            <span className="text-border">›</span>
+            <span className={activationStep === "ghl" ? "text-foreground font-semibold" : activationStep === "confirm" || activationStep === "done" ? "text-green-600" : ""}>
+              2. GHL Location
+            </span>
+            <span className="text-border">›</span>
+            <span className={activationStep === "confirm" || activationStep === "done" ? "text-foreground font-semibold" : ""}>
+              3. Confirm
+            </span>
+          </div>
+
+          {/* Step 1: Meta Ad Account */}
+          {activationStep === "meta" && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Meta Ad Account ID</label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="act_1234567890 or just the number"
+                    value={adAccountInput}
+                    onChange={(e) => { setAdAccountInput(e.target.value); setMetaPreview(null); setMetaError(""); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" && adAccountInput.trim()) validateMetaAccount(); }}
+                  />
+                  <Button
+                    variant="secondary"
+                    onClick={validateMetaAccount}
+                    disabled={!adAccountInput.trim() || isValidating}
+                  >
+                    {isValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Validate"}
+                  </Button>
+                </div>
+                {metaError && (
+                  <div className="flex items-center gap-1.5 text-xs text-destructive">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    {metaError}
+                  </div>
+                )}
+              </div>
+
+              {metaPreview && (
+                <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-3 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-green-600 mb-2">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Account found
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                    <span className="text-muted-foreground text-xs">Name</span>
+                    <span className="font-medium text-xs">{metaPreview.name}</span>
+                    <span className="text-muted-foreground text-xs">Currency</span>
+                    <span className="font-medium text-xs">{metaPreview.currency}</span>
+                    <span className="text-muted-foreground text-xs">Timezone</span>
+                    <span className="font-medium text-xs">{metaPreview.timezone}</span>
+                    <span className="text-muted-foreground text-xs">Status</span>
+                    <span className={`font-medium text-xs ${metaPreview.status_code === 1 ? "text-green-600" : "text-amber-600"}`}>
+                      {metaPreview.status}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-1">
+                <Button variant="ghost" size="sm" onClick={resetActivation}>Cancel</Button>
+                <Button
+                  size="sm"
+                  disabled={!metaPreview}
+                  onClick={() => setActivationStep("ghl")}
+                  className="gap-1"
+                >
+                  Continue
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: GHL Location */}
+          {activationStep === "ghl" && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">GHL Location ID <span className="text-muted-foreground font-normal">(optional)</span></label>
+                <Input
+                  placeholder="e.g. abc123XYZ..."
+                  value={ghlLocationId}
+                  onChange={(e) => setGhlLocationId(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Found in GoHighLevel → Settings → Business Info → Location ID. This links GHL leads and appointments to this client.
+                </p>
+              </div>
+              <div className="flex justify-between gap-2 pt-1">
+                <Button variant="ghost" size="sm" onClick={() => setActivationStep("meta")}>Back</Button>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setActivationStep("confirm")}>Skip</Button>
+                  <Button size="sm" onClick={() => setActivationStep("confirm")} className="gap-1">
+                    Continue
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Confirm */}
+          {activationStep === "confirm" && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Summary</p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Account name</span>
+                    <span className="font-medium">{client?.business_name ?? client?.full_name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Meta account</span>
+                    <span className="font-medium">{metaPreview?.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Ad Account ID</span>
+                    <span className="font-mono text-xs font-medium">{metaPreview?.id}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">GHL Location</span>
+                    <span className="font-medium">{ghlLocationId.trim() || <span className="text-muted-foreground italic">—</span>}</span>
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This will create a new CRM account and immediately begin pulling ad spend data.
+              </p>
+              <div className="flex justify-between gap-2 pt-1">
+                <Button variant="ghost" size="sm" onClick={() => setActivationStep("ghl")}>Back</Button>
+                <Button
+                  size="sm"
+                  onClick={() => activateClient.mutate()}
+                  disabled={activateClient.isPending}
+                  className="gap-1.5"
+                >
+                  {activateClient.isPending ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Activating…</>
+                  ) : (
+                    <><Zap className="h-3.5 w-3.5" /> Activate Client</>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Done */}
+          {activationStep === "done" && (
+            <div className="space-y-4 text-center py-4">
+              <div className="flex justify-center">
+                <div className="rounded-full bg-green-500/15 p-4">
+                  <CheckCircle2 className="h-8 w-8 text-green-600" />
+                </div>
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">{client?.business_name ?? client?.full_name} is live!</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Ad spend, leads, and appointments will now be tracked automatically.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => { resetActivation(); navigate(`/account/${encodeURIComponent(client?.business_name ?? client?.full_name ?? "")}`); }}
+              >
+                View Account Dashboard
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
