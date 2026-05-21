@@ -649,26 +649,34 @@ function CreativeRequestsSection() {
     },
   });
 
-  if (isLoading || openRequests.length === 0) return null;
-
   return (
     <div className="mt-8">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <ClipboardList className="h-4 w-4 text-primary" />
           <h2 className="text-sm font-semibold text-foreground">Creative Requests</h2>
-          {openRequests.length > 0 && (
+          {!isLoading && openRequests.length > 0 && (
             <span className="text-xs font-semibold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full">
               {openRequests.length} open
             </span>
           )}
         </div>
-        <Link
-          to="/creatives?tab=requests"
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-        >
-          View all <ArrowRight className="h-3 w-3" />
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/creatives?tab=requests"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+          >
+            View all <ArrowRight className="h-3 w-3" />
+          </Link>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 text-xs"
+            onClick={() => navigate("/creatives?tab=requests")}
+          >
+            + New Brief
+          </Button>
+        </div>
       </div>
 
       {isLoading && (
@@ -676,6 +684,21 @@ function CreativeRequestsSection() {
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="h-12 rounded-xl bg-muted animate-pulse" />
           ))}
+        </div>
+      )}
+
+      {!isLoading && openRequests.length === 0 && (
+        <div className="rounded-xl border border-dashed border-border bg-card px-4 py-8 text-center">
+          <ClipboardList className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">No open creative requests</p>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="mt-2 gap-1.5 text-xs"
+            onClick={() => navigate("/creatives?tab=requests")}
+          >
+            + Create a brief
+          </Button>
         </div>
       )}
 
