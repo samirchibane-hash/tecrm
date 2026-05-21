@@ -649,7 +649,7 @@ function CreativeRequestsSection() {
     },
   });
 
-  if (!isLoading && openRequests.length === 0) return null;
+  if (isLoading || openRequests.length === 0) return null;
 
   return (
     <div className="mt-8">
