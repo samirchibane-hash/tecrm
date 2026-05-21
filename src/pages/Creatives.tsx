@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { NewBriefDialog } from "@/components/creatives/NewBriefDialog";
 import { format, formatDistanceToNow } from "date-fns";
 
 import { Button } from "@/components/ui/button";
@@ -155,15 +156,6 @@ const Creatives = () => {
   const [reqFilterStatus, setReqFilterStatus] = useState("all");
   const [reqFilterClient, setReqFilterClient] = useState("all");
   const [newBriefOpen, setNewBriefOpen] = useState(false);
-  const [briefClient, setBriefClient] = useState("");
-  const [briefAdType, setBriefAdType] = useState<"image_ads" | "video_ads">("image_ads");
-  const [briefTemplate, setBriefTemplate] = useState("");
-  const [briefAngle, setBriefAngle] = useState("");
-  const [briefOffer, setBriefOffer] = useState("");
-  const [briefAssignedTo, setBriefAssignedTo] = useState("");
-  const [briefCreatedBy, setBriefCreatedBy] = useState(() => localStorage.getItem("te_username") ?? "");
-  const [briefNotes, setBriefNotes] = useState("");
-  const [briefSaving, setBriefSaving] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<CreativeRequest | null>(null);
   const [deleteRequestId, setDeleteRequestId] = useState<string | null>(null);
   // Detail sheet state
@@ -361,32 +353,6 @@ const Creatives = () => {
     requests.filter((r) => r.status !== "done").length, [requests]);
 
   // ── Creative Request mutations ────────────────────────────────────────────
-
-  const createBrief = useMutation({
-    mutationFn: async () => {
-      setBriefSaving(true);
-      const { data, error } = await supabase.from("creative_requests").insert({
-        account_name: briefClient,
-        ad_type: briefAdType,
-        template_name: briefTemplate.trim(),
-        ad_angle: briefAngle.trim(),
-        offer_type: briefOffer.trim(),
-        notes: briefNotes.trim() || null,
-        assigned_to: briefAssignedTo.trim() || null,
-        created_by: briefCreatedBy.trim() || null,
-        status: "requested",
-      }).select().single();
-      if (error) throw error;
-      if (briefCreatedBy.trim()) localStorage.setItem("te_username", briefCreatedBy.trim());
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["creative-requests"] });
-      resetBriefForm();
-      toast.success("Creative brief created");
-    },
-    onError: (err: Error) => { setBriefSaving(false); toast.error(err.message); },
-  });
 
   const updateRequestStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
@@ -606,13 +572,11 @@ const Creatives = () => {
   // ── Form resets ───────────────────────────────────────────────────────────
 
   const resetAddForm = () => { setAddOpen(false); setAddTemplateName(""); setAddClient(""); setAddGdriveUrl(""); setAddPreviewFile(null); setAddPreviewPreview(null); setSaving(false); };
-  const resetBriefForm = () => { setNewBriefOpen(false); setBriefClient(""); setBriefAdType("image_ads"); setBriefTemplate(""); setBriefAngle(""); setBriefOffer(""); setBriefAssignedTo(""); setBriefNotes(""); setBriefSaving(false); };
   const resetUploadForm = () => { setUploadOpen(false); setUploadClient(""); setUploadAdType("image_ads"); setUploadTemplate(""); setUploadAngle(""); setUploadOffer(""); setUploadNotes(""); setQueuedFiles([]); setUploading(false); };
 
   const toggleBatch = (id: string) => setExpandedBatches((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
 
   const canUpload = !!uploadClient && !!uploadTemplate.trim() && !!uploadAngle.trim() && !!uploadOffer.trim() && queuedFiles.length > 0 && !uploading;
-  const canCreateBrief = !!briefClient && !!briefTemplate.trim() && !!briefAngle.trim() && !!briefOffer.trim() && !briefSaving;
 
   // Status action button logic
   const nextStatus = (s: string): RequestStatus | null => {
@@ -1158,75 +1122,7 @@ const Creatives = () => {
         </Sheet>
 
         {/* ── New Brief Dialog ──────────────────────────────────────────────── */}
-        <Dialog open={newBriefOpen} onOpenChange={(open) => { if (!open) resetBriefForm(); }}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader><DialogTitle>New Creative Brief</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Client</label>
-                <Select value={briefClient} onValueChange={setBriefClient}>
-                  <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
-                  <SelectContent>{accounts.map((a) => <SelectItem key={a.id} value={a.account_name}>{a.account_name}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Ad Type</label>
-                <div className="flex gap-2">
-                  {([["image_ads", "Image Ads"], ["video_ads", "Video Ads"]] as const).map(([val, label]) => (
-                    <button key={val} onClick={() => setBriefAdType(val)}
-                      className={cn("flex-1 flex items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-semibold transition-colors",
-                        briefAdType === val ? val === "image_ads" ? "bg-sky-100 text-sky-800 border-sky-200" : "bg-violet-100 text-violet-800 border-violet-200" : "border-border text-muted-foreground hover:border-muted-foreground")}>
-                      {val === "image_ads" ? <ImageIcon className="h-3.5 w-3.5" /> : <Film className="h-3.5 w-3.5" />}
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Template</label>
-                <Input
-                  list="brief-template-list"
-                  placeholder="Select from library or type new…"
-                  value={briefTemplate}
-                  onChange={(e) => setBriefTemplate(e.target.value)}
-                />
-                <datalist id="brief-template-list">{existingTemplates.map((t) => <option key={t} value={t} />)}</datalist>
-                <p className="text-[11px] text-muted-foreground">Start typing to see templates from your library</p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Ad Angle</label>
-                  <Input placeholder="e.g. Pain Point" value={briefAngle} onChange={(e) => setBriefAngle(e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Offer Type</label>
-                  <Input placeholder="e.g. Free Estimate" value={briefOffer} onChange={(e) => setBriefOffer(e.target.value)} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Assign To <span className="text-muted-foreground/50">(optional)</span></label>
-                  <Input placeholder="Editor name" value={briefAssignedTo} onChange={(e) => setBriefAssignedTo(e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Created By</label>
-                  <Input placeholder="Your name" value={briefCreatedBy} onChange={(e) => setBriefCreatedBy(e.target.value)} />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Notes <span className="text-muted-foreground/50">(optional)</span></label>
-                <Textarea rows={2} className="resize-none text-sm" placeholder="Context, references, priorities…" value={briefNotes} onChange={(e) => setBriefNotes(e.target.value)} />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={resetBriefForm}>Cancel</Button>
-              <Button onClick={() => createBrief.mutate()} disabled={!canCreateBrief} className="gap-1.5">
-                {briefSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardList className="h-4 w-4" />}
-                {briefSaving ? "Creating…" : "Create Brief"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <NewBriefDialog open={newBriefOpen} onOpenChange={setNewBriefOpen} />
 
         {/* ── Upload Batch Dialog ───────────────────────────────────────────── */}
         <Dialog open={uploadOpen} onOpenChange={(open) => { if (!open && !uploading) resetUploadForm(); }}>

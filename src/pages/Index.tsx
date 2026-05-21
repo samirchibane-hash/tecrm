@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCouplerData } from "@/hooks/useCouplerData";
+import { NewBriefDialog } from "@/components/creatives/NewBriefDialog";
 import { TaskList } from "@/components/dashboard/TaskList";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -634,6 +635,7 @@ const REQ_STATUS_LABEL: Record<string, string> = {
 
 function CreativeRequestsSection() {
   const navigate = useNavigate();
+  const [briefOpen, setBriefOpen] = useState(false);
 
   const { data: openRequests = [], isLoading } = useQuery({
     queryKey: ["dashboard-creative-requests"],
@@ -672,12 +674,14 @@ function CreativeRequestsSection() {
             size="sm"
             variant="outline"
             className="h-7 gap-1.5 text-xs"
-            onClick={() => navigate("/creatives?tab=requests")}
+            onClick={() => setBriefOpen(true)}
           >
             + New Brief
           </Button>
         </div>
       </div>
+
+      <NewBriefDialog open={briefOpen} onOpenChange={setBriefOpen} />
 
       {isLoading && (
         <div className="space-y-2">
@@ -695,7 +699,7 @@ function CreativeRequestsSection() {
             size="sm"
             variant="ghost"
             className="mt-2 gap-1.5 text-xs"
-            onClick={() => navigate("/creatives?tab=requests")}
+            onClick={() => setBriefOpen(true)}
           >
             + Create a brief
           </Button>
