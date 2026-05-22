@@ -100,6 +100,7 @@ const Creatives = () => {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [addTplComboOpen, setAddTplComboOpen] = useState(false);
+  const [addAdType, setAddAdType] = useState<"image" | "video">("image");
   const [addTemplateName, setAddTemplateName] = useState("");
   const [addClient, setAddClient] = useState("");
   const [addGdriveUrl, setAddGdriveUrl] = useState("");
@@ -264,6 +265,16 @@ const Creatives = () => {
   const existingTemplates = useMemo(() =>
     [...new Set(creatives.map((c) => c.batch_name || "Uncategorized"))].sort(),
     [creatives]);
+
+  const addFilteredTemplates = useMemo(() => {
+    const typed = new Set(
+      creatives
+        .filter((c) => c.file_type === "template_type" && c.file_name === addAdType)
+        .map((c) => c.batch_name)
+        .filter(Boolean) as string[]
+    );
+    return existingTemplates.filter((t) => typed.has(t));
+  }, [creatives, existingTemplates, addAdType]);
 
   const filteredRequests = useMemo(() => {
     return requests.filter((r) => {
@@ -470,7 +481,7 @@ const Creatives = () => {
 
   // ── Form resets ───────────────────────────────────────────────────────────
 
-  const resetAddForm = () => { setAddOpen(false); setAddTplComboOpen(false); setAddTemplateName(""); setAddClient(""); setAddGdriveUrl(""); setAddPreviewFile(null); setAddPreviewPreview(null); setSaving(false); };
+  const resetAddForm = () => { setAddOpen(false); setAddTplComboOpen(false); setAddAdType("image"); setAddTemplateName(""); setAddClient(""); setAddGdriveUrl(""); setAddPreviewFile(null); setAddPreviewPreview(null); setSaving(false); };
   const resetNewTplForm = () => { setNewTplOpen(false); setNewTplName(""); setNewTplType(null); setNewTplLink(""); setNewTplFile(null); setNewTplPreview(null); setNewTplSaving(false); };
   const resetUploadForm = () => { setUploadOpen(false); setUploadClient(""); setUploadAdType("image_ads"); setUploadTemplate(""); setUploadAngle(""); setUploadOffer(""); setUploadNotes(""); setQueuedFiles([]); setUploading(false); };
 
@@ -969,7 +980,29 @@ const Creatives = () => {
             </DialogHeader>
             <div className="space-y-4">
 
-              {/* Template — searchable combobox */}
+              {/* Ad Type */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Ad Type</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    ["image", "Image", <ImageIcon className="h-3.5 w-3.5" />] as const,
+                    ["video", "Video", <Film className="h-3.5 w-3.5" />] as const,
+                  ]).map(([val, label, icon]) => (
+                    <button key={val} type="button"
+                      onClick={() => { setAddAdType(val); setAddTemplateName(""); }}
+                      className={cn(
+                        "flex items-center justify-center gap-2 rounded-lg border py-2.5 text-xs font-semibold transition-all",
+                        addAdType === val
+                          ? val === "image" ? "bg-sky-50 text-sky-700 border-sky-300 shadow-sm" : "bg-violet-50 text-violet-700 border-violet-300 shadow-sm"
+                          : "border-border text-muted-foreground hover:bg-muted/40 hover:border-muted-foreground/40"
+                      )}>
+                      {icon}{label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Template — searchable combobox filtered by ad type */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Template</label>
                 <Popover open={addTplComboOpen} onOpenChange={setAddTplComboOpen}>
@@ -988,9 +1021,13 @@ const Creatives = () => {
                     <Command>
                       <CommandInput placeholder="Search templates…" className="h-8 text-sm" />
                       <CommandList>
-                        <CommandEmpty><span className="text-xs text-muted-foreground">No templates found</span></CommandEmpty>
+                        <CommandEmpty>
+                          <span className="text-xs text-muted-foreground">
+                            No {addAdType} templates in library. Set a template type in Template Settings first.
+                          </span>
+                        </CommandEmpty>
                         <CommandGroup>
-                          {existingTemplates.map((t) => (
+                          {addFilteredTemplates.map((t) => (
                             <CommandItem key={t} value={t} onSelect={(v) => { setAddTemplateName(v === addTemplateName ? "" : v); setAddTplComboOpen(false); }} className="text-sm">
                               <Check className={cn("mr-2 h-3.5 w-3.5 shrink-0", addTemplateName === t ? "opacity-100" : "opacity-0")} />
                               {t}
@@ -1001,6 +1038,9 @@ const Creatives = () => {
                     </Command>
                   </PopoverContent>
                 </Popover>
+                {addFilteredTemplates.length === 0 && (
+                  <p className="text-[11px] text-amber-600">No {addAdType} templates found. Set template types in the Template Library first.</p>
+                )}
               </div>
 
               {/* Client */}
