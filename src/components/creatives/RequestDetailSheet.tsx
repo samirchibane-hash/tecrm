@@ -11,8 +11,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   Image as ImageIcon, Film, Check, Loader2, RotateCcw,
-  CheckCircle2, Send, MessageSquare, FolderOpen, FolderPlus, ExternalLink,
+  CheckCircle2, Send, MessageSquare, FolderOpen, FolderPlus, ExternalLink, Trash2,
 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   CreativeRequest, RequestComment,
   STATUS_STEPS, STATUS_LABEL, STATUS_BADGE, STATUS_DOT,
@@ -30,6 +34,7 @@ export function RequestDetailSheet({ request, onClose, onRequestChange }: Props)
   const queryClient = useQueryClient();
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [assignedTo, setAssignedTo] = useState("");
   const [assignSaving, setAssignSaving] = useState(false);
   const [driveLink, setDriveLink] = useState("");
@@ -155,14 +160,30 @@ export function RequestDetailSheet({ request, onClose, onRequestChange }: Props)
     onError: (err: Error) => { setCommentSending(false); toast.error(err.message); },
   });
 
+  const deleteRequest = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("creative_requests").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["creative-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-creative-requests"] });
+      toast.success("Request deleted");
+      setConfirmDelete(false);
+      onClose();
+    },
+    onError: (err: Error) => { setConfirmDelete(false); toast.error(err.message); },
+  });
+
   return (
+    <>
     <Sheet open={!!request} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent side="right" className="w-full sm:max-w-xl p-0 flex flex-col overflow-hidden">
         {request && (
           <>
             {/* Header */}
-            <div className="px-6 pt-6 pb-4 border-b border-border shrink-0">
-              <div className="flex items-start gap-3 pr-6">
+            <div className="relative px-6 pt-6 pb-4 border-b border-border shrink-0">
+              <div className="flex items-start gap-3 pr-10">
                 <div className={cn("rounded-lg p-2 mt-0.5 shrink-0", request.ad_type === "image_ads" ? "bg-sky-50" : "bg-violet-50")}>
                   {request.ad_type === "image_ads"
                     ? <ImageIcon className="h-4 w-4 text-sky-600" />
@@ -183,6 +204,14 @@ export function RequestDetailSheet({ request, onClose, onRequestChange }: Props)
                   </p>
                 </div>
               </div>
+
+              <Button
+                variant="ghost" size="icon"
+                className="absolute top-4 right-12 h-8 w-8 text-muted-foreground hover:text-destructive"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
 
               {/* Status progress */}
               <div className="flex items-center gap-0 mt-4">
@@ -403,5 +432,24 @@ export function RequestDetailSheet({ request, onClose, onRequestChange }: Props)
         )}
       </SheetContent>
     </Sheet>
+
+    <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete this creative request?</AlertDialogTitle>
+          <AlertDialogDescription>This will permanently delete the brief and all its comments.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={() => request && deleteRequest.mutate(request.id)}
+          >
+            {deleteRequest.isPending ? "Deleting…" : "Delete"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
