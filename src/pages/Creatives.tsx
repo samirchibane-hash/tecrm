@@ -658,19 +658,21 @@ const Creatives = () => {
                                         {req.ad_angle} · {req.offer_type}
                                       </p>
                                     </div>
-                                    {(req as any).gdrive_folder_url ? (
+                                    {req.gdrive_folder_url ? (
                                       <a
-                                        href={(req as any).gdrive_folder_url}
+                                        href={req.gdrive_folder_url}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         onClick={(e) => e.stopPropagation()}
                                         title="Open Drive folder"
-                                        className="shrink-0 mt-0.5 p-1 rounded-md text-muted-foreground/30 hover:text-primary hover:bg-muted transition-all opacity-0 group-hover/row:opacity-100"
+                                        className="shrink-0 mt-0.5 p-1 rounded-md text-muted-foreground/50 hover:text-primary hover:bg-muted transition-colors"
                                       >
                                         <FolderOpen className="h-3.5 w-3.5" />
                                       </a>
                                     ) : (
-                                      <span className="shrink-0 w-[26px]" />
+                                      <span className="shrink-0 p-1 mt-0.5 text-muted-foreground/20" title="No Drive folder yet">
+                                        <FolderOpen className="h-3.5 w-3.5" />
+                                      </span>
                                     )}
                                   </div>
                                 );
