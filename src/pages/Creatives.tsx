@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,7 +21,7 @@ import {
   ArrowLeft, Plus, X, MoreVertical, Trash2, Image as ImageIcon, ExternalLink,
   Search, Info, Camera, Upload, Film, FolderOpen, ChevronDown, ChevronUp,
   AlertCircle, CheckCircle2, Loader2, Send, MessageSquare, User, Check,
-  RotateCcw, ClipboardList,
+  RotateCcw, ClipboardList, ChevronsUpDown,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
@@ -97,6 +99,7 @@ const Creatives = () => {
   const [filterType, setFilterType] = useState("all");
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [addTplComboOpen, setAddTplComboOpen] = useState(false);
   const [addTemplateName, setAddTemplateName] = useState("");
   const [addClient, setAddClient] = useState("");
   const [addGdriveUrl, setAddGdriveUrl] = useState("");
@@ -467,7 +470,7 @@ const Creatives = () => {
 
   // ── Form resets ───────────────────────────────────────────────────────────
 
-  const resetAddForm = () => { setAddOpen(false); setAddTemplateName(""); setAddClient(""); setAddGdriveUrl(""); setAddPreviewFile(null); setAddPreviewPreview(null); setSaving(false); };
+  const resetAddForm = () => { setAddOpen(false); setAddTplComboOpen(false); setAddTemplateName(""); setAddClient(""); setAddGdriveUrl(""); setAddPreviewFile(null); setAddPreviewPreview(null); setSaving(false); };
   const resetNewTplForm = () => { setNewTplOpen(false); setNewTplName(""); setNewTplType(null); setNewTplLink(""); setNewTplFile(null); setNewTplPreview(null); setNewTplSaving(false); };
   const resetUploadForm = () => { setUploadOpen(false); setUploadClient(""); setUploadAdType("image_ads"); setUploadTemplate(""); setUploadAngle(""); setUploadOffer(""); setUploadNotes(""); setQueuedFiles([]); setUploading(false); };
 
@@ -961,19 +964,106 @@ const Creatives = () => {
         {/* ── Library dialogs ───────────────────────────────────────────────── */}
         <Dialog open={addOpen} onOpenChange={(open) => { if (!open) resetAddForm(); }}>
           <DialogContent className="max-w-lg">
-            <DialogHeader><DialogTitle>Add Client Production</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Add Client Production</DialogTitle>
+            </DialogHeader>
             <div className="space-y-4">
-              <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground">Template</label><Input list="template-list" placeholder="Template name" value={addTemplateName} onChange={(e) => setAddTemplateName(e.target.value)} /><datalist id="template-list">{existingTemplates.map((t) => <option key={t} value={t} />)}</datalist></div>
-              <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground">Client</label><Select value={addClient} onValueChange={setAddClient}><SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger><SelectContent>{accounts.map((a) => <SelectItem key={a.id} value={a.account_name}>{a.account_name}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground">Google Drive Link</label><Input placeholder="https://drive.google.com/…" value={addGdriveUrl} onChange={(e) => setAddGdriveUrl(e.target.value)} /></div>
-              <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground">Preview Image <span className="text-muted-foreground/60">(optional)</span></label>
+
+              {/* Template — searchable combobox */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Template</label>
+                <Popover open={addTplComboOpen} onOpenChange={setAddTplComboOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline" role="combobox" aria-expanded={addTplComboOpen}
+                      className="w-full justify-between font-normal text-sm h-9"
+                    >
+                      <span className={cn("truncate", !addTemplateName && "text-muted-foreground")}>
+                        {addTemplateName || "Select a template…"}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search templates…" className="h-8 text-sm" />
+                      <CommandList>
+                        <CommandEmpty><span className="text-xs text-muted-foreground">No templates found</span></CommandEmpty>
+                        <CommandGroup>
+                          {existingTemplates.map((t) => (
+                            <CommandItem key={t} value={t} onSelect={(v) => { setAddTemplateName(v === addTemplateName ? "" : v); setAddTplComboOpen(false); }} className="text-sm">
+                              <Check className={cn("mr-2 h-3.5 w-3.5 shrink-0", addTemplateName === t ? "opacity-100" : "opacity-0")} />
+                              {t}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Client */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Client</label>
+                <Select value={addClient} onValueChange={setAddClient}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select client" /></SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((a) => <SelectItem key={a.id} value={a.account_name}>{a.account_name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Google Drive Link */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Google Drive Link</label>
+                <Input
+                  className="h-9 text-sm"
+                  placeholder="https://drive.google.com/…"
+                  value={addGdriveUrl}
+                  onChange={(e) => setAddGdriveUrl(e.target.value)}
+                />
+              </div>
+
+              {/* Preview Image */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Preview Image <span className="text-muted-foreground/50">(optional)</span>
+                </label>
                 <div className="relative rounded-xl border-2 border-dashed border-border p-4 text-center">
-                  <input type="file" accept="image/*" className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; setAddPreviewFile(f); setAddPreviewPreview(URL.createObjectURL(f)); }} />
-                  {addPreviewPreview ? <div className="relative inline-block"><img src={addPreviewPreview} alt="Preview" className="max-h-32 rounded-lg mx-auto" /><button className="absolute -top-1 -right-1 bg-background rounded-full border border-border p-0.5" onClick={(e) => { e.stopPropagation(); setAddPreviewFile(null); setAddPreviewPreview(null); }}><X className="h-3 w-3" /></button></div> : <p className="text-xs text-muted-foreground">Upload a thumbnail</p>}
+                  <input
+                    type="file" accept="image/*"
+                    className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; setAddPreviewFile(f); setAddPreviewPreview(URL.createObjectURL(f)); }}
+                  />
+                  {addPreviewPreview ? (
+                    <div className="relative inline-block">
+                      <img src={addPreviewPreview} alt="Preview" className="max-h-32 rounded-lg mx-auto" />
+                      <button className="absolute -top-1 -right-1 bg-background rounded-full border border-border p-0.5" onClick={(e) => { e.stopPropagation(); setAddPreviewFile(null); setAddPreviewPreview(null); }}>
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1.5 py-2">
+                      <Camera className="h-5 w-5 text-muted-foreground/40" />
+                      <p className="text-xs text-muted-foreground">Click to upload a thumbnail</p>
+                    </div>
+                  )}
                 </div>
               </div>
+
             </div>
-            <DialogFooter><Button variant="outline" onClick={resetAddForm}>Cancel</Button><Button onClick={() => saveProduction.mutate()} disabled={!addTemplateName.trim() || !addClient || !addGdriveUrl.trim() || saving}>{saving ? "Saving…" : "Save"}</Button></DialogFooter>
+            <DialogFooter>
+              <Button variant="outline" onClick={resetAddForm}>Cancel</Button>
+              <Button
+                onClick={() => saveProduction.mutate()}
+                disabled={!addTemplateName.trim() || !addClient || !addGdriveUrl.trim() || saving}
+                className="gap-1.5"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                {saving ? "Saving…" : "Add Production"}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
