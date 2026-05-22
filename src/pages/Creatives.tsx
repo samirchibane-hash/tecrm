@@ -137,6 +137,7 @@ const Creatives = () => {
   // ── Creative Requests state ─────────────────────────────────────────────
   const [reqFilterStatus, setReqFilterStatus] = useState("all");
   const [reqFilterClient, setReqFilterClient] = useState("all");
+  const [reqFilterTemplate, setReqFilterTemplate] = useState("all");
   const [newBriefOpen, setNewBriefOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<CreativeRequest | null>(null);
   const [deleteRequestId, setDeleteRequestId] = useState<string | null>(null);
@@ -266,10 +267,12 @@ const Creatives = () => {
     [...new Set(creatives.map((c) => c.batch_name || "Uncategorized"))].sort(),
     [creatives]);
 
-  const openRequestsByTemplate = useMemo(() => {
-    const map: Record<string, number> = {};
+  const requestsByTemplate = useMemo(() => {
+    const map: Record<string, { total: number; open: number }> = {};
     requests.forEach((r) => {
-      if (r.status !== "done") map[r.template_name] = (map[r.template_name] ?? 0) + 1;
+      if (!map[r.template_name]) map[r.template_name] = { total: 0, open: 0 };
+      map[r.template_name].total++;
+      if (r.status !== "done") map[r.template_name].open++;
     });
     return map;
   }, [requests]);
@@ -288,9 +291,10 @@ const Creatives = () => {
     return requests.filter((r) => {
       if (reqFilterStatus !== "all" && r.status !== reqFilterStatus) return false;
       if (reqFilterClient !== "all" && r.account_name !== reqFilterClient) return false;
+      if (reqFilterTemplate !== "all" && r.template_name !== reqFilterTemplate) return false;
       return true;
     });
-  }, [requests, reqFilterStatus, reqFilterClient]);
+  }, [requests, reqFilterStatus, reqFilterClient, reqFilterTemplate]);
 
   // Group requests by status for the kanban-style list
   const requestsByStatus = useMemo(() => {
@@ -607,13 +611,20 @@ const Creatives = () => {
                       </div>
                       <div className="flex items-center justify-between mt-auto gap-2">
                         <p className="text-[11px] text-muted-foreground">{Object.keys(c).length} client{Object.keys(c).length !== 1 ? "s" : ""}</p>
-                        {openRequestsByTemplate[name] > 0 && (
+                        {requestsByTemplate[name] && (
                           <button
-                            onClick={() => setActiveTab("requests")}
-                            className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px] font-semibold hover:bg-amber-200 transition-colors"
+                            onClick={() => { setReqFilterTemplate(name); setActiveTab("requests"); }}
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors",
+                              requestsByTemplate[name].open > 0
+                                ? "bg-amber-100 text-amber-800 hover:bg-amber-200"
+                                : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+                            )}
                           >
                             <ClipboardList className="h-2.5 w-2.5" />
-                            {openRequestsByTemplate[name]} open
+                            {requestsByTemplate[name].open > 0
+                              ? `${requestsByTemplate[name].open} open`
+                              : `${requestsByTemplate[name].total} done`}
                           </button>
                         )}
                       </div>
@@ -640,6 +651,21 @@ const Creatives = () => {
                   <SelectTrigger className="w-[180px] h-9 text-xs"><SelectValue placeholder="All Clients" /></SelectTrigger>
                   <SelectContent><SelectItem value="all">All Clients</SelectItem>{accounts.map((a) => <SelectItem key={a.id} value={a.account_name}>{a.account_name}</SelectItem>)}</SelectContent>
                 </Select>
+                <Select value={reqFilterTemplate} onValueChange={setReqFilterTemplate}>
+                  <SelectTrigger className="w-[160px] h-9 text-xs"><SelectValue placeholder="All Templates" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Templates</SelectItem>
+                    {existingTemplates.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {reqFilterTemplate !== "all" && (
+                  <button
+                    onClick={() => setReqFilterTemplate("all")}
+                    className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-1 text-xs font-medium hover:bg-primary/20 transition-colors"
+                  >
+                    {reqFilterTemplate} <X className="h-3 w-3" />
+                  </button>
+                )}
               </div>
               <Button size="sm" className="gap-1.5" onClick={() => setNewBriefOpen(true)}>
                 <ClipboardList className="h-4 w-4" /> New Brief
