@@ -20,9 +20,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Plus, X, MoreVertical, Trash2, Image as ImageIcon, ExternalLink,
-  Search, Info, Camera, Upload, Film, FolderOpen, ChevronDown, ChevronUp,
+  Search, Info, Camera, Upload, Film, FolderOpen,
   AlertCircle, CheckCircle2, Loader2, Send, MessageSquare, User, Check,
-  RotateCcw, ClipboardList, ChevronsUpDown,
+  ClipboardList, ChevronsUpDown,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
@@ -188,18 +188,6 @@ const Creatives = () => {
   });
 
 
-  const { data: batches = [], isLoading: batchesLoading } = useQuery({
-    queryKey: ["creative-batches"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("creative_batches")
-        .select(`*, uploads:creative_uploads(*)`)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as CreativeBatch[];
-    },
-  });
-
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const accountDriveMap = useMemo(() => {
@@ -287,13 +275,6 @@ const Creatives = () => {
     filteredRequests.forEach((r) => { groups[r.status]?.push(r); });
     return groups;
   }, [filteredRequests]);
-
-  const filteredBatches = useMemo(() =>
-    batches.filter((b) => {
-      if (outputsFilterClient !== "all" && b.account_name !== outputsFilterClient) return false;
-      if (outputsFilterType !== "all" && b.ad_type !== outputsFilterType) return false;
-      return true;
-    }), [batches, outputsFilterClient, outputsFilterType]);
 
   const openRequestCount = useMemo(() =>
     requests.filter((r) => r.status !== "done").length, [requests]);
@@ -426,19 +407,6 @@ const Creatives = () => {
     onError: (err: Error) => { setNewTplSaving(false); toast.error(`Failed: ${err.message}`); },
   });
 
-  // ── Ad Uploads mutation ───────────────────────────────────────────────────
-
-  const deleteBatch = useMutation({
-    mutationFn: async (batchId: string) => {
-      const batch = batches.find((b) => b.id === batchId);
-      if (batch?.uploads) for (const u of batch.uploads) if (u.storage_path) await supabase.storage.from("creative-outputs").remove([u.storage_path]);
-      const { error } = await supabase.from("creative_batches").delete().eq("id", batchId);
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["creative-batches"] }); setDeleteBatchId(null); toast.success("Batch deleted"); },
-    onError: (err: Error) => toast.error(`Failed: ${err.message}`),
-  });
-
   // ── Upload flow ───────────────────────────────────────────────────────────
 
   const addFilesToQueue = useCallback((newFiles: FileList | File[]) => {
@@ -470,10 +438,8 @@ const Creatives = () => {
     const { data, error } = await supabase.functions.invoke("upload-creatives-to-drive", { body: { account_name: uploadClient, ad_type: uploadAdType, template_name: uploadTemplate.trim(), ad_angle: uploadAngle.trim(), offer_type: uploadOffer.trim(), notes: uploadNotes.trim() || null, gdrive_parent_folder_url: driveUrl, files: uploadedFiles } });
     setUploading(false);
     if (error || data?.error) { toast.error(data?.error ?? "Failed to upload to Drive"); return; }
-    queryClient.invalidateQueries({ queryKey: ["creative-batches"] });
     toast.success(`Batch uploaded — ${uploadedFiles.length} file${uploadedFiles.length !== 1 ? "s" : ""} sent to Drive`);
     resetUploadForm();
-    setActiveTab("outputs");
   };
 
   // ── Form resets ───────────────────────────────────────────────────────────
@@ -481,8 +447,6 @@ const Creatives = () => {
   const resetAddForm = () => { setAddOpen(false); setAddTplComboOpen(false); setAddAdType("image"); setAddTemplateName(""); setAddClient(""); setAddGdriveUrl(""); setAddPreviewFile(null); setAddPreviewPreview(null); setSaving(false); };
   const resetNewTplForm = () => { setNewTplOpen(false); setNewTplName(""); setNewTplType(null); setNewTplLink(""); setNewTplFile(null); setNewTplPreview(null); setNewTplSaving(false); };
   const resetUploadForm = () => { setUploadOpen(false); setUploadClient(""); setUploadAdType("image_ads"); setUploadTemplate(""); setUploadAngle(""); setUploadOffer(""); setUploadNotes(""); setQueuedFiles([]); setUploading(false); };
-
-  const toggleBatch = (id: string) => setExpandedBatches((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
 
   const canUpload = !!uploadClient && !!uploadTemplate.trim() && !!uploadAngle.trim() && !!uploadOffer.trim() && queuedFiles.length > 0 && !uploading;
 
@@ -515,7 +479,6 @@ const Creatives = () => {
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="outputs">Ad Uploads</TabsTrigger>
           </TabsList>
 
           {/* ────────────── TAB 1: Template Library ────────────── */}
@@ -537,7 +500,8 @@ const Creatives = () => {
               </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setNewTplOpen(true)}><Plus className="h-4 w-4" /> New Template</Button>
-                <Button size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add Production</Button>
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add Production</Button>
+                <Button size="sm" className="gap-1.5" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" /> Upload Batch</Button>
               </div>
             </div>
 
@@ -764,91 +728,6 @@ const Creatives = () => {
             )}
           </TabsContent>
 
-          {/* ────────────── TAB 3: Ad Uploads ────────────── */}
-          <TabsContent value="outputs">
-            <div className="mb-6 flex flex-wrap items-center gap-2 justify-between">
-              <div className="flex flex-wrap items-center gap-2">
-                <Select value={outputsFilterClient} onValueChange={setOutputsFilterClient}>
-                  <SelectTrigger className="w-[180px] h-9 text-xs"><SelectValue placeholder="All Clients" /></SelectTrigger>
-                  <SelectContent><SelectItem value="all">All Clients</SelectItem>{accounts.map((a) => <SelectItem key={a.id} value={a.account_name}>{a.account_name}</SelectItem>)}</SelectContent>
-                </Select>
-                <Select value={outputsFilterType} onValueChange={setOutputsFilterType}>
-                  <SelectTrigger className="w-[140px] h-9 text-xs"><SelectValue placeholder="All Types" /></SelectTrigger>
-                  <SelectContent><SelectItem value="all">All Types</SelectItem><SelectItem value="image_ads">Image Ads</SelectItem><SelectItem value="video_ads">Video Ads</SelectItem></SelectContent>
-                </Select>
-              </div>
-              <Button size="sm" className="gap-1.5" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" /> Upload Batch</Button>
-            </div>
-
-            {batchesLoading && <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>}
-
-            {!batchesLoading && filteredBatches.length === 0 && (
-              <div className="flex flex-col items-center gap-4 py-20 text-center">
-                <FolderOpen className="h-12 w-12 text-muted-foreground/40" />
-                <p className="text-lg font-medium">No uploads yet</p>
-                <p className="max-w-md text-sm text-muted-foreground">Upload your first batch of ad creatives and they'll appear here alongside their Drive folder links.</p>
-                <Button onClick={() => setUploadOpen(true)} className="gap-1.5"><Upload className="h-4 w-4" /> Upload Batch</Button>
-              </div>
-            )}
-
-            {!batchesLoading && filteredBatches.length > 0 && (
-              <div className="space-y-3">
-                {filteredBatches.map((batch) => {
-                  const isExpanded = expandedBatches.has(batch.id);
-                  return (
-                    <div key={batch.id} className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-                      <div className="flex items-center gap-3 px-4 py-3">
-                        <button className="flex-1 flex items-center gap-3 text-left min-w-0" onClick={() => toggleBatch(batch.id)}>
-                          <div className={cn("shrink-0 rounded-lg p-2", batch.ad_type === "image_ads" ? "bg-sky-50" : "bg-violet-50")}>
-                            {batch.ad_type === "image_ads" ? <ImageIcon className="h-4 w-4 text-sky-600" /> : <Film className="h-4 w-4 text-violet-600" />}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-semibold text-sm">{batch.account_name}</span>
-                              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", batch.ad_type === "image_ads" ? "bg-sky-100 text-sky-800" : "bg-violet-100 text-violet-800")}>{batch.ad_type === "image_ads" ? "Image Ads" : "Video Ads"}</span>
-                            </div>
-                            <p className="text-xs text-muted-foreground truncate mt-0.5">{batch.template_name} · {batch.ad_angle} · {batch.offer_type}</p>
-                          </div>
-                          <div className="shrink-0 text-right hidden sm:block">
-                            <p className="text-xs text-muted-foreground">{format(new Date(batch.created_at), "MMM d, yyyy")}</p>
-                            <p className="text-[11px] text-muted-foreground/70">{batch.file_count} file{batch.file_count !== 1 ? "s" : ""}</p>
-                          </div>
-                          {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
-                        </button>
-                        <div className="flex items-center gap-1 shrink-0">
-                          {batch.gdrive_folder_url && <Button variant="ghost" size="icon" className="h-8 w-8" asChild title="Open in Drive"><a href={batch.gdrive_folder_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3.5 w-3.5" /></a></Button>}
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setDeleteBatchId(batch.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
-                        </div>
-                      </div>
-                      {isExpanded && (
-                        <div className="border-t border-border px-4 py-4">
-                          {batch.notes && <p className="text-xs text-muted-foreground mb-4 bg-muted/50 rounded-lg px-3 py-2">{batch.notes}</p>}
-                          {(!batch.uploads || batch.uploads.length === 0) ? (
-                            <p className="text-xs text-muted-foreground text-center py-4">No files recorded</p>
-                          ) : (
-                            <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-8 gap-2">
-                              {batch.uploads.map((upload) => (
-                                <a key={upload.id} href={upload.gdrive_view_url ?? upload.storage_url ?? "#"} target="_blank" rel="noopener noreferrer" className="group relative aspect-square rounded-lg overflow-hidden bg-muted border border-border hover:border-primary/40 transition-colors" title={upload.file_name}>
-                                  {isImageMime(upload.mime_type) && upload.storage_url ? (
-                                    <img src={upload.storage_url} alt={upload.file_name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" loading="lazy" />
-                                  ) : (
-                                    <div className="w-full h-full flex flex-col items-center justify-center gap-1 p-1">
-                                      <Film className={cn("h-6 w-6", isVideoMime(upload.mime_type) ? "text-violet-400" : "text-muted-foreground/50")} />
-                                      <span className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-2 px-1">{upload.file_name}</span>
-                                    </div>
-                                  )}
-                                </a>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </TabsContent>
         </Tabs>
 
         {/* ── Template Detail Sheet ─────────────────────────────────────────── */}
@@ -1217,13 +1096,6 @@ const Creatives = () => {
           <AlertDialogContent>
             <AlertDialogHeader><AlertDialogTitle>Delete this creative request?</AlertDialogTitle><AlertDialogDescription>This will permanently delete the brief and all its comments.</AlertDialogDescription></AlertDialogHeader>
             <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => deleteRequestId && deleteRequest.mutate(deleteRequestId)}>Delete</AlertDialogAction></AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        <AlertDialog open={!!deleteBatchId} onOpenChange={(open) => { if (!open) setDeleteBatchId(null); }}>
-          <AlertDialogContent>
-            <AlertDialogHeader><AlertDialogTitle>Delete this batch?</AlertDialogTitle><AlertDialogDescription>Removes the batch record and stored thumbnails. Files in Google Drive are not deleted.</AlertDialogDescription></AlertDialogHeader>
-            <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => deleteBatchId && deleteBatch.mutate(deleteBatchId)}>Delete</AlertDialogAction></AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
 
