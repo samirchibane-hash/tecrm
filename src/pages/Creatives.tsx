@@ -523,7 +523,6 @@ const Creatives = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {templateGroups.map(({ name, previewImage, templateType, templateLink, clients: c }) => {
                   const templateReqs = requests.filter((r) => r.template_name === name);
-                  const clientCount = Object.keys(c).length;
 
                   return (
                     <div
@@ -532,15 +531,19 @@ const Creatives = () => {
                       onClick={() => setSelectedTemplateGroup({ name, templateType, templateLink, clients: c })}
                     >
 
-                      {/* Thumbnail */}
+                      {/* Thumbnail — click opens lightbox only */}
                       <div
-                        className="group/preview relative aspect-video bg-muted flex items-center justify-center cursor-pointer"
+                        className="relative aspect-video bg-muted flex items-center justify-center"
                         onClick={(e) => { e.stopPropagation(); previewImage && setLightboxUrl(previewImage); }}
                       >
-                        {previewImage ? <img src={previewImage} alt={name} className="w-full h-full object-cover" loading="lazy" /> : <ImageIcon className="h-10 w-10 text-muted-foreground/25" />}
-                        <button className={cn("absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/40 opacity-0 group-hover/preview:opacity-100 transition-opacity", thumbnailUploading && thumbnailTargetTemplate === name && "opacity-100")} onClick={(e) => { e.stopPropagation(); setThumbnailTargetTemplate(name); thumbnailInputRef.current?.click(); }}>
-                          {thumbnailUploading && thumbnailTargetTemplate === name ? <span className="text-xs text-white">Uploading…</span> : <><Camera className="h-5 w-5 text-white" /><span className="text-xs text-white font-medium">{previewImage ? "Replace thumbnail" : "Upload thumbnail"}</span></>}
-                        </button>
+                        {thumbnailUploading && thumbnailTargetTemplate === name && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10">
+                            <span className="text-xs text-white font-medium">Uploading…</span>
+                          </div>
+                        )}
+                        {previewImage
+                          ? <img src={previewImage} alt={name} className="w-full h-full object-cover" loading="lazy" />
+                          : <ImageIcon className="h-10 w-10 text-muted-foreground/25" />}
                       </div>
 
                       {/* Card body */}
@@ -549,19 +552,19 @@ const Creatives = () => {
                         {/* Header */}
                         <div className="px-4 pt-3.5 pb-3 flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-sm leading-tight truncate">{name}</h3>
-                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                              {templateType && (
-                                <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", templateType === "video" ? "bg-violet-100 text-violet-800" : "bg-sky-100 text-sky-800")}>
-                                  {templateType === "video" ? "Video" : "Image"}
-                                </span>
-                              )}
-                              {templateLink && (
-                                <a href={templateLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
-                                  <ExternalLink className="h-2.5 w-2.5" /> Master
-                                </a>
-                              )}
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              {templateType === "video"
+                                ? <Film className="h-3.5 w-3.5 shrink-0 text-violet-500" />
+                                : templateType === "image"
+                                ? <ImageIcon className="h-3.5 w-3.5 shrink-0 text-sky-500" />
+                                : null}
+                              <h3 className="font-semibold text-sm leading-tight truncate">{name}</h3>
                             </div>
+                            {templateLink && (
+                              <a href={templateLink} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors mt-0.5">
+                                <ExternalLink className="h-2.5 w-2.5" /> Master
+                              </a>
+                            )}
                           </div>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -570,6 +573,9 @@ const Creatives = () => {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setThumbnailTargetTemplate(name); thumbnailInputRef.current?.click(); }}>
+                                <Camera className="mr-2 h-3.5 w-3.5" /> {previewImage ? "Replace thumbnail" : "Upload thumbnail"}
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => { setSettingsOriginalName(name); setSettingsName(name); setSettingsType(templateType); setSettingsLink(templateLink); setSettingsOpen(true); }}>
                                 <Info className="mr-2 h-3.5 w-3.5" /> Settings
                               </DropdownMenuItem>
@@ -585,28 +591,12 @@ const Creatives = () => {
 
                         {/* Footer */}
                         <div className="border-t border-border/60 mx-4" />
-                        <div className="px-4 py-2.5 flex items-center justify-between gap-2">
+                        <div className="px-4 py-2.5">
                           <p className="text-[11px] text-muted-foreground">
-                            {templateReqs.length > 0
-                              ? `${templateReqs.length} brief${templateReqs.length !== 1 ? "s" : ""} · ${clientCount} client${clientCount !== 1 ? "s" : ""}`
-                              : `${clientCount} client${clientCount !== 1 ? "s" : ""}`}
+                            {templateReqs.length === 0
+                              ? "No briefs yet"
+                              : `${templateReqs.length} brief${templateReqs.length !== 1 ? "s" : ""}`}
                           </p>
-                          {requestsByTemplate[name] && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setReqFilterTemplate(name); setActiveTab("requests"); }}
-                              className={cn(
-                                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors",
-                                requestsByTemplate[name].open > 0
-                                  ? "bg-amber-100 text-amber-800 hover:bg-amber-200"
-                                  : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
-                              )}
-                            >
-                              <ClipboardList className="h-2.5 w-2.5" />
-                              {requestsByTemplate[name].open > 0
-                                ? `${requestsByTemplate[name].open} open`
-                                : `${requestsByTemplate[name].total} done`}
-                            </button>
-                          )}
                         </div>
 
                       </div>
