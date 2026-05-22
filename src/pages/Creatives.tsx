@@ -489,10 +489,22 @@ const Creatives = () => {
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                   <Input className="pl-8 h-9 w-[180px] text-xs" placeholder="Search templates…" value={search} onChange={(e) => setSearch(e.target.value)} />
                 </div>
-                <Select value={filterType} onValueChange={setFilterType}>
-                  <SelectTrigger className="w-[130px] h-9 text-xs"><SelectValue placeholder="All Types" /></SelectTrigger>
-                  <SelectContent><SelectItem value="all">All Types</SelectItem><SelectItem value="image">Image</SelectItem><SelectItem value="video">Video</SelectItem></SelectContent>
-                </Select>
+                <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
+                  <button
+                    onClick={() => setFilterType(filterType === "image" ? "all" : "image")}
+                    title="Image templates"
+                    className={cn("rounded p-1.5 transition-colors", filterType === "image" ? "bg-sky-100 text-sky-700" : "text-muted-foreground hover:text-foreground hover:bg-muted")}
+                  >
+                    <ImageIcon className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setFilterType(filterType === "video" ? "all" : "video")}
+                    title="Video templates"
+                    className={cn("rounded p-1.5 transition-colors", filterType === "video" ? "bg-violet-100 text-violet-700" : "text-muted-foreground hover:text-foreground hover:bg-muted")}
+                  >
+                    <Film className="h-3.5 w-3.5" />
+                  </button>
+                </div>
                 <Select value={filterAccount} onValueChange={setFilterAccount}>
                   <SelectTrigger className="w-[160px] h-9 text-xs"><SelectValue placeholder="All Clients" /></SelectTrigger>
                   <SelectContent><SelectItem value="all">All Clients</SelectItem>{accounts.map((a) => <SelectItem key={a.id} value={a.account_name}>{a.account_name}</SelectItem>)}</SelectContent>
