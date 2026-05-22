@@ -266,6 +266,14 @@ const Creatives = () => {
     [...new Set(creatives.map((c) => c.batch_name || "Uncategorized"))].sort(),
     [creatives]);
 
+  const openRequestsByTemplate = useMemo(() => {
+    const map: Record<string, number> = {};
+    requests.forEach((r) => {
+      if (r.status !== "done") map[r.template_name] = (map[r.template_name] ?? 0) + 1;
+    });
+    return map;
+  }, [requests]);
+
   const addFilteredTemplates = useMemo(() => {
     const typed = new Set(
       creatives
@@ -597,7 +605,18 @@ const Creatives = () => {
                           );
                         })}
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-auto">{Object.keys(c).length} client{Object.keys(c).length !== 1 ? "s" : ""}</p>
+                      <div className="flex items-center justify-between mt-auto gap-2">
+                        <p className="text-[11px] text-muted-foreground">{Object.keys(c).length} client{Object.keys(c).length !== 1 ? "s" : ""}</p>
+                        {openRequestsByTemplate[name] > 0 && (
+                          <button
+                            onClick={() => setActiveTab("requests")}
+                            className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px] font-semibold hover:bg-amber-200 transition-colors"
+                          >
+                            <ClipboardList className="h-2.5 w-2.5" />
+                            {openRequestsByTemplate[name]} open
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}

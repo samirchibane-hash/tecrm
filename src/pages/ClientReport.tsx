@@ -22,7 +22,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ReferenceLine } from "recharts";
-import { CalendarDays, Image as ImageIcon, ExternalLink, ChevronLeft, Phone, Mail, MapPin, Clock, Plus, Search, BarChart2 } from "lucide-react";
+import { CalendarDays, Image as ImageIcon, ExternalLink, ChevronLeft, Phone, Mail, MapPin, Clock, Plus, Search, BarChart2, Film, ClipboardList } from "lucide-react";
 import { format, startOfDay, subDays, startOfMonth, endOfMonth, subMonths, max } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
@@ -55,6 +55,29 @@ const CATEGORY_SVG_COLORS: Record<string, string> = {
   bid_change: "#f97316",
   status_change: "#ef4444",
   other: "#94a3b8",
+};
+
+// ─── Creative request status display ─────────────────────────────────────────
+
+const CREATIVE_STATUS_BADGE: Record<string, string> = {
+  requested:   "bg-slate-100 text-slate-700",
+  in_progress: "bg-blue-100 text-blue-800",
+  in_review:   "bg-amber-100 text-amber-800",
+  done:        "bg-emerald-100 text-emerald-800",
+};
+
+const CREATIVE_STATUS_DOT: Record<string, string> = {
+  requested:   "bg-slate-400",
+  in_progress: "bg-blue-400",
+  in_review:   "bg-amber-400",
+  done:        "bg-emerald-500",
+};
+
+const CREATIVE_STATUS_LABEL: Record<string, string> = {
+  requested:   "Requested",
+  in_progress: "In Progress",
+  in_review:   "In Review",
+  done:        "Delivered",
 };
 
 // ─── Appointment outcome statuses ──────────────────────────────────────────────
@@ -402,6 +425,20 @@ export default function ClientReport() {
     },
   });
 
+  // ── Creative Requests ─────────────────────────────────────────────────────
+  const { data: creativeRequests = [] } = useQuery({
+    queryKey: ["creative-requests", decodedName],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("creative_requests")
+        .select("*")
+        .eq("account_name", decodedName)
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
   // ── Appointments + outcome status ─────────────────────────────────────────
   const queryClient = useQueryClient();
 
@@ -664,7 +701,8 @@ export default function ClientReport() {
   // ── Unified timeline ─────────────────────────────────────────────────────
   type TimelineItem =
     | { type: "update"; date: string; data: (typeof updates)[number] }
-    | { type: "creative-batch"; date: string; batchName: string; items: typeof creatives };
+    | { type: "creative-batch"; date: string; batchName: string; items: typeof creatives }
+    | { type: "creative-request"; date: string; data: (typeof creativeRequests)[number] };
 
   const timeline = useMemo<TimelineItem[]>(() => {
     const items: TimelineItem[] = updates.map((u) => ({ type: "update" as const, date: u.created_at, data: u }));
@@ -679,9 +717,12 @@ export default function ClientReport() {
       const sortDate = launchDate ?? batchItems.reduce((latest, c) => (c.created_at > latest ? c.created_at : latest), batchItems[0]?.created_at ?? "");
       items.push({ type: "creative-batch", date: sortDate, batchName, items: batchItems });
     });
+    creativeRequests.forEach((req) => {
+      items.push({ type: "creative-request", date: (req as any).updated_at ?? req.created_at, data: req });
+    });
     items.sort((a, b) => b.date.localeCompare(a.date));
     return items;
-  }, [updates, creatives]);
+  }, [updates, creatives, creativeRequests]);
 
   // ── Timeline filtered by active date range ────────────────────────────────
   const filteredTimeline = useMemo(() => {
@@ -704,8 +745,10 @@ export default function ClientReport() {
       if (!grouped[date]) grouped[date] = [];
       if (item.type === "update") {
         grouped[date].push({ category: item.data.category, campaign_name: item.data.campaign_name, details: item.data.details });
-      } else {
+      } else if (item.type === "creative-batch") {
         grouped[date].push({ category: "creative_swap", campaign_name: item.batchName, details: `${item.items.length} asset${item.items.length !== 1 ? "s" : ""}` });
+      } else {
+        grouped[date].push({ category: "creative_swap", campaign_name: item.data.template_name, details: `${item.data.ad_angle} · ${item.data.offer_type} — ${CREATIVE_STATUS_LABEL[item.data.status] ?? item.data.status}` });
       }
     });
     return Object.entries(grouped).map(([date, upds]) => ({ date, updates: upds }));
@@ -1451,6 +1494,52 @@ export default function ClientReport() {
                                     </a>
                                   );
                                 })()}
+                              </CardContent>
+                            </Card>
+                          </div>
+                        );
+                      }
+
+                      // Creative Request
+                      if (item.type === "creative-request") {
+                        const req = item.data;
+                        const statusLabel = CREATIVE_STATUS_LABEL[req.status] ?? req.status;
+                        const statusBadge = CREATIVE_STATUS_BADGE[req.status] ?? "bg-slate-100 text-slate-700";
+                        const statusDot = CREATIVE_STATUS_DOT[req.status] ?? "bg-slate-400";
+                        return (
+                          <div key={`req-${req.id}`} className="relative">
+                            <div className={`absolute -left-[25px] top-[14px] h-2.5 w-2.5 rounded-full border-2 border-background ${statusDot}`} />
+                            <Card className="border-border/50 bg-white shadow-sm">
+                              <CardContent className="p-4 space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="secondary" className={`text-xs ${statusBadge}`}>
+                                    <ClipboardList className="h-3 w-3 mr-1" /> {statusLabel}
+                                  </Badge>
+                                  <span className="text-sm font-medium text-foreground">{req.template_name}</span>
+                                  <Badge variant="secondary" className={`text-xs ${req.ad_type === "image_ads" ? "bg-sky-100 text-sky-800" : "bg-violet-100 text-violet-800"}`}>
+                                    {req.ad_type === "image_ads" ? <ImageIcon className="h-3 w-3 mr-1" /> : <Film className="h-3 w-3 mr-1" />}
+                                    {req.ad_type === "image_ads" ? "Image" : "Video"}
+                                  </Badge>
+                                  <span className="ml-auto text-xs text-muted-foreground">
+                                    {format(new Date(item.date), "MMM d, yyyy")}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-foreground">
+                                  {req.ad_angle} · {req.offer_type}
+                                </p>
+                                {req.notes && (
+                                  <p className="text-xs text-muted-foreground whitespace-pre-wrap">{req.notes}</p>
+                                )}
+                                {(req as any).gdrive_folder_url && (
+                                  <a
+                                    href={(req as any).gdrive_folder_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                                  >
+                                    <ExternalLink className="h-3 w-3" /> View creative folder
+                                  </a>
+                                )}
                               </CardContent>
                             </Card>
                           </div>
