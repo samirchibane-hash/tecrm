@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   Image as ImageIcon, Film, Check, Loader2, RotateCcw,
-  CheckCircle2, Send, MessageSquare, FolderOpen, ExternalLink,
+  CheckCircle2, Send, MessageSquare, FolderOpen, FolderPlus, ExternalLink,
 } from "lucide-react";
 import {
   CreativeRequest, RequestComment,
@@ -90,6 +90,31 @@ export function RequestDetailSheet({ request, onClose, onRequestChange }: Props)
       toast.success("Drive link saved");
     },
     onError: (err: Error) => { setDriveSaving(false); toast.error(err.message); },
+  });
+
+  const createDriveFolder = useMutation({
+    mutationFn: async () => {
+      const folderName = `${request!.template_name} – ${request!.ad_angle}`;
+      const { data, error } = await supabase.functions.invoke("create-creative-folder", {
+        body: {
+          request_id: request!.id,
+          account_name: request!.account_name,
+          ad_type: request!.ad_type,
+          folder_name: folderName,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data.folder_url as string;
+    },
+    onSuccess: (folderUrl) => {
+      setDriveLink(folderUrl);
+      queryClient.invalidateQueries({ queryKey: ["creative-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-creative-requests"] });
+      onRequestChange?.({ ...request!, gdrive_folder_url: folderUrl });
+      toast.success("Drive folder created");
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const saveAssignee = useMutation({
@@ -231,17 +256,57 @@ export function RequestDetailSheet({ request, onClose, onRequestChange }: Props)
               {/* Drive folder */}
               <section>
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Drive Folder</h3>
-                {request.gdrive_folder_url && (
+
+                {/* Existing folder link */}
+                {request.gdrive_folder_url ? (
                   <a href={request.gdrive_folder_url} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 mb-2 text-xs font-medium text-emerald-800 hover:bg-emerald-100 transition-colors">
+                    className="flex items-center gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 mb-3 text-xs font-medium text-emerald-800 hover:bg-emerald-100 transition-colors group">
                     <FolderOpen className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{request.gdrive_folder_url}</span>
-                    <ExternalLink className="h-3 w-3 shrink-0 ml-auto opacity-60" />
+                    <span className="truncate flex-1">Open in Drive</span>
+                    <ExternalLink className="h-3 w-3 shrink-0 opacity-50 group-hover:opacity-100 transition-opacity" />
                   </a>
+                ) : (
+                  /* Create button — shown when no folder exists yet */
+                  <button
+                    type="button"
+                    onClick={() => createDriveFolder.mutate()}
+                    disabled={createDriveFolder.isPending}
+                    className={cn(
+                      "w-full flex items-center gap-3 rounded-xl border-2 border-dashed px-4 py-3.5 mb-3 transition-all text-left",
+                      "border-border hover:border-primary/40 hover:bg-primary/5",
+                      "disabled:opacity-60 disabled:pointer-events-none",
+                      request.ad_type === "image_ads"
+                        ? "hover:border-sky-300 hover:bg-sky-50/60"
+                        : "hover:border-violet-300 hover:bg-violet-50/60"
+                    )}
+                  >
+                    <div className={cn(
+                      "rounded-lg p-2 shrink-0 transition-colors",
+                      createDriveFolder.isPending ? "bg-muted" :
+                        request.ad_type === "image_ads" ? "bg-sky-100" : "bg-violet-100"
+                    )}>
+                      {createDriveFolder.isPending
+                        ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        : <FolderPlus className={cn("h-4 w-4", request.ad_type === "image_ads" ? "text-sky-600" : "text-violet-600")} />}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-foreground">
+                        {createDriveFolder.isPending ? "Creating folder…" : "Create Drive Folder"}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {request.ad_type === "image_ads" ? "Image Ads" : "Video Ads"} › {request.template_name}
+                      </p>
+                    </div>
+                  </button>
                 )}
+
+                {/* Manual paste — always available as override */}
                 <div className="flex gap-2">
-                  <Input className="text-sm h-9 text-xs" placeholder="Paste Google Drive folder link…"
-                    value={driveLink} onChange={(e) => setDriveLink(e.target.value)}
+                  <Input
+                    className="text-sm h-9 text-xs"
+                    placeholder={request.gdrive_folder_url ? "Replace Drive link…" : "Or paste Drive link manually…"}
+                    value={driveLink}
+                    onChange={(e) => setDriveLink(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") saveDriveLink.mutate({ id: request.id, url: driveLink }); }}
                   />
                   <Button size="sm" variant="outline" className="shrink-0"
@@ -250,7 +315,6 @@ export function RequestDetailSheet({ request, onClose, onRequestChange }: Props)
                     {driveSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                   </Button>
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-1.5">Creative editors work directly in Drive. Paste the folder link here once created.</p>
               </section>
 
               {/* Status actions */}
