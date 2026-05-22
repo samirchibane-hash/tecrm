@@ -707,6 +707,28 @@ const AccountDetail = () => {
     });
   }, [updates, dateRange]);
 
+  // ─── Unified timeline: campaign updates + creative briefs ─────────────────
+  const filteredTimeline = useMemo(() => {
+    const items: Array<
+      | { kind: "update"; date: string; data: (typeof updates)[number] }
+      | { kind: "creative-request"; date: string; data: CreativeRequest }
+    > = [];
+    updates.forEach((u) => {
+      const d = startOfDay(new Date(u.created_at));
+      if (dateRange?.from && d < startOfDay(dateRange.from)) return;
+      if (dateRange?.to && d > startOfDay(dateRange.to)) return;
+      items.push({ kind: "update", date: u.created_at, data: u });
+    });
+    creativeRequests.forEach((req) => {
+      const d = startOfDay(new Date(req.updated_at));
+      if (dateRange?.from && d < startOfDay(dateRange.from)) return;
+      if (dateRange?.to && d > startOfDay(dateRange.to)) return;
+      items.push({ kind: "creative-request", date: req.updated_at, data: req });
+    });
+    items.sort((a, b) => b.date.localeCompare(a.date));
+    return items;
+  }, [updates, creativeRequests, dateRange]);
+
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
@@ -1147,9 +1169,9 @@ const AccountDetail = () => {
               {/* ── Change Log timeline (date-synced) ── */}
               <div className="mt-5">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                  Change Log <span className="font-normal text-muted-foreground/60">({filteredUpdates.length})</span>
+                  Change Log <span className="font-normal text-muted-foreground/60">({filteredTimeline.length})</span>
                 </h3>
-                {filteredUpdates.length === 0 ? (
+                {filteredTimeline.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-6">
                     No updates logged for this period.
                   </p>
@@ -1157,29 +1179,65 @@ const AccountDetail = () => {
                   <div className="relative">
                     <div className="absolute left-[9px] top-2 bottom-2 w-px bg-border" />
                     <div className="space-y-3 pl-6">
-                      {filteredUpdates.map((u, i) => {
-                        const pal = getPalette(u.campaign_name, changeLogOptions);
-                        const annColor = chartAnnotations.find((a) => a.date === format(new Date(u.created_at), "yyyy-MM-dd"))?.color ?? PALETTE_HEX[i % PALETTE_HEX.length];
+                      {filteredTimeline.map((item, i) => {
+                        if (item.kind === "update") {
+                          const u = item.data;
+                          const pal = getPalette(u.campaign_name, changeLogOptions);
+                          const annColor = chartAnnotations.find((a) => a.date === format(new Date(u.created_at), "yyyy-MM-dd"))?.color ?? PALETTE_HEX[i % PALETTE_HEX.length];
+                          return (
+                            <div key={u.id} className="relative">
+                              <div className="absolute -left-[23px] top-3 h-2.5 w-2.5 rounded-full border-2 border-background" style={{ backgroundColor: annColor }} />
+                              <Card className="border-border/50 bg-card shadow-sm">
+                                <CardContent className="p-3 space-y-1.5">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Badge variant="secondary" className={`text-xs px-2 py-0.5 ${pal.badge}`}>
+                                      <span className={`inline-block h-1.5 w-1.5 rounded-full mr-1 ${pal.dot}`} />
+                                      {(u as any).title || u.campaign_name}
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">{u.campaign_name}</span>
+                                    <span className="ml-auto text-xs text-muted-foreground shrink-0">
+                                      {format(new Date(u.created_at), "MMM d, yyyy")}
+                                    </span>
+                                  </div>
+                                  {u.details && <p className="text-sm text-foreground leading-relaxed">{u.details}</p>}
+                                  {(u as any).link_url && (
+                                    <a href={(u as any).link_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                                      <ExternalLink className="h-3 w-3" />
+                                      {(() => { try { return new URL((u as any).link_url).hostname.replace(/^www\./, ""); } catch { return "View link"; } })()}
+                                    </a>
+                                  )}
+                                </CardContent>
+                              </Card>
+                            </div>
+                          );
+                        }
+
+                        // Creative brief
+                        const req = item.data;
                         return (
-                          <div key={u.id} className="relative">
-                            <div className="absolute -left-[23px] top-3 h-2.5 w-2.5 rounded-full border-2 border-background" style={{ backgroundColor: annColor }} />
+                          <div key={`req-${req.id}`} className="relative">
+                            <div className="absolute -left-[23px] top-3 h-2.5 w-2.5 rounded-full border-2 border-background bg-violet-400" />
                             <Card className="border-border/50 bg-card shadow-sm">
                               <CardContent className="p-3 space-y-1.5">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant="secondary" className={`text-xs px-2 py-0.5 ${pal.badge}`}>
-                                    <span className={`inline-block h-1.5 w-1.5 rounded-full mr-1 ${pal.dot}`} />
-                                    {(u as any).title || u.campaign_name}
+                                  <Badge variant="secondary" className={`text-xs px-2 py-0.5 ${BRIEF_STATUS_BADGE[req.status] ?? "bg-slate-100 text-slate-700"}`}>
+                                    <ClipboardList className="inline h-3 w-3 mr-1" />
+                                    {BRIEF_STATUS_LABEL[req.status] ?? req.status}
                                   </Badge>
-                                  <span className="text-xs text-muted-foreground">{u.campaign_name}</span>
+                                  <Badge variant="secondary" className={`text-xs px-2 py-0.5 ${req.ad_type === "image_ads" ? "bg-sky-100 text-sky-800" : "bg-violet-100 text-violet-800"}`}>
+                                    {req.ad_type === "image_ads" ? <ImageIcon className="inline h-3 w-3 mr-1" /> : <Film className="inline h-3 w-3 mr-1" />}
+                                    {req.ad_type === "image_ads" ? "Image" : "Video"}
+                                  </Badge>
+                                  <span className="text-sm font-medium text-foreground">{req.template_name}</span>
                                   <span className="ml-auto text-xs text-muted-foreground shrink-0">
-                                    {format(new Date(u.created_at), "MMM d, yyyy")}
+                                    {format(new Date(req.updated_at), "MMM d, yyyy")}
                                   </span>
                                 </div>
-                                {u.details && <p className="text-sm text-foreground leading-relaxed">{u.details}</p>}
-                                {(u as any).link_url && (
-                                  <a href={(u as any).link_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                                    <ExternalLink className="h-3 w-3" />
-                                    {(() => { try { return new URL((u as any).link_url).hostname.replace(/^www\./, ""); } catch { return "View link"; } })()}
+                                <p className="text-xs text-muted-foreground">{req.ad_angle} · {req.offer_type}</p>
+                                {req.notes && <p className="text-sm text-foreground leading-relaxed">{req.notes}</p>}
+                                {req.gdrive_folder_url && (
+                                  <a href={req.gdrive_folder_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                                    <ExternalLink className="h-3 w-3" /> View creative folder
                                   </a>
                                 )}
                               </CardContent>
