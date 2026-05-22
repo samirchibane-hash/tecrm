@@ -121,6 +121,15 @@ const Creatives = () => {
   const [thumbnailUploading, setThumbnailUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
+  // ── New Template dialog state ───────────────────────────────────────────
+  const [newTplOpen, setNewTplOpen] = useState(false);
+  const [newTplName, setNewTplName] = useState("");
+  const [newTplType, setNewTplType] = useState<"image" | "video" | null>(null);
+  const [newTplLink, setNewTplLink] = useState("");
+  const [newTplFile, setNewTplFile] = useState<File | null>(null);
+  const [newTplPreview, setNewTplPreview] = useState<string | null>(null);
+  const [newTplSaving, setNewTplSaving] = useState(false);
+
   // ── Creative Requests state ─────────────────────────────────────────────
   const [reqFilterStatus, setReqFilterStatus] = useState("all");
   const [reqFilterClient, setReqFilterClient] = useState("all");
@@ -234,6 +243,7 @@ const Creatives = () => {
         const clientMap: Record<string, string | null> = {};
         items.forEach((i) => {
           if (i.file_type === "template_type") return;
+          if (i.account_name === "_meta" || i.account_name === "") return;
           if (i.file_type === "link") clientMap[i.account_name] = i.file_url;
           else if (!(i.account_name in clientMap)) clientMap[i.account_name] = null;
         });
@@ -372,6 +382,39 @@ const Creatives = () => {
     onError: (err: Error) => { setThumbnailUploading(false); toast.error(`Upload failed: ${err.message}`); },
   });
 
+  const saveNewTemplate = useMutation({
+    mutationFn: async () => {
+      if (!newTplName.trim()) return;
+      setNewTplSaving(true);
+      const { error } = await supabase.from("creatives").insert({
+        account_name: "_meta",
+        batch_name: newTplName.trim(),
+        file_name: newTplType ?? "",
+        file_url: newTplLink.trim(),
+        file_type: "template_type",
+        launch_date: null,
+      });
+      if (error) throw error;
+      if (newTplFile) {
+        const ext = newTplFile.name.split(".").pop();
+        const path = `_meta/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error: uploadErr } = await supabase.storage.from("creatives").upload(path, newTplFile);
+        if (uploadErr) throw uploadErr;
+        const { data: urlData } = supabase.storage.from("creatives").getPublicUrl(path);
+        await supabase.from("creatives").insert({
+          account_name: "_meta",
+          batch_name: newTplName.trim(),
+          file_name: newTplFile.name,
+          file_url: urlData.publicUrl,
+          file_type: "image",
+          launch_date: null,
+        });
+      }
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["creatives"] }); resetNewTplForm(); toast.success("Template created"); },
+    onError: (err: Error) => { setNewTplSaving(false); toast.error(`Failed: ${err.message}`); },
+  });
+
   // ── Ad Uploads mutation ───────────────────────────────────────────────────
 
   const deleteBatch = useMutation({
@@ -425,6 +468,7 @@ const Creatives = () => {
   // ── Form resets ───────────────────────────────────────────────────────────
 
   const resetAddForm = () => { setAddOpen(false); setAddTemplateName(""); setAddClient(""); setAddGdriveUrl(""); setAddPreviewFile(null); setAddPreviewPreview(null); setSaving(false); };
+  const resetNewTplForm = () => { setNewTplOpen(false); setNewTplName(""); setNewTplType(null); setNewTplLink(""); setNewTplFile(null); setNewTplPreview(null); setNewTplSaving(false); };
   const resetUploadForm = () => { setUploadOpen(false); setUploadClient(""); setUploadAdType("image_ads"); setUploadTemplate(""); setUploadAngle(""); setUploadOffer(""); setUploadNotes(""); setQueuedFiles([]); setUploading(false); };
 
   const toggleBatch = (id: string) => setExpandedBatches((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
@@ -480,7 +524,10 @@ const Creatives = () => {
                   <SelectContent><SelectItem value="all">All Clients</SelectItem>{accounts.map((a) => <SelectItem key={a.id} value={a.account_name}>{a.account_name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <Button size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add Production</Button>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setNewTplOpen(true)}><Plus className="h-4 w-4" /> New Template</Button>
+                <Button size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add Production</Button>
+              </div>
             </div>
 
             {creativesLoading && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="aspect-[4/3] rounded-xl" />)}</div>}
@@ -489,8 +536,11 @@ const Creatives = () => {
               <div className="flex flex-col items-center gap-4 py-20 text-center">
                 <ImageIcon className="h-12 w-12 text-muted-foreground/40" />
                 <p className="text-lg font-medium">No templates yet</p>
-                <p className="max-w-md text-sm text-muted-foreground">Add client productions to build your template library.</p>
-                <Button onClick={() => setAddOpen(true)} className="gap-1.5"><Plus className="h-4 w-4" /> Add Production</Button>
+                <p className="max-w-md text-sm text-muted-foreground">Create a template first, then link client productions to it.</p>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" onClick={() => setNewTplOpen(true)} className="gap-1.5"><Plus className="h-4 w-4" /> New Template</Button>
+                  <Button onClick={() => setAddOpen(true)} className="gap-1.5"><Plus className="h-4 w-4" /> Add Production</Button>
+                </div>
               </div>
             )}
 
@@ -819,7 +869,96 @@ const Creatives = () => {
           </DialogContent>
         </Dialog>
 
-        {/* ── Library dialogs (unchanged) ───────────────────────────────────── */}
+        {/* ── New Template Dialog ───────────────────────────────────────────── */}
+        <Dialog open={newTplOpen} onOpenChange={(open) => { if (!open) resetNewTplForm(); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>New Template</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Template Name <span className="text-destructive">*</span></label>
+                <Input
+                  placeholder="e.g. IMG001, VSL-Hero, Static-Square"
+                  value={newTplName}
+                  onChange={(e) => setNewTplName(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Type <span className="text-muted-foreground/50">(optional)</span></label>
+                <div className="flex gap-2">
+                  {(["image", "video"] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setNewTplType(newTplType === t ? null : t)}
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-semibold transition-colors",
+                        newTplType === t
+                          ? t === "video" ? "bg-violet-100 text-violet-800 border-violet-200" : "bg-sky-100 text-sky-800 border-sky-200"
+                          : "border-border text-muted-foreground hover:border-muted-foreground"
+                      )}
+                    >
+                      {t === "video" ? <Film className="h-3.5 w-3.5" /> : <ImageIcon className="h-3.5 w-3.5" />}
+                      {t === "video" ? "Video" : "Image"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Master Template Link <span className="text-muted-foreground/50">(optional)</span></label>
+                <Input
+                  placeholder="https://drive.google.com/…"
+                  value={newTplLink}
+                  onChange={(e) => setNewTplLink(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Thumbnail <span className="text-muted-foreground/50">(optional)</span></label>
+                <div className="relative rounded-xl border-2 border-dashed border-border p-4 text-center">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      setNewTplFile(f);
+                      setNewTplPreview(URL.createObjectURL(f));
+                    }}
+                  />
+                  {newTplPreview ? (
+                    <div className="relative inline-block">
+                      <img src={newTplPreview} alt="Preview" className="max-h-32 rounded-lg mx-auto" />
+                      <button
+                        className="absolute -top-1 -right-1 bg-background rounded-full border border-border p-0.5"
+                        onClick={(e) => { e.stopPropagation(); setNewTplFile(null); setNewTplPreview(null); }}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1.5 py-2">
+                      <Camera className="h-5 w-5 text-muted-foreground/40" />
+                      <p className="text-xs text-muted-foreground">Click to upload a thumbnail</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={resetNewTplForm}>Cancel</Button>
+              <Button
+                onClick={() => saveNewTemplate.mutate()}
+                disabled={!newTplName.trim() || newTplSaving}
+              >
+                {newTplSaving ? "Creating…" : "Create Template"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Library dialogs ───────────────────────────────────────────────── */}
         <Dialog open={addOpen} onOpenChange={(open) => { if (!open) resetAddForm(); }}>
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>Add Client Production</DialogTitle></DialogHeader>
