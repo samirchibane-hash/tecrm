@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { NewBriefDialog } from "@/components/creatives/NewBriefDialog";
 import { RequestDetailSheet } from "@/components/creatives/RequestDetailSheet";
+import { TemplateDetailSheet } from "@/components/creatives/TemplateDetailSheet";
 import { type CreativeRequest, type RequestStatus, STATUS_STEPS, STATUS_LABEL, STATUS_BADGE, STATUS_DOT } from "@/components/creatives/types";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -40,20 +41,6 @@ type Creative = {
 };
 
 
-type CreativeBatch = {
-  id: string; account_name: string; ad_type: string; template_name: string;
-  ad_angle: string; offer_type: string; notes: string | null;
-  gdrive_folder_id: string | null; gdrive_folder_url: string | null;
-  file_count: number; created_at: string;
-  uploads?: CreativeUpload[];
-};
-
-type CreativeUpload = {
-  id: string; batch_id: string; file_name: string; storage_path: string | null;
-  storage_url: string | null; gdrive_file_id: string | null; gdrive_view_url: string | null;
-  mime_type: string | null; file_size: number | null; created_at: string;
-};
-
 type QueuedFile = {
   id: string; file: File; status: "pending" | "uploading" | "done" | "error"; error?: string;
   storageUrl?: string; storagePath?: string;
@@ -88,10 +75,8 @@ const Creatives = () => {
   const [searchParams] = useSearchParams();
 
   // Active tab
-  type TabId = "library" | "requests" | "outputs";
-  const initialTab: TabId = searchParams.get("tab") === "outputs"
-    ? "outputs" : searchParams.get("tab") === "requests"
-    ? "requests" : "library";
+  type TabId = "library" | "requests";
+  const initialTab: TabId = searchParams.get("tab") === "requests" ? "requests" : "library";
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
 
   // ── Template Library state ──────────────────────────────────────────────
@@ -125,6 +110,13 @@ const Creatives = () => {
   const [thumbnailUploading, setThumbnailUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
+  const [selectedTemplateGroup, setSelectedTemplateGroup] = useState<{
+    name: string;
+    templateType: "image" | "video" | null;
+    templateLink: string;
+    clients: Record<string, string | null>;
+  } | null>(null);
+
   // ── New Template dialog state ───────────────────────────────────────────
   const [newTplOpen, setNewTplOpen] = useState(false);
   const [newTplName, setNewTplName] = useState("");
@@ -153,18 +145,11 @@ const Creatives = () => {
   const [queuedFiles, setQueuedFiles] = useState<QueuedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [outputsFilterClient, setOutputsFilterClient] = useState("all");
-  const [outputsFilterType, setOutputsFilterType] = useState("all");
-  const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set());
-  const [deleteBatchId, setDeleteBatchId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Deep-link: ?upload=1 opens upload dialog
   useEffect(() => {
-    if (searchParams.get("upload") === "1") {
-      setActiveTab("outputs");
-      setUploadOpen(true);
-    }
+    if (searchParams.get("upload") === "1") setUploadOpen(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -572,23 +557,22 @@ const Creatives = () => {
 
             {!creativesLoading && templateGroups.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {templateGroups.map(({ name, previewImage, templateType, templateLink, typeMeta, clients: c, items }) => {
-                  const templateReqs = requests
-                    .filter((r) => r.template_name === name)
-                    .sort((a, b) => {
-                      const dA = (a as any).updated_at ?? a.created_at;
-                      const dB = (b as any).updated_at ?? b.created_at;
-                      return dB.localeCompare(dA);
-                    });
-                  const recentBriefs = templateReqs.slice(0, 3);
-                  const extraCount = Math.max(0, templateReqs.length - 3);
+                {templateGroups.map(({ name, previewImage, templateType, templateLink, clients: c }) => {
+                  const templateReqs = requests.filter((r) => r.template_name === name);
                   const clientCount = Object.keys(c).length;
 
                   return (
-                    <div key={name} className="rounded-xl border border-border bg-card overflow-hidden flex flex-col shadow-sm hover:shadow-md transition-shadow">
+                    <div
+                      key={name}
+                      className="rounded-xl border border-border bg-card overflow-hidden flex flex-col shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                      onClick={() => setSelectedTemplateGroup({ name, templateType, templateLink, clients: c })}
+                    >
 
                       {/* Thumbnail */}
-                      <div className="group/preview relative aspect-video bg-muted flex items-center justify-center cursor-pointer" onClick={() => previewImage && setLightboxUrl(previewImage)}>
+                      <div
+                        className="group/preview relative aspect-video bg-muted flex items-center justify-center cursor-pointer"
+                        onClick={(e) => { e.stopPropagation(); previewImage && setLightboxUrl(previewImage); }}
+                      >
                         {previewImage ? <img src={previewImage} alt={name} className="w-full h-full object-cover" loading="lazy" /> : <ImageIcon className="h-10 w-10 text-muted-foreground/25" />}
                         <button className={cn("absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/40 opacity-0 group-hover/preview:opacity-100 transition-opacity", thumbnailUploading && thumbnailTargetTemplate === name && "opacity-100")} onClick={(e) => { e.stopPropagation(); setThumbnailTargetTemplate(name); thumbnailInputRef.current?.click(); }}>
                           {thumbnailUploading && thumbnailTargetTemplate === name ? <span className="text-xs text-white">Uploading…</span> : <><Camera className="h-5 w-5 text-white" /><span className="text-xs text-white font-medium">{previewImage ? "Replace thumbnail" : "Upload thumbnail"}</span></>}
@@ -617,7 +601,7 @@ const Creatives = () => {
                           </div>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 -mt-0.5 -mr-1.5">
+                              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 -mt-0.5 -mr-1.5" onClick={(e) => e.stopPropagation()}>
                                 <MoreVertical className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -635,78 +619,6 @@ const Creatives = () => {
                           </DropdownMenu>
                         </div>
 
-                        <div className="border-t border-border/60 mx-4" />
-
-                        {/* Brief feed — or client pills fallback */}
-                        <div className="px-4 py-2 flex-1">
-                          {recentBriefs.length > 0 ? (
-                            <>
-                              {recentBriefs.map((req) => {
-                                const statusDot =
-                                  req.status === "done"        ? "bg-emerald-500" :
-                                  req.status === "in_review"   ? "bg-amber-400"   :
-                                  req.status === "in_progress" ? "bg-blue-400"    : "bg-slate-300";
-                                const clientColor = accountColors[req.account_name] ?? CLIENT_COLORS[0];
-                                return (
-                                  <div key={req.id} className="flex items-start gap-2.5 py-2 group/row border-b border-border/40 last:border-0">
-                                    <span className={cn("h-1.5 w-1.5 rounded-full mt-[5px] shrink-0", statusDot)} title={STATUS_LABEL[req.status as RequestStatus]} />
-                                    <div className="flex-1 min-w-0">
-                                      <span className={cn("inline-flex rounded-full px-1.5 py-px text-[10px] font-semibold leading-tight", clientColor)}>
-                                        {req.account_name}
-                                      </span>
-                                      <p className="text-[11px] text-muted-foreground truncate mt-0.5 leading-tight">
-                                        {req.ad_angle} · {req.offer_type}
-                                      </p>
-                                    </div>
-                                    {req.gdrive_folder_url ? (
-                                      <a
-                                        href={req.gdrive_folder_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={(e) => e.stopPropagation()}
-                                        title="Open Drive folder"
-                                        className="shrink-0 mt-0.5 p-1 rounded-md text-muted-foreground/50 hover:text-primary hover:bg-muted transition-colors"
-                                      >
-                                        <FolderOpen className="h-3.5 w-3.5" />
-                                      </a>
-                                    ) : (
-                                      <span className="shrink-0 p-1 mt-0.5 text-muted-foreground/20" title="No Drive folder yet">
-                                        <FolderOpen className="h-3.5 w-3.5" />
-                                      </span>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                              {extraCount > 0 && (
-                                <button
-                                  onClick={() => { setReqFilterTemplate(name); setActiveTab("requests"); }}
-                                  className="mt-1 text-[11px] text-primary hover:underline"
-                                >
-                                  +{extraCount} more brief{extraCount !== 1 ? "s" : ""}
-                                </button>
-                              )}
-                            </>
-                          ) : clientCount > 0 ? (
-                            <div className="flex flex-wrap gap-1.5 py-1">
-                              {Object.entries(c).map(([clientName, gdriveUrl]) => {
-                                const colorClass = accountColors[clientName] ?? CLIENT_COLORS[0];
-                                return (
-                                  <span key={clientName} className={cn("group/pill inline-flex items-center gap-0 rounded-full text-[11px] font-semibold transition-colors", colorClass)}>
-                                    {gdriveUrl
-                                      ? <a href={gdriveUrl} target="_blank" rel="noopener noreferrer" className="pl-2.5 pr-1 py-0.5 flex items-center gap-1">{clientName}<ExternalLink className="h-2.5 w-2.5 opacity-50" /></a>
-                                      : <span className="pl-2.5 pr-1 py-0.5">{clientName}</span>}
-                                    <button className="pr-1.5 py-0.5 opacity-0 group-hover/pill:opacity-60 hover:!opacity-100 transition-opacity" onClick={() => { setEditProdOriginalTemplate(name); setEditProdTemplateName(name); setEditProdClient(clientName); setEditProdGdriveUrl(c[clientName] ?? ""); setEditProdOpen(true); }}>
-                                      <Info className="h-2.5 w-2.5" />
-                                    </button>
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <p className="py-3 text-[11px] text-muted-foreground/50 italic">No briefs yet — use New Brief to get started.</p>
-                          )}
-                        </div>
-
                         {/* Footer */}
                         <div className="border-t border-border/60 mx-4" />
                         <div className="px-4 py-2.5 flex items-center justify-between gap-2">
@@ -717,7 +629,7 @@ const Creatives = () => {
                           </p>
                           {requestsByTemplate[name] && (
                             <button
-                              onClick={() => { setReqFilterTemplate(name); setActiveTab("requests"); }}
+                              onClick={(e) => { e.stopPropagation(); setReqFilterTemplate(name); setActiveTab("requests"); }}
                               className={cn(
                                 "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors",
                                 requestsByTemplate[name].open > 0
@@ -938,6 +850,15 @@ const Creatives = () => {
             )}
           </TabsContent>
         </Tabs>
+
+        {/* ── Template Detail Sheet ─────────────────────────────────────────── */}
+        <TemplateDetailSheet
+          group={selectedTemplateGroup}
+          requests={selectedTemplateGroup ? requests.filter((r) => r.template_name === selectedTemplateGroup.name) : []}
+          accountColors={accountColors}
+          onClose={() => setSelectedTemplateGroup(null)}
+          onSelectRequest={(req) => { setSelectedTemplateGroup(null); setSelectedRequest(req); }}
+        />
 
         {/* ── Creative Request Detail Sheet ──────────────────────────────────── */}
         <RequestDetailSheet
