@@ -927,7 +927,22 @@ const AccountDetail = () => {
             </button>
             <div className="min-w-0">
               <h1 className="text-xl font-bold text-foreground truncate">{decodedName}</h1>
-              <p className="text-xs text-muted-foreground mt-0.5">Client management</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <p className="text-xs text-muted-foreground">Client management</p>
+                {account?.id && (
+                  <>
+                    <span className="text-xs text-muted-foreground/40">·</span>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(account.id); toast.success("TECRM ID copied"); }}
+                      className="flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors font-mono"
+                      title="Copy TECRM ID"
+                    >
+                      {account.id.slice(0, 8)}…
+                      <Copy className="h-2.5 w-2.5" />
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
