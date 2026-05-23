@@ -66,6 +66,7 @@ export default function ClientOnboarding() {
   const [metaError, setMetaError] = useState("");
   const [ghlLocationId, setGhlLocationId] = useState("");
   const [isValidating, setIsValidating] = useState(false);
+  const [activatedTecrmId, setActivatedTecrmId] = useState<string | null>(null);
 
   const { data: client, isLoading } = useQuery({
     queryKey: ["client", clientId],
@@ -193,8 +194,10 @@ export default function ClientOnboarding() {
         .update({ account_id: newAccount.id })
         .eq("id", clientId!);
       if (linkError) throw new Error(linkError.message);
+      return newAccount.id;
     },
-    onSuccess: () => {
+    onSuccess: (newId) => {
+      setActivatedTecrmId(newId ?? null);
       setActivationStep("done");
       qc.invalidateQueries({ queryKey: ["client", clientId] });
       qc.invalidateQueries({ queryKey: ["accounts"] });
@@ -211,6 +214,7 @@ export default function ClientOnboarding() {
     setMetaPreview(null);
     setMetaError("");
     setGhlLocationId("");
+    setActivatedTecrmId(null);
   }
 
   const checklist = appSettings.onboarding_checklists[client?.service?.toLowerCase() ?? ""] ?? [];
@@ -270,10 +274,22 @@ export default function ClientOnboarding() {
                 </Badge>
               )}
             </div>
-            <p className="text-sm text-muted-foreground">
-              Onboarded {client.submitted_at ? format(new Date(client.submitted_at), "MMM d, yyyy 'at' h:mm a") : "—"}
-              {amountFormatted && <span className="ml-3 text-green-600 font-medium">{amountFormatted}</span>}
-            </p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+              <p className="text-sm text-muted-foreground">
+                Onboarded {client.submitted_at ? format(new Date(client.submitted_at), "MMM d, yyyy 'at' h:mm a") : "—"}
+                {amountFormatted && <span className="ml-3 text-green-600 font-medium">{amountFormatted}</span>}
+              </p>
+              {(client as any)?.account_id && (
+                <button
+                  onClick={() => { navigator.clipboard.writeText((client as any).account_id); toast.success("TECRM ID copied"); }}
+                  className="flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors font-mono"
+                  title="Copy TECRM ID"
+                >
+                  TECRM: {((client as any).account_id as string).slice(0, 8)}…
+                  <Copy className="h-2.5 w-2.5" />
+                </button>
+              )}
+            </div>
           </div>
           {!isActivated && (
             <Button
@@ -778,6 +794,21 @@ export default function ClientOnboarding() {
                   Ad spend, leads, and appointments will now be tracked automatically.
                 </p>
               </div>
+              {activatedTecrmId && (
+                <div className="rounded-lg border border-border bg-muted/40 p-3 text-left">
+                  <p className="text-xs text-muted-foreground mb-1.5">TECRM ID — paste this into the GHL sub-account</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-xs text-foreground break-all">{activatedTecrmId}</span>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(activatedTecrmId); toast.success("TECRM ID copied"); }}
+                      className="shrink-0 flex items-center gap-1 rounded border border-border/60 bg-background px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Copy className="h-3 w-3" />
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              )}
               <Button
                 size="sm"
                 onClick={() => { resetActivation(); navigate(`/account/${encodeURIComponent(client?.business_name ?? client?.full_name ?? "")}`); }}
