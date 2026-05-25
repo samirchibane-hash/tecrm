@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // @deno-types="npm:@types/nunjucks"
 import nunjucks from "npm:nunjucks@3.2.4";
 import { Octokit } from "npm:@octokit/rest@20.1.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -132,10 +133,6 @@ serve(async (req) => {
       files.push({ path: `dist/${slug}/assets/images/logo.${logoExt}`, content: logoBase64, encoding: "base64" });
     }
 
-    // client-meta.json
-    const meta = { name: clientName, slug, tecrmId: formData.tecrmId, created: new Date().toISOString().split("T")[0], pages: pages.map((p: { type: string; slug: string }) => ({ type: p.type, slug: p.slug })) };
-    files.push({ path: `clients/${slug}/client-meta.json`, content: JSON.stringify(meta, null, 2) });
-
     // GitHub commit via Octokit
     const octokit = new Octokit({ auth: githubToken });
 
@@ -153,6 +150,19 @@ serve(async (req) => {
     const { data: newTree } = await octokit.git.createTree({ owner: githubOwner, repo: githubRepo, tree, base_tree: baseTreeSha });
     const { data: newCommit } = await octokit.git.createCommit({ owner: githubOwner, repo: githubRepo, message: `feat: add funnel for ${clientName} (slug: ${slug})`, tree: newTree.sha, parents: [baseSha] });
     await octokit.git.updateRef({ owner: githubOwner, repo: githubRepo, ref: "heads/main", sha: newCommit.sha });
+
+    // Save client metadata to Supabase
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    await supabase.from("funnel_clients").upsert({
+      slug,
+      name: clientName,
+      domain: formData.domain || "",
+      tecrm_id: formData.tecrmId || "",
+      created: new Date().toISOString().split("T")[0],
+      pages: pages.map((p: { type: string; slug: string }) => ({ type: p.type, slug: p.slug, url: "" })),
+    }, { onConflict: "slug" });
 
     return new Response(JSON.stringify({ success: true, commitSha: newCommit.sha, fileCount: files.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
