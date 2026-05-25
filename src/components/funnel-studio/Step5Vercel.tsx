@@ -20,8 +20,8 @@ export function Step5Vercel({ slug, commitSha, pages, onNext }: Props) {
 
   const checklistItems: React.ReactNode[] = [
     <>Go to <a href="https://vercel.com" target="_blank" rel="noopener" className="text-primary underline font-medium">vercel.com</a> → <strong>Add New Project</strong></>,
-    <>Import the <code className="bg-muted px-1.5 py-0.5 rounded text-xs">temetamanager</code> GitHub repo</>,
-    <>Set <strong>Root Directory</strong> to: <code className="bg-muted px-2 py-0.5 rounded text-xs font-mono ml-1">dist/{slug}</code></>,
+    <>Import the <code className="bg-muted px-1.5 py-0.5 rounded text-xs">tecrm</code> GitHub repo</>,
+    <>Set <strong>Root Directory</strong> to: <code className="bg-muted px-2 py-0.5 rounded text-xs font-mono ml-1">funnels/{slug}</code></>,
     <>Click <strong>Deploy</strong> — first deploy, Vercel subdomain is fine for now</>,
     <>Go to <strong>Settings → Domains</strong> → add your custom domain</>,
   ]
@@ -65,13 +65,12 @@ export function Step5Vercel({ slug, commitSha, pages, onNext }: Props) {
       <div className="rounded-xl border border-border bg-muted/10 p-4">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Files committed</p>
         <div className="space-y-1 text-xs font-mono text-muted-foreground">
-          <div>dist/{slug}/</div>
+          <div>funnels/{slug}/</div>
           <div className="pl-5">vercel.json</div>
           <div className="pl-5">assets/images/logo.*</div>
           {pages.map(p => (
             <div key={p.slug} className="pl-5">{p.slug}/index.html</div>
           ))}
-          <div>clients/{slug}/client-meta.json</div>
         </div>
       </div>
 

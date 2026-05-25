@@ -122,15 +122,15 @@ serve(async (req) => {
       const overrides = aiCopy?.[page.slug];
       const config = buildPageConfig(formData, page, overrides);
       const html = renderPage(page.type, config);
-      files.push({ path: `dist/${slug}/${page.slug}/index.html`, content: html });
+      files.push({ path: `funnels/${slug}/${page.slug}/index.html`, content: html });
     }
 
     // vercel.json
-    files.push({ path: `dist/${slug}/vercel.json`, content: JSON.stringify(generateVercelConfig(pages), null, 2) });
+    files.push({ path: `funnels/${slug}/vercel.json`, content: JSON.stringify(generateVercelConfig(pages), null, 2) });
 
     // Logo
     if (logoBase64 && logoExt) {
-      files.push({ path: `dist/${slug}/assets/images/logo.${logoExt}`, content: logoBase64, encoding: "base64" });
+      files.push({ path: `funnels/${slug}/assets/images/logo.${logoExt}`, content: logoBase64, encoding: "base64" });
     }
 
     // GitHub commit via Octokit
