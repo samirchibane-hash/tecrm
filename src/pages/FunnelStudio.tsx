@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Layers, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ProgressBar } from '@/components/funnel-studio/ProgressBar'
@@ -27,9 +27,25 @@ const EMPTY_FORM: FunnelFormData = {
   pages: [],
 }
 
+function slugify(s: string) {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+}
+
 export default function FunnelStudio() {
+  const [searchParams] = useSearchParams()
   const [step, setStep] = useState(1)
-  const [form, setForm] = useState<FunnelFormData>({ ...EMPTY_FORM })
+  const [form, setForm] = useState<FunnelFormData>(() => {
+    const clientName = searchParams.get('clientName') ?? ''
+    return {
+      ...EMPTY_FORM,
+      clientName,
+      slug: clientName ? slugify(clientName) : '',
+      city: searchParams.get('city') ?? '',
+      state: searchParams.get('state') ?? '',
+      phone: searchParams.get('phone') ?? '',
+      tecrmId: searchParams.get('tecrmId') ?? '',
+    }
+  })
   const [logoPreview, setLogoPreview] = useState('')
   const [aiCopy, setAiCopy] = useState<Record<string, Record<string, unknown>> | undefined>()
   const [commitSha, setCommitSha] = useState('')
