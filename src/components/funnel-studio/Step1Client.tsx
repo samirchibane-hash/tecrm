@@ -101,18 +101,11 @@ export function Step1Client({ data, onChange, onNext }: Props) {
           onChange={v => onChange({ city: v })}
         />
         <Field
-          label="State (full)"
+          label="State"
           id="state"
           value={data.state}
           placeholder="Arizona"
           onChange={v => onChange({ state: v })}
-        />
-        <Field
-          label="State Abbreviation"
-          id="stateAbbr"
-          value={data.stateAbbr}
-          placeholder="AZ"
-          onChange={v => onChange({ stateAbbr: v })}
         />
         <Field
           label="Phone Number"
