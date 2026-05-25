@@ -7,11 +7,23 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const TEMPLATES: Record<string, string> = {
-  "landing-1": Deno.readTextFileSync(new URL("./templates/landing-page-1.html", import.meta.url)),
-  "landing-2": Deno.readTextFileSync(new URL("./templates/landing-page-2.html", import.meta.url)),
-  "schedule": Deno.readTextFileSync(new URL("./templates/calendar.html", import.meta.url)),
-};
+let TEMPLATES: Record<string, string> | null = null;
+
+async function getTemplates(): Promise<Record<string, string>> {
+  if (TEMPLATES) return TEMPLATES;
+  const token = Deno.env.get("GITHUB_TOKEN");
+  const owner = Deno.env.get("GITHUB_OWNER") || "samirchibane-hash";
+  const repo = Deno.env.get("GITHUB_REPO") || "tecrm";
+  const base = `https://raw.githubusercontent.com/${owner}/${repo}/main/supabase/functions/funnel-generate/templates`;
+  const headers: Record<string, string> = token ? { Authorization: `token ${token}` } : {};
+  const [lp1, lp2, cal] = await Promise.all([
+    fetch(`${base}/landing-page-1.html`, { headers }).then(r => r.text()),
+    fetch(`${base}/landing-page-2.html`, { headers }).then(r => r.text()),
+    fetch(`${base}/calendar.html`, { headers }).then(r => r.text()),
+  ]);
+  TEMPLATES = { "landing-1": lp1, "landing-2": lp2, "schedule": cal };
+  return TEMPLATES;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -20,8 +32,8 @@ serve(async (req) => {
 
   try {
     const { pageType, config } = await req.json();
-
-    const template = TEMPLATES[pageType];
+    const templates = await getTemplates();
+    const template = templates[pageType];
     if (!template) throw new Error(`Unknown page type: ${pageType}`);
 
     const env = new nunjucks.Environment();

@@ -9,15 +9,27 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Load template files at startup
-const TEMPLATES: Record<string, string> = {
-  "landing-1": Deno.readTextFileSync(new URL("./templates/landing-page-1.html", import.meta.url)),
-  "landing-2": Deno.readTextFileSync(new URL("./templates/landing-page-2.html", import.meta.url)),
-  "schedule": Deno.readTextFileSync(new URL("./templates/calendar.html", import.meta.url)),
-};
+// Fetch templates from this repo on first use and cache them
+let TEMPLATES: Record<string, string> | null = null;
 
-function renderPage(pageType: string, config: Record<string, unknown>): string {
-  const template = TEMPLATES[pageType];
+async function getTemplates(): Promise<Record<string, string>> {
+  if (TEMPLATES) return TEMPLATES;
+  const token = Deno.env.get("GITHUB_TOKEN");
+  const owner = Deno.env.get("GITHUB_OWNER") || "samirchibane-hash";
+  const repo = Deno.env.get("GITHUB_REPO") || "tecrm";
+  const base = `https://raw.githubusercontent.com/${owner}/${repo}/main/supabase/functions/funnel-generate/templates`;
+  const headers: Record<string, string> = token ? { Authorization: `token ${token}` } : {};
+  const [lp1, lp2, cal] = await Promise.all([
+    fetch(`${base}/landing-page-1.html`, { headers }).then(r => r.text()),
+    fetch(`${base}/landing-page-2.html`, { headers }).then(r => r.text()),
+    fetch(`${base}/calendar.html`, { headers }).then(r => r.text()),
+  ]);
+  TEMPLATES = { "landing-1": lp1, "landing-2": lp2, "schedule": cal };
+  return TEMPLATES;
+}
+
+function renderPage(templates: Record<string, string>, pageType: string, config: Record<string, unknown>): string {
+  const template = templates[pageType];
   if (!template) throw new Error(`Unknown page type: ${pageType}`);
   const env = new nunjucks.Environment();
   return env.renderString(template, { config });
@@ -91,10 +103,7 @@ function buildPageConfig(form: any, page: { type: string; slug: string }, aiOver
 
 // deno-lint-ignore no-explicit-any
 function generateVercelConfig(pages: { type: string; slug: string }[]): any {
-  const rewrites = pages.map(p => ({
-    source: `/${p.slug}`,
-    destination: `/${p.slug}/index.html`,
-  }));
+  const rewrites = pages.map(p => ({ source: `/${p.slug}`, destination: `/${p.slug}/index.html` }));
   rewrites.push({ source: "/", destination: `/${pages[0]?.slug || "index"}/index.html` });
   return { rewrites };
 }
@@ -109,33 +118,26 @@ serve(async (req) => {
     const { slug, pages, logoBase64, logoExt, clientName } = formData;
 
     const githubToken = Deno.env.get("GITHUB_TOKEN");
-    const githubOwner = Deno.env.get("GITHUB_OWNER");
-    const githubRepo = Deno.env.get("GITHUB_REPO");
-    if (!githubToken || !githubOwner || !githubRepo) {
-      throw new Error("GitHub credentials not configured (GITHUB_TOKEN, GITHUB_OWNER, GITHUB_REPO)");
-    }
+    const githubOwner = Deno.env.get("GITHUB_OWNER") || "samirchibane-hash";
+    const githubRepo = Deno.env.get("GITHUB_REPO") || "tecrm";
+    if (!githubToken) throw new Error("GITHUB_TOKEN secret not configured");
 
+    const templates = await getTemplates();
     const files: { path: string; content: string; encoding?: "utf-8" | "base64" }[] = [];
 
-    // Render each page
     for (const page of pages) {
-      const overrides = aiCopy?.[page.slug];
-      const config = buildPageConfig(formData, page, overrides);
-      const html = renderPage(page.type, config);
+      const config = buildPageConfig(formData, page, aiCopy?.[page.slug]);
+      const html = renderPage(templates, page.type, config);
       files.push({ path: `funnels/${slug}/${page.slug}/index.html`, content: html });
     }
 
-    // vercel.json
     files.push({ path: `funnels/${slug}/vercel.json`, content: JSON.stringify(generateVercelConfig(pages), null, 2) });
 
-    // Logo
     if (logoBase64 && logoExt) {
       files.push({ path: `funnels/${slug}/assets/images/logo.${logoExt}`, content: logoBase64, encoding: "base64" });
     }
 
-    // GitHub commit via Octokit
     const octokit = new Octokit({ auth: githubToken });
-
     const { data: refData } = await octokit.git.getRef({ owner: githubOwner, repo: githubRepo, ref: "heads/main" });
     const baseSha = refData.object.sha;
     const { data: baseCommit } = await octokit.git.getCommit({ owner: githubOwner, repo: githubRepo, commit_sha: baseSha });
@@ -146,20 +148,13 @@ serve(async (req) => {
     ));
 
     const tree = files.map((f, i) => ({ path: f.path, mode: "100644" as const, type: "blob" as const, sha: blobs[i].data.sha }));
-
     const { data: newTree } = await octokit.git.createTree({ owner: githubOwner, repo: githubRepo, tree, base_tree: baseTreeSha });
     const { data: newCommit } = await octokit.git.createCommit({ owner: githubOwner, repo: githubRepo, message: `feat: add funnel for ${clientName} (slug: ${slug})`, tree: newTree.sha, parents: [baseSha] });
     await octokit.git.updateRef({ owner: githubOwner, repo: githubRepo, ref: "heads/main", sha: newCommit.sha });
 
-    // Save client metadata to Supabase
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     await supabase.from("funnel_clients").upsert({
-      slug,
-      name: clientName,
-      domain: formData.domain || "",
-      tecrm_id: formData.tecrmId || "",
+      slug, name: clientName, domain: formData.domain || "", tecrm_id: formData.tecrmId || "",
       created: new Date().toISOString().split("T")[0],
       pages: pages.map((p: { type: string; slug: string }) => ({ type: p.type, slug: p.slug, url: "" })),
     }, { onConflict: "slug" });
