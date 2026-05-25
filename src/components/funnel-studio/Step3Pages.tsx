@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { LayoutTemplate, FileText, CalendarDays, Sparkles, Check } from 'lucide-react'
@@ -34,11 +34,40 @@ const PAGE_TYPES: { type: PageType; label: string; desc: string; icon: React.Rea
   },
 ]
 
+const LOADING_PHASES = [
+  { label: 'Analyzing local market…', sub: 'Researching water quality concerns and homeowner pain points' },
+  { label: 'Writing hero headlines…', sub: 'Crafting punchy, geo-specific headlines for your market' },
+  { label: 'Building problem & solution sections…', sub: 'Positioning the offer against local water issues' },
+  { label: 'Generating reviews & FAQs…', sub: 'Creating authentic local testimonials and objection handling' },
+  { label: 'Polishing final copy…', sub: 'Reviewing tone, urgency, and conversion flow' },
+]
+
 export function Step3Pages({ data, onChange, onNext, onBack }: Props) {
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState('')
   const [aiCopy, setAiCopy] = useState<Record<string, Record<string, unknown>> | undefined>()
   const [aiDone, setAiDone] = useState(false)
+  const [loadingPhase, setLoadingPhase] = useState(0)
+  const [loadingProgress, setLoadingProgress] = useState(0)
+
+  useEffect(() => {
+    if (!aiLoading) {
+      setLoadingPhase(0)
+      setLoadingProgress(0)
+      return
+    }
+    setLoadingProgress(4)
+    const phaseTimer = setInterval(() => {
+      setLoadingPhase(p => Math.min(p + 1, LOADING_PHASES.length - 1))
+    }, 8000)
+    const progressTimer = setInterval(() => {
+      setLoadingProgress(p => Math.min(p + 1.2, 88))
+    }, 500)
+    return () => {
+      clearInterval(phaseTimer)
+      clearInterval(progressTimer)
+    }
+  }, [aiLoading])
 
   const pages = data.pages || []
 
@@ -135,39 +164,76 @@ export function Step3Pages({ data, onChange, onNext, onBack }: Props) {
       </div>
 
       {hasLandingPages && (
-        <div className="rounded-xl border border-border bg-muted/30 p-4">
+        <div className={cn(
+          'rounded-xl border p-4 transition-colors duration-300',
+          aiLoading ? 'border-primary/40 bg-primary/5' : 'border-border bg-muted/30'
+        )}>
           <div className="flex items-start gap-3">
-            <Sparkles className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+            <Sparkles className={cn('h-4 w-4 mt-0.5 shrink-0 transition-colors', aiLoading ? 'text-primary animate-pulse' : 'text-primary')} />
             <div className="flex-1">
               <h3 className="font-medium text-sm text-foreground">AI Copy Generation</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Let Claude write geo-specific headlines, problem/solution copy, reviews, and FAQs
-                tailored to <strong>{data.city}, {data.state}</strong>.
-              </p>
-              {aiDone ? (
+
+              {!aiLoading && !aiDone && (
+                <>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Let Claude write geo-specific headlines, problem/solution copy, reviews, and FAQs
+                    tailored to <strong>{data.city}, {data.state}</strong>.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-2.5 gap-1.5 text-xs h-8"
+                    onClick={handleGenerateAI}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Generate Copy with AI
+                  </Button>
+                </>
+              )}
+
+              {aiLoading && (
+                <div className="mt-3 space-y-3">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium text-foreground leading-snug">
+                      {LOADING_PHASES[loadingPhase].label}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {LOADING_PHASES[loadingPhase].sub}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+                        style={{ width: `${loadingProgress}%` }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground text-right tabular-nums">
+                      {Math.round(loadingProgress)}%
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    This usually takes 20–40 seconds for {pages.filter(p => p.type !== 'schedule').length > 1 ? `${pages.filter(p => p.type !== 'schedule').length} pages` : 'one page'}.
+                  </p>
+                </div>
+              )}
+
+              {aiDone && (
                 <div className="mt-2.5 flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400">
                   <Check className="h-3.5 w-3.5" />
-                  AI copy generated — will be used when building pages
+                  AI copy ready — will be used when building pages
                   <button
                     onClick={() => { setAiDone(false); setAiCopy(undefined) }}
                     className="ml-1 text-xs text-muted-foreground hover:text-foreground underline"
                   >
-                    Clear
+                    Redo
                   </button>
                 </div>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="mt-2.5 gap-1.5 text-xs h-8"
-                  onClick={handleGenerateAI}
-                  disabled={aiLoading}
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  {aiLoading ? 'Generating…' : 'Generate Copy with AI'}
-                </Button>
               )}
-              {aiError && <p className="text-destructive text-xs mt-2">{aiError}</p>}
+
+              {aiError && (
+                <p className="text-destructive text-xs mt-2 break-words">{aiError}</p>
+              )}
             </div>
           </div>
         </div>

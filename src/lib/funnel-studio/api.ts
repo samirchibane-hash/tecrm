@@ -8,7 +8,7 @@ export async function generateCopy(
   const { data, error } = await supabase.functions.invoke('funnel-copy-gen', {
     body: { formData, pages },
   })
-  if (error) throw new Error(error.message)
+  if (error) throw new Error(data?.error ?? error.message)
   if (data?.error) throw new Error(data.error)
   return data.copy
 }
