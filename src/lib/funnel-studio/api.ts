@@ -20,7 +20,7 @@ export async function generateFunnel(
   const { data, error } = await supabase.functions.invoke('funnel-generate', {
     body: { formData, aiCopy },
   })
-  if (error) throw new Error(error.message)
+  if (error) throw new Error(data?.error ?? error.message)
   if (data?.error) throw new Error(data.error)
   return { commitSha: data.commitSha }
 }

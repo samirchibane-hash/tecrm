@@ -128,13 +128,13 @@ serve(async (req) => {
     for (const page of pages) {
       const config = buildPageConfig(formData, page, aiCopy?.[page.slug]);
       const html = renderPage(templates, page.type, config);
-      files.push({ path: `funnels/${slug}/${page.slug}/index.html`, content: html });
+      files.push({ path: `public/funnels/${slug}/${page.slug}/index.html`, content: html });
     }
 
-    files.push({ path: `funnels/${slug}/vercel.json`, content: JSON.stringify(generateVercelConfig(pages), null, 2) });
+    files.push({ path: `public/funnels/${slug}/vercel.json`, content: JSON.stringify(generateVercelConfig(pages), null, 2) });
 
     if (logoBase64 && logoExt) {
-      files.push({ path: `funnels/${slug}/assets/images/logo.${logoExt}`, content: logoBase64, encoding: "base64" });
+      files.push({ path: `public/funnels/${slug}/assets/images/logo.${logoExt}`, content: logoBase64, encoding: "base64" });
     }
 
     const octokit = new Octokit({ auth: githubToken });
