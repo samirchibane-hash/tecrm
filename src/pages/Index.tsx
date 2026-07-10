@@ -604,7 +604,7 @@ const Index = () => {
 
         {/* ── Task List ─────────────────────────────────────────────────────── */}
         <div className="mt-8">
-          <TaskList accounts={dbAccounts} />
+          <TaskList accounts={dbAccounts} changeLogOptions={settings.change_log_options} />
         </div>
       </div>
     </div>

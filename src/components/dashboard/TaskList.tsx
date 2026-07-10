@@ -17,14 +17,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { getPalette } from "@/components/dashboard/AccountCard";
+import type { ChangeLogOption } from "@/hooks/useSettings";
 
 type Priority = "low" | "medium" | "high";
 type Filter = "active" | "all" | "done";
+
+// Separator used to encode a "Category › Sub-option" path in a single field.
+const CAT_SEP = " › ";
 
 interface Task {
   id: string;
   title: string;
   account_name: string | null;
+  category: string | null;
   priority: string;
   completed: boolean;
   due_date: string | null;
@@ -54,6 +60,7 @@ const PRIORITY = {
 
 interface TaskListProps {
   accounts: { account_name: string }[];
+  changeLogOptions?: ChangeLogOption[];
 }
 
 function formatFileSize(bytes: number): string {
@@ -87,13 +94,79 @@ function renderWithLinks(text: string): React.ReactNode[] {
   return result;
 }
 
-export function TaskList({ accounts }: TaskListProps) {
+// Grouped native dropdown fed by the Change Log Options configured in Settings.
+// Each category becomes an <optgroup>; sub-options are encoded as "Category › Sub".
+function CategorySelect({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: ChangeLogOption[];
+}) {
+  if (options.length === 0) return null;
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="text-xs h-7 px-2 rounded border border-border bg-background text-foreground max-w-[160px]"
+    >
+      <option value="">No category</option>
+      {options.map((opt) =>
+        opt.sub_options.length > 0 ? (
+          <optgroup key={opt.label} label={opt.label}>
+            <option value={opt.label}>{opt.label} (general)</option>
+            {opt.sub_options.map((sub) => (
+              <option key={sub} value={`${opt.label}${CAT_SEP}${sub}`}>
+                {sub}
+              </option>
+            ))}
+          </optgroup>
+        ) : (
+          <option key={opt.label} value={opt.label}>
+            {opt.label}
+          </option>
+        )
+      )}
+    </select>
+  );
+}
+
+// Colored pill for a task's Change Log category, matching the palette used
+// across the dashboard (color keyed on the top-level category).
+function CategoryBadge({
+  category,
+  options,
+}: {
+  category: string;
+  options: ChangeLogOption[];
+}) {
+  const [topLabel, ...rest] = category.split(CAT_SEP);
+  const leaf = rest.length > 0 ? rest.join(CAT_SEP) : topLabel;
+  const pal = getPalette(topLabel, options);
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-medium max-w-[130px]",
+        pal.badge
+      )}
+      title={category}
+    >
+      <span className={cn("inline-block h-1.5 w-1.5 rounded-full shrink-0", pal.dot)} />
+      <span className="truncate">{leaf}</span>
+    </span>
+  );
+}
+
+export function TaskList({ accounts, changeLogOptions = [] }: TaskListProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [filter, setFilter] = useState<Filter>("active");
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newPriority, setNewPriority] = useState<Priority>("medium");
   const [newAccount, setNewAccount] = useState("");
+  const [newCategory, setNewCategory] = useState("");
   const [newDueDate, setNewDueDate] = useState("");
 
   const { data: tasks = [], refetch } = useQuery({
@@ -144,6 +217,7 @@ export function TaskList({ accounts }: TaskListProps) {
     setNewTitle("");
     setNewPriority("medium");
     setNewAccount("");
+    setNewCategory("");
     setNewDueDate("");
   }
 
@@ -153,6 +227,7 @@ export function TaskList({ accounts }: TaskListProps) {
       title: newTitle.trim(),
       priority: newPriority,
       account_name: newAccount || null,
+      category: newCategory || null,
       due_date: newDueDate || null,
     });
     cancelAdd();
@@ -169,7 +244,7 @@ export function TaskList({ accounts }: TaskListProps) {
 
   async function handleSave(
     id: string,
-    updates: { title: string; priority: string; account_name: string | null; due_date: string | null }
+    updates: { title: string; priority: string; account_name: string | null; category: string | null; due_date: string | null }
   ) {
     await supabase
       .from("tasks")
@@ -235,6 +310,7 @@ export function TaskList({ accounts }: TaskListProps) {
             key={task.id}
             task={task}
             accounts={accounts}
+            changeLogOptions={changeLogOptions}
             commentCount={commentCounts[task.id] ?? 0}
             onToggle={handleToggle}
             onSave={handleSave}
@@ -288,6 +364,12 @@ export function TaskList({ accounts }: TaskListProps) {
                 </select>
               )}
 
+              <CategorySelect
+                value={newCategory}
+                onChange={setNewCategory}
+                options={changeLogOptions}
+              />
+
               <input
                 type="date"
                 value={newDueDate}
@@ -325,6 +407,7 @@ export function TaskList({ accounts }: TaskListProps) {
 function TaskRow({
   task,
   accounts,
+  changeLogOptions,
   commentCount,
   onToggle,
   onSave,
@@ -333,9 +416,10 @@ function TaskRow({
 }: {
   task: Task;
   accounts: { account_name: string }[];
+  changeLogOptions: ChangeLogOption[];
   commentCount: number;
   onToggle: (t: Task) => void;
-  onSave: (id: string, updates: { title: string; priority: string; account_name: string | null; due_date: string | null }) => void;
+  onSave: (id: string, updates: { title: string; priority: string; account_name: string | null; category: string | null; due_date: string | null }) => void;
   onDelete: (id: string) => void;
   onCommentCountChange: () => void;
 }) {
@@ -346,6 +430,7 @@ function TaskRow({
   const [editTitle, setEditTitle] = useState(task.title);
   const [editPriority, setEditPriority] = useState<Priority>((task.priority as Priority) ?? "medium");
   const [editAccount, setEditAccount] = useState(task.account_name ?? "");
+  const [editCategory, setEditCategory] = useState(task.category ?? "");
   const [editDueDate, setEditDueDate] = useState(task.due_date ?? "");
 
   const priority = PRIORITY[(task.priority as Priority) ?? "medium"];
@@ -364,6 +449,7 @@ function TaskRow({
     setEditTitle(task.title);
     setEditPriority((task.priority as Priority) ?? "medium");
     setEditAccount(task.account_name ?? "");
+    setEditCategory(task.category ?? "");
     setEditDueDate(task.due_date ?? "");
     setIsEditing(true);
     setTimeout(() => editTitleRef.current?.focus(), 40);
@@ -379,6 +465,7 @@ function TaskRow({
       title: editTitle.trim(),
       priority: editPriority,
       account_name: editAccount || null,
+      category: editCategory || null,
       due_date: editDueDate || null,
     });
     setIsEditing(false);
@@ -427,6 +514,12 @@ function TaskRow({
               ))}
             </select>
           )}
+
+          <CategorySelect
+            value={editCategory}
+            onChange={setEditCategory}
+            options={changeLogOptions}
+          />
 
           <input
             type="date"
@@ -481,6 +574,9 @@ function TaskRow({
             <span className="px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground text-[11px] font-medium max-w-[110px] truncate">
               {task.account_name}
             </span>
+          )}
+          {task.category && (
+            <CategoryBadge category={task.category} options={changeLogOptions} />
           )}
           <span
             className={cn("inline-block h-2 w-2 rounded-full shrink-0", priority.dot)}
