@@ -14,6 +14,7 @@ export const CAT_SEP = " › ";
 export interface Task {
   id: string;
   title: string;
+  description: string | null;
   account_name: string | null;
   category: string | null;
   assigned_to: string | null;

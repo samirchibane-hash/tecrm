@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   AlertDialog,
@@ -60,12 +61,17 @@ export function TaskDetailSheet({
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Local, editable mirror of the task's title (saved on blur / Enter).
+  // Local, editable mirrors of the task's title + description (saved on blur).
   const [title, setTitle] = useState("");
   const [savingTitle, setSavingTitle] = useState(false);
+  const [description, setDescription] = useState("");
+  const [savingDescription, setSavingDescription] = useState(false);
 
   useEffect(() => {
-    if (task) setTitle(task.title);
+    if (task) {
+      setTitle(task.title);
+      setDescription(task.description ?? "");
+    }
   }, [task?.id]);
 
   const priority = PRIORITY[priorityOf(task?.priority)];
@@ -122,6 +128,27 @@ export function TaskDetailSheet({
           toast.success("Task updated");
         },
         onError: () => setSavingTitle(false),
+      }
+    );
+  }
+
+  function saveDescription() {
+    if (!task) return;
+    const trimmed = description.trim();
+    const current = task.description ?? "";
+    if (trimmed === current) {
+      setDescription(current);
+      return;
+    }
+    setSavingDescription(true);
+    patch.mutate(
+      { description: trimmed || null },
+      {
+        onSuccess: () => {
+          setSavingDescription(false);
+          toast.success("Task updated");
+        },
+        onError: () => setSavingDescription(false),
       }
     );
   }
@@ -202,6 +229,26 @@ export function TaskDetailSheet({
                       <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-muted-foreground" />
                     )}
                   </div>
+                </section>
+
+                {/* Description */}
+                <section>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
+                    Description
+                    {savingDescription && (
+                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                    )}
+                  </h3>
+                  <Textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    onBlur={saveDescription}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") setDescription(task.description ?? "");
+                    }}
+                    placeholder="Add details, context, or a checklist…"
+                    className="text-sm min-h-[96px] resize-y"
+                  />
                 </section>
 
                 {/* Details */}

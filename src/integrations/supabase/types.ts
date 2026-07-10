@@ -869,6 +869,7 @@ export type Database = {
           category: string | null
           completed: boolean
           created_at: string
+          description: string | null
           due_date: string | null
           id: string
           priority: string
@@ -881,6 +882,7 @@ export type Database = {
           category?: string | null
           completed?: boolean
           created_at?: string
+          description?: string | null
           due_date?: string | null
           id?: string
           priority?: string
@@ -893,6 +895,7 @@ export type Database = {
           category?: string | null
           completed?: boolean
           created_at?: string
+          description?: string | null
           due_date?: string | null
           id?: string
           priority?: string

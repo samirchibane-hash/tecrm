@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, Circle, ListTodo, MessageSquare, Plus, User } from "lucide-react";
+import { AlignLeft, CheckCircle2, Circle, ListTodo, MessageSquare, Plus, User } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import type { ChangeLogOption } from "@/hooks/useSettings";
@@ -217,6 +217,12 @@ function TaskRow({
           </span>
         )}
         {task.category && <CategoryBadge category={task.category} options={changeLogOptions} />}
+        {task.description && (
+          <AlignLeft
+            className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0"
+            aria-label="Has description"
+          />
+        )}
         {task.assigned_to && (
           <span
             className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground text-[11px] font-medium max-w-[110px]"

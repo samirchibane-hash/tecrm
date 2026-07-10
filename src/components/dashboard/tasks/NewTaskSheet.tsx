@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import type { ChangeLogOption } from "@/hooks/useSettings";
 import { AssigneeSelect } from "@/components/AssigneeSelect";
@@ -21,6 +22,7 @@ export function NewTaskSheet({ open, onOpenChange, accounts, changeLogOptions }:
   const queryClient = useQueryClient();
 
   const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
   const [account, setAccount] = useState("");
   const [category, setCategory] = useState("");
@@ -30,6 +32,7 @@ export function NewTaskSheet({ open, onOpenChange, accounts, changeLogOptions }:
   function reset() {
     onOpenChange(false);
     setTitle("");
+    setDescription("");
     setPriority("medium");
     setAccount("");
     setCategory("");
@@ -41,6 +44,7 @@ export function NewTaskSheet({ open, onOpenChange, accounts, changeLogOptions }:
     mutationFn: async () => {
       const { error } = await supabase.from("tasks").insert({
         title: title.trim(),
+        description: description.trim() || null,
         priority,
         account_name: account || null,
         category: category || null,
@@ -89,6 +93,19 @@ export function NewTaskSheet({ open, onOpenChange, accounts, changeLogOptions }:
               }}
               placeholder="What needs to get done?"
               className="text-sm h-10"
+            />
+          </div>
+
+          {/* Description */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">
+              Description <span className="text-muted-foreground/50">(optional)</span>
+            </label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Add details, context, or a checklist…"
+              className="text-sm min-h-[88px] resize-y"
             />
           </div>
 
