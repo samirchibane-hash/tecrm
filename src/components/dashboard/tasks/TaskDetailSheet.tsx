@@ -8,6 +8,7 @@ import {
   ListTodo,
   Loader2,
   Trash2,
+  User,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -26,6 +27,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { ChangeLogOption } from "@/hooks/useSettings";
+import { AssigneeSelect } from "@/components/AssigneeSelect";
 import { TaskComments } from "./TaskComments";
 import {
   CategoryBadge,
@@ -156,6 +158,12 @@ export function TaskDetailSheet({
                         </span>
                       )}
                       {task.category && <CategoryBadge category={task.category} options={changeLogOptions} />}
+                      {task.assigned_to && (
+                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground max-w-[140px]">
+                          <User className="h-2.5 w-2.5 shrink-0" />
+                          <span className="truncate">{task.assigned_to}</span>
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1.5">
                       Created {format(new Date(task.created_at), "MMM d, yyyy · h:mm a")}
@@ -240,6 +248,16 @@ export function TaskDetailSheet({
                         />
                       </div>
                     )}
+
+                    {/* Assignee */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Assign to</label>
+                      <AssigneeSelect
+                        value={task.assigned_to ?? ""}
+                        onChange={(v) => patch.mutate({ assigned_to: v || null })}
+                        className="w-full"
+                      />
+                    </div>
 
                     {/* Due date */}
                     <div className="space-y-1.5">

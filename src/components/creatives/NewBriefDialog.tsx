@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AssigneeSelect } from "@/components/AssigneeSelect";
 import { Image as ImageIcon, Film, ClipboardList, Loader2, Check, ChevronsUpDown, Settings2, Plus, Trash2, ArrowLeft } from "lucide-react";
 
 type OptionType = "ad_angle" | "offer_type";
@@ -398,7 +399,7 @@ export function NewBriefDialog({ open, onOpenChange }: Props) {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Assign To <span className="text-muted-foreground/50">(optional)</span></label>
-                  <Input placeholder="Editor name" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} className="h-9 text-sm" />
+                  <AssigneeSelect value={assignedTo} onChange={setAssignedTo} className="h-9 w-full" placeholder="Unassigned" />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Notes <span className="text-muted-foreground/50">(optional)</span></label>

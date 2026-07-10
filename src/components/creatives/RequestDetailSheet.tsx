@@ -17,6 +17,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { AssigneeSelect } from "@/components/AssigneeSelect";
 import {
   CreativeRequest, RequestComment,
   STATUS_STEPS, STATUS_LABEL, STATUS_BADGE, STATUS_DOT,
@@ -269,16 +270,17 @@ export function RequestDetailSheet({ request, onClose, onRequestChange }: Props)
               {/* Assigned to */}
               <section>
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Assigned To</h3>
-                <div className="flex gap-2">
-                  <Input className="text-sm h-9" placeholder="Name of creative editor…"
-                    value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") saveAssignee.mutate({ id: request.id, name: assignedTo }); }}
+                <div className="flex items-center gap-2">
+                  <AssigneeSelect
+                    className="h-9 w-full"
+                    placeholder="Unassigned"
+                    value={assignedTo}
+                    onChange={(name) => {
+                      setAssignedTo(name);
+                      saveAssignee.mutate({ id: request.id, name });
+                    }}
                   />
-                  <Button size="sm" variant="outline" className="shrink-0"
-                    disabled={assignedTo === (request.assigned_to ?? "") || assignSaving}
-                    onClick={() => saveAssignee.mutate({ id: request.id, name: assignedTo })}>
-                    {assignSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                  </Button>
+                  {assignSaving && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />}
                 </div>
               </section>
 

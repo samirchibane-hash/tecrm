@@ -865,6 +865,7 @@ export type Database = {
       tasks: {
         Row: {
           account_name: string | null
+          assigned_to: string | null
           category: string | null
           completed: boolean
           created_at: string
@@ -876,6 +877,7 @@ export type Database = {
         }
         Insert: {
           account_name?: string | null
+          assigned_to?: string | null
           category?: string | null
           completed?: boolean
           created_at?: string
@@ -887,6 +889,7 @@ export type Database = {
         }
         Update: {
           account_name?: string | null
+          assigned_to?: string | null
           category?: string | null
           completed?: boolean
           created_at?: string
@@ -895,6 +898,27 @@ export type Database = {
           priority?: string
           title?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      team_members: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          position: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          position?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          position?: string | null
         }
         Relationships: []
       }

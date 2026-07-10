@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import type { ChangeLogOption } from "@/hooks/useSettings";
+import { AssigneeSelect } from "@/components/AssigneeSelect";
 import { CategorySelect, Priority, PrioritySegmented } from "./shared";
 
 interface Props {
@@ -23,6 +24,7 @@ export function NewTaskSheet({ open, onOpenChange, accounts, changeLogOptions }:
   const [priority, setPriority] = useState<Priority>("medium");
   const [account, setAccount] = useState("");
   const [category, setCategory] = useState("");
+  const [assignedTo, setAssignedTo] = useState("");
   const [dueDate, setDueDate] = useState("");
 
   function reset() {
@@ -31,6 +33,7 @@ export function NewTaskSheet({ open, onOpenChange, accounts, changeLogOptions }:
     setPriority("medium");
     setAccount("");
     setCategory("");
+    setAssignedTo("");
     setDueDate("");
   }
 
@@ -41,6 +44,7 @@ export function NewTaskSheet({ open, onOpenChange, accounts, changeLogOptions }:
         priority,
         account_name: account || null,
         category: category || null,
+        assigned_to: assignedTo || null,
         due_date: dueDate || null,
       });
       if (error) throw error;
@@ -129,6 +133,14 @@ export function NewTaskSheet({ open, onOpenChange, accounts, changeLogOptions }:
               />
             </div>
           )}
+
+          {/* Assignee */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">
+              Assign to <span className="text-muted-foreground/50">(optional)</span>
+            </label>
+            <AssigneeSelect value={assignedTo} onChange={setAssignedTo} className="w-full" />
+          </div>
 
           {/* Due date */}
           <div className="space-y-1.5">

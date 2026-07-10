@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, Circle, ListTodo, MessageSquare, Plus } from "lucide-react";
+import { CheckCircle2, Circle, ListTodo, MessageSquare, Plus, User } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import type { ChangeLogOption } from "@/hooks/useSettings";
@@ -217,6 +217,15 @@ function TaskRow({
           </span>
         )}
         {task.category && <CategoryBadge category={task.category} options={changeLogOptions} />}
+        {task.assigned_to && (
+          <span
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground text-[11px] font-medium max-w-[110px]"
+            title={`Assigned to ${task.assigned_to}`}
+          >
+            <User className="h-2.5 w-2.5 shrink-0" />
+            <span className="truncate">{task.assigned_to}</span>
+          </span>
+        )}
         <span
           className={cn("inline-block h-2 w-2 rounded-full shrink-0", priority.dot)}
           title={`${priority.label} priority`}

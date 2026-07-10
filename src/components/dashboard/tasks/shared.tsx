@@ -16,6 +16,7 @@ export interface Task {
   title: string;
   account_name: string | null;
   category: string | null;
+  assigned_to: string | null;
   priority: string;
   completed: boolean;
   due_date: string | null;

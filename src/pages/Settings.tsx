@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Settings as SettingsIcon, Plus, X, Eye, EyeOff, ChevronDown, ChevronRight, Phone, ClipboardList, ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, Plus, X, Eye, EyeOff, ChevronDown, ChevronRight, Phone, ClipboardList, ArrowUp, ArrowDown, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ALL_KPIS, getPalette, type KpiKey } from "@/components/dashboard/AccountCard";
 import { useSettings, type ChangeLogOption, type OnboardingChecklists, type ChecklistSection, ONBOARDING_SERVICES } from "@/hooks/useSettings";
+import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -41,6 +42,40 @@ const Settings = () => {
   const [expandedChecklistSections, setExpandedChecklistSections] = useState<Record<string, boolean>>({});
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [editingSectionValue, setEditingSectionValue] = useState("");
+
+  // Team members
+  const { members: teamMembers } = useTeamMembers();
+  const [newMemberName, setNewMemberName] = useState("");
+  const [newMemberPosition, setNewMemberPosition] = useState("");
+
+  const addMember = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("team_members").insert({
+        name: newMemberName.trim(),
+        position: newMemberPosition.trim() || null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["team-members"] });
+      setNewMemberName("");
+      setNewMemberPosition("");
+      toast.success("Team member added");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const removeMember = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("team_members").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["team-members"] });
+      toast.success("Team member removed");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
 
   // Full accounts list with IDs (needed for feature flag upserts)
   const { data: accountRows = [] } = useQuery({
@@ -307,6 +342,81 @@ const Settings = () => {
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Team Members */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary" />
+              Team Members
+            </CardTitle>
+            <CardDescription>
+              Add the people on your team and their position. They become available to assign
+              Creative Requests and Tasks to. No login or invite is sent.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Add member */}
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                placeholder="Name (e.g. Jordan Lee)"
+                value={newMemberName}
+                onChange={(e) => setNewMemberName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && newMemberName.trim() && addMember.mutate()}
+                className="flex-1"
+              />
+              <Input
+                placeholder="Position (e.g. Video Editor)"
+                value={newMemberPosition}
+                onChange={(e) => setNewMemberPosition(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && newMemberName.trim() && addMember.mutate()}
+                className="flex-1"
+              />
+              <Button
+                size="sm"
+                onClick={() => addMember.mutate()}
+                disabled={!newMemberName.trim() || addMember.isPending}
+                className="shrink-0"
+              >
+                <Plus className="mr-1 h-4 w-4" /> Add
+              </Button>
+            </div>
+
+            {teamMembers.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No team members yet. Add someone to start assigning work.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {teamMembers.map((m) => (
+                  <div
+                    key={m.id}
+                    className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                        {m.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{m.name}</p>
+                        {m.position && (
+                          <p className="text-xs text-muted-foreground truncate">{m.position}</p>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeMember.mutate(m.id)}
+                      className="text-muted-foreground hover:text-destructive transition-colors p-1 shrink-0"
+                      title="Remove team member"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
