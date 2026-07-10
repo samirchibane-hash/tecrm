@@ -53,7 +53,7 @@ export function TemplateDetailSheet({ group, requests, accountColors, onClose, o
   );
 
   const clientCount = Object.keys(clients).length;
-  const doneCount = requests.filter((r) => r.status === "done").length;
+  const doneCount = requests.filter((r) => r.status === "launched").length;
 
   return (
     <Sheet open={!!group} onOpenChange={(open) => { if (!open) onClose(); }}>

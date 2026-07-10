@@ -60,24 +60,24 @@ const CATEGORY_SVG_COLORS: Record<string, string> = {
 // ─── Creative request status display ─────────────────────────────────────────
 
 const CREATIVE_STATUS_BADGE: Record<string, string> = {
-  requested:   "bg-slate-100 text-slate-700",
-  in_progress: "bg-blue-100 text-blue-800",
-  in_review:   "bg-amber-100 text-amber-800",
-  done:        "bg-emerald-100 text-emerald-800",
+  assigned:  "bg-slate-100 text-slate-700",
+  reviewing: "bg-blue-100 text-blue-800",
+  approved:  "bg-amber-100 text-amber-800",
+  launched:  "bg-emerald-100 text-emerald-800",
 };
 
 const CREATIVE_STATUS_DOT: Record<string, string> = {
-  requested:   "bg-slate-400",
-  in_progress: "bg-blue-400",
-  in_review:   "bg-amber-400",
-  done:        "bg-emerald-500",
+  assigned:  "bg-slate-400",
+  reviewing: "bg-blue-400",
+  approved:  "bg-amber-400",
+  launched:  "bg-emerald-500",
 };
 
 const CREATIVE_STATUS_LABEL: Record<string, string> = {
-  requested:   "Requested",
-  in_progress: "In Progress",
-  in_review:   "In Review",
-  done:        "Delivered",
+  assigned:  "Assigned",
+  reviewing: "Reviewing",
+  approved:  "Approved",
+  launched:  "Launched",
 };
 
 // ─── Appointment outcome statuses ──────────────────────────────────────────────

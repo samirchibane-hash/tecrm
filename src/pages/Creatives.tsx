@@ -245,7 +245,7 @@ const Creatives = () => {
     requests.forEach((r) => {
       if (!map[r.template_name]) map[r.template_name] = { total: 0, open: 0 };
       map[r.template_name].total++;
-      if (r.status !== "done") map[r.template_name].open++;
+      if (r.status !== "launched") map[r.template_name].open++;
     });
     return map;
   }, [requests]);
@@ -271,13 +271,13 @@ const Creatives = () => {
 
   // Group requests by status for the kanban-style list
   const requestsByStatus = useMemo(() => {
-    const groups: Record<string, CreativeRequest[]> = { requested: [], in_progress: [], in_review: [], done: [] };
+    const groups: Record<string, CreativeRequest[]> = { assigned: [], reviewing: [], approved: [], launched: [] };
     filteredRequests.forEach((r) => { groups[r.status]?.push(r); });
     return groups;
   }, [filteredRequests]);
 
   const openRequestCount = useMemo(() =>
-    requests.filter((r) => r.status !== "done").length, [requests]);
+    requests.filter((r) => r.status !== "launched").length, [requests]);
 
   const deleteRequest = useMutation({
     mutationFn: async (id: string) => {

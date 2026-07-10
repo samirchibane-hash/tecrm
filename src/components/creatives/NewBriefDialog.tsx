@@ -282,7 +282,7 @@ export function NewBriefDialog({ open, onOpenChange }: Props) {
       const { data, error } = await supabase.from("creative_requests").insert({
         account_name: client, ad_type: adType, template_name: template,
         ad_angle: angle, offer_type: offer,
-        notes: notes.trim() || null, assigned_to: assignedTo.trim() || null, status: "requested",
+        notes: notes.trim() || null, assigned_to: assignedTo.trim() || null, status: "assigned",
       }).select().single();
       if (error) throw error;
       return data;

@@ -603,14 +603,14 @@ const Index = () => {
 // ── Creative Requests dashboard section ──────────────────────────────────────
 
 const REQ_STATUS_BADGE: Record<string, string> = {
-  requested: "bg-blue-100 text-blue-800",
-  in_progress: "bg-amber-100 text-amber-800",
-  in_review: "bg-orange-100 text-orange-800",
+  assigned: "bg-blue-100 text-blue-800",
+  reviewing: "bg-amber-100 text-amber-800",
+  approved: "bg-orange-100 text-orange-800",
 };
 const REQ_STATUS_LABEL: Record<string, string> = {
-  requested: "Requested",
-  in_progress: "In Progress",
-  in_review: "In Review",
+  assigned: "Assigned",
+  reviewing: "Reviewing",
+  approved: "Approved",
 };
 
 function CreativeRequestsSection() {
@@ -623,7 +623,7 @@ function CreativeRequestsSection() {
       const { data, error } = await supabase
         .from("creative_requests")
         .select("*")
-        .neq("status", "done")
+        .neq("status", "launched")
         .order("created_at", { ascending: false })
         .limit(5);
       if (error) throw error;

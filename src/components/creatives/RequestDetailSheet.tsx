@@ -10,9 +10,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
-  Image as ImageIcon, Film, Check, Loader2, RotateCcw,
-  CheckCircle2, Send, MessageSquare, FolderOpen, FolderPlus, ExternalLink, Trash2,
+  Image as ImageIcon, Film, Check, Loader2,
+  Send, MessageSquare, FolderOpen, FolderPlus, ExternalLink, Trash2,
 } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -21,7 +24,6 @@ import { AssigneeSelect } from "@/components/AssigneeSelect";
 import {
   CreativeRequest, RequestComment,
   STATUS_STEPS, STATUS_LABEL, STATUS_BADGE, STATUS_DOT,
-  nextStatus, nextStatusLabel,
   type RequestStatus,
 } from "./types";
 
@@ -348,40 +350,32 @@ export function RequestDetailSheet({ request, onClose, onRequestChange }: Props)
                 </div>
               </section>
 
-              {/* Status actions */}
-              {request.status !== "done" && (
-                <section>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Actions</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {nextStatus(request.status) && (
-                      <Button size="sm" className="gap-1.5"
-                        onClick={() => updateStatus.mutate({ id: request.id, status: nextStatus(request.status)! })}
-                        disabled={updateStatus.isPending}>
-                        {updateStatus.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                        {nextStatusLabel(request.status)}
-                      </Button>
-                    )}
-                    {request.status === "in_review" && (
-                      <Button size="sm" variant="outline" className="gap-1.5"
-                        onClick={() => updateStatus.mutate({ id: request.id, status: "in_progress" })}
-                        disabled={updateStatus.isPending}>
-                        <RotateCcw className="h-3.5 w-3.5" /> Request Changes
-                      </Button>
-                    )}
-                  </div>
-                </section>
-              )}
-
-              {request.status === "done" && (
-                <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span className="text-sm font-medium text-emerald-800">Completed</span>
-                  <Button size="sm" variant="ghost" className="ml-auto h-7 text-xs text-muted-foreground"
-                    onClick={() => updateStatus.mutate({ id: request.id, status: "in_review" })}>
-                    Reopen
-                  </Button>
+              {/* Stage */}
+              <section>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Stage</h3>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={request.status}
+                    onValueChange={(v) => updateStatus.mutate({ id: request.id, status: v })}
+                    disabled={updateStatus.isPending}
+                  >
+                    <SelectTrigger className="h-9 w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STATUS_STEPS.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          <span className="flex items-center gap-2">
+                            <span className={cn("h-2 w-2 rounded-full", STATUS_DOT[s])} />
+                            {STATUS_LABEL[s]}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {updateStatus.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />}
                 </div>
-              )}
+              </section>
 
               {/* Comments */}
               <section className="pb-2">
