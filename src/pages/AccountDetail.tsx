@@ -226,7 +226,7 @@ function StatCard({ label, value, icon: Icon, isActive, onClick }: {
 
 type Task = {
   id: string; title: string; account_name: string | null;
-  priority: string; completed: boolean; due_date: string | null; created_at: string;
+  priority: string; completed: boolean; stage: string; due_date: string | null; created_at: string;
 };
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -461,7 +461,11 @@ const AccountDetail = () => {
   }
 
   async function handleToggleTask(task: Task) {
-    await supabase.from("tasks").update({ completed: !task.completed }).eq("id", task.id);
+    const completed = !task.completed;
+    await supabase
+      .from("tasks")
+      .update({ completed, stage: completed ? "launched" : "assigned" })
+      .eq("id", task.id);
     refetchTasks();
   }
 

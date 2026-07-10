@@ -874,6 +874,7 @@ export type Database = {
           due_date: string | null
           id: string
           priority: string
+          stage: string
           title: string
           updated_at: string
         }
@@ -888,6 +889,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           priority?: string
+          stage?: string
           title: string
           updated_at?: string
         }
@@ -902,6 +904,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           priority?: string
+          stage?: string
           title?: string
           updated_at?: string
         }

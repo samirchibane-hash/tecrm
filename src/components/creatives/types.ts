@@ -22,26 +22,12 @@ export type RequestComment = {
   created_at: string;
 };
 
-export const STATUS_STEPS = ["assigned", "reviewing", "approved", "launched"] as const;
-export type RequestStatus = typeof STATUS_STEPS[number];
+// Creative request stages are the shared pipeline stages (see src/lib/stages.ts),
+// re-exported under the STATUS_* names this feature already uses.
+import { STAGE_STEPS, STAGE_LABEL, STAGE_BADGE, STAGE_DOT, type Stage } from "@/lib/stages";
 
-export const STATUS_LABEL: Record<RequestStatus, string> = {
-  assigned: "Assigned",
-  reviewing: "Reviewing",
-  approved: "Approved",
-  launched: "Launched",
-};
-
-export const STATUS_BADGE: Record<RequestStatus, string> = {
-  assigned: "bg-blue-100 text-blue-800",
-  reviewing: "bg-amber-100 text-amber-800",
-  approved: "bg-orange-100 text-orange-800",
-  launched: "bg-emerald-100 text-emerald-800",
-};
-
-export const STATUS_DOT: Record<RequestStatus, string> = {
-  assigned: "bg-blue-400",
-  reviewing: "bg-amber-400",
-  approved: "bg-orange-400",
-  launched: "bg-emerald-500",
-};
+export const STATUS_STEPS = STAGE_STEPS;
+export type RequestStatus = Stage;
+export const STATUS_LABEL = STAGE_LABEL;
+export const STATUS_BADGE = STAGE_BADGE;
+export const STATUS_DOT = STAGE_DOT;

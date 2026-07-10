@@ -3,8 +3,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
   Calendar,
-  Check,
-  CheckCircle2,
   ListTodo,
   Loader2,
   Paperclip,
@@ -32,6 +30,8 @@ import {
 import type { Json } from "@/integrations/supabase/types";
 import type { ChangeLogOption } from "@/hooks/useSettings";
 import { AssigneeSelect } from "@/components/AssigneeSelect";
+import { StageSelect } from "@/components/StageSelect";
+import { STAGE_BADGE, STAGE_LABEL, type Stage } from "@/lib/stages";
 import { TaskComments } from "./TaskComments";
 import {
   CategoryBadge,
@@ -224,15 +224,9 @@ export function TaskDetailSheet({
                       <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", priority.badge)}>
                         {priority.label} Priority
                       </span>
-                      {task.completed ? (
-                        <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                          Completed
-                        </span>
-                      ) : (
-                        <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
-                          Active
-                        </span>
-                      )}
+                      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", STAGE_BADGE[task.stage as Stage])}>
+                        {STAGE_LABEL[task.stage as Stage] ?? task.stage}
+                      </span>
                       {task.account_name && (
                         <span className="rounded-full px-2 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground max-w-[140px] truncate">
                           {task.account_name}
@@ -459,37 +453,17 @@ export function TaskDetailSheet({
                   </div>
                 </section>
 
-                {/* Completion */}
+                {/* Stage */}
                 <section>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Status</h3>
-                  {task.completed ? (
-                    <div className="flex items-center gap-2 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                      <span className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Completed</span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="ml-auto h-7 text-xs text-muted-foreground"
-                        onClick={() => patch.mutate({ completed: false })}
-                      >
-                        Reopen
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      className="w-full gap-1.5"
-                      onClick={() => {
-                        patch.mutate(
-                          { completed: true },
-                          { onSuccess: () => toast.success("Task completed") }
-                        );
-                      }}
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Stage</h3>
+                  <div className="flex items-center gap-2">
+                    <StageSelect
+                      value={task.stage}
+                      onChange={(v) => patch.mutate({ stage: v, completed: v === "launched" })}
                       disabled={patch.isPending}
-                    >
-                      {patch.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                      Mark Complete
-                    </Button>
-                  )}
+                    />
+                    {patch.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />}
+                  </div>
                 </section>
 
                 {/* Comments */}

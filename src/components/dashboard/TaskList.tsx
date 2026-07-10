@@ -65,15 +65,18 @@ export function TaskList({ accounts, changeLogOptions = [] }: TaskListProps) {
   const activeCount = tasks.filter((t) => !t.completed).length;
   const doneCount = tasks.filter((t) => t.completed).length;
 
-  // Quick-toggle straight from the row without opening the sheet.
+  // Quick-toggle straight from the row without opening the sheet. Completion is
+  // the "Launched" stage; un-completing drops the task back to "Assigned".
   async function handleToggle(task: Task) {
+    const completed = !task.completed;
+    const stage = completed ? "launched" : "assigned";
     await supabase
       .from("tasks")
-      .update({ completed: !task.completed, updated_at: new Date().toISOString() })
+      .update({ completed, stage, updated_at: new Date().toISOString() })
       .eq("id", task.id);
     refetch();
     if (selectedTask?.id === task.id) {
-      setSelectedTask({ ...selectedTask, completed: !task.completed });
+      setSelectedTask({ ...selectedTask, completed, stage });
     }
   }
 

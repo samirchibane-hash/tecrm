@@ -13,9 +13,7 @@ import {
   Image as ImageIcon, Film, Check, Loader2,
   Send, MessageSquare, FolderOpen, FolderPlus, ExternalLink, Trash2,
 } from "lucide-react";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { StageSelect } from "@/components/StageSelect";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -354,25 +352,11 @@ export function RequestDetailSheet({ request, onClose, onRequestChange }: Props)
               <section>
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Stage</h3>
                 <div className="flex items-center gap-2">
-                  <Select
+                  <StageSelect
                     value={request.status}
-                    onValueChange={(v) => updateStatus.mutate({ id: request.id, status: v })}
+                    onChange={(v) => updateStatus.mutate({ id: request.id, status: v })}
                     disabled={updateStatus.isPending}
-                  >
-                    <SelectTrigger className="h-9 w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STATUS_STEPS.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          <span className="flex items-center gap-2">
-                            <span className={cn("h-2 w-2 rounded-full", STATUS_DOT[s])} />
-                            {STATUS_LABEL[s]}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  />
                   {updateStatus.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />}
                 </div>
               </section>
