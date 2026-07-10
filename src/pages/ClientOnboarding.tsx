@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { ArrowLeft, ExternalLink, Globe, Tag, MessageSquare, CheckSquare, Copy, Link2, Zap, CheckCircle2, Loader2, ArrowRight, AlertCircle, FolderOpen, Layers } from "lucide-react";
+import { ArrowLeft, ExternalLink, Globe, Tag, MessageSquare, CheckSquare, Copy, Link2, Zap, CheckCircle2, Loader2, ArrowRight, AlertCircle, FolderOpen } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -508,40 +508,6 @@ export default function ClientOnboarding() {
                   )}
                 </div>
               );
-            })()}
-
-            {/* Claude Funnel */}
-            {(() => {
-              const clientName = client.business_name ?? client.full_name ?? ''
-              const params = new URLSearchParams({
-                clientName,
-                city: client.city ?? '',
-                state: client.state ?? '',
-                phone: client.business_phone ?? '',
-                tecrmId: (client as any).account_id ?? '',
-              })
-              return (
-                <div className="rounded-xl border border-border bg-card p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Layers className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-semibold text-foreground">Claude Funnel</span>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="gap-1.5 text-xs h-7"
-                      onClick={() => navigate(`/funnel-studio?${params.toString()}`)}
-                    >
-                      <Layers className="h-3 w-3" />
-                      Launch Funnel Studio
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Generate a landing page funnel for <span className="font-medium">{clientName}</span> with client details pre-filled.
-                  </p>
-                </div>
-              )
             })()}
 
             {/* Progress bar */}

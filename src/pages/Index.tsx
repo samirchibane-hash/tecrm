@@ -21,7 +21,6 @@ import {
   Clock,
   Film,
   ClipboardList,
-  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
@@ -281,12 +280,6 @@ const Index = () => {
             <p className="mt-1 text-sm text-muted-foreground">Campaign performance overview</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/funnel-studio" className="gap-1.5">
-                <Layers className="h-4 w-4" />
-                <span className="text-xs hidden sm:inline">Funnel Studio</span>
-              </Link>
-            </Button>
             <Button variant="ghost" size="sm" asChild>
               <Link to="/creatives"><ImageIcon className="h-4 w-4" /></Link>
             </Button>
