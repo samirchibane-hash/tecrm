@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlignLeft, CheckCircle2, Circle, ListTodo, MessageSquare, Plus, User } from "lucide-react";
+import { AlignLeft, CheckCircle2, Circle, ListTodo, MessageSquare, Paperclip, Plus, User } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import type { ChangeLogOption } from "@/hooks/useSettings";
@@ -13,6 +13,7 @@ import {
   TaskFilter,
   getDueDateInfo,
   priorityOf,
+  toAttachments,
 } from "@/components/dashboard/tasks/shared";
 
 interface TaskListProps {
@@ -35,7 +36,10 @@ export function TaskList({ accounts, changeLogOptions = [] }: TaskListProps) {
         .order("due_date", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as Task[];
+      return (data ?? []).map((t) => ({
+        ...t,
+        description_attachments: toAttachments(t.description_attachments),
+      })) as Task[];
     },
   });
 
@@ -222,6 +226,17 @@ function TaskRow({
             className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0"
             aria-label="Has description"
           />
+        )}
+        {task.description_attachments.length > 0 && (
+          <span
+            className="flex items-center gap-0.5 text-muted-foreground/60 shrink-0"
+            title={`${task.description_attachments.length} attachment${task.description_attachments.length === 1 ? "" : "s"}`}
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+            <span className="text-[10px] font-semibold tabular-nums leading-none">
+              {task.description_attachments.length}
+            </span>
+          </span>
         )}
         {task.assigned_to && (
           <span

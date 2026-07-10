@@ -870,6 +870,7 @@ export type Database = {
           completed: boolean
           created_at: string
           description: string | null
+          description_attachments: Json
           due_date: string | null
           id: string
           priority: string
@@ -883,6 +884,7 @@ export type Database = {
           completed?: boolean
           created_at?: string
           description?: string | null
+          description_attachments?: Json
           due_date?: string | null
           id?: string
           priority?: string
@@ -896,6 +898,7 @@ export type Database = {
           completed?: boolean
           created_at?: string
           description?: string | null
+          description_attachments?: Json
           due_date?: string | null
           id?: string
           priority?: string

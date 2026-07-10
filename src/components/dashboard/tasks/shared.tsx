@@ -1,5 +1,7 @@
 import { format, isPast, isToday } from "date-fns";
+import { File as FileIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 import { getPalette } from "@/components/dashboard/AccountCard";
 import type { ChangeLogOption } from "@/hooks/useSettings";
 
@@ -15,6 +17,7 @@ export interface Task {
   id: string;
   title: string;
   description: string | null;
+  description_attachments: CommentAttachment[];
   account_name: string | null;
   category: string | null;
   assigned_to: string | null;
@@ -85,6 +88,33 @@ export function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// Normalize a raw jsonb value from the DB into a typed attachment list.
+export function toAttachments(value: unknown): CommentAttachment[] {
+  return Array.isArray(value) ? (value as CommentAttachment[]) : [];
+}
+
+// Upload files to the shared task-attachments bucket and return their metadata.
+// `prefix` lets callers namespace files (e.g. "desc/") within a task's folder.
+export async function uploadAttachments(
+  taskId: string,
+  files: File[],
+  prefix = ""
+): Promise<CommentAttachment[]> {
+  const uploaded: CommentAttachment[] = [];
+  for (const file of files) {
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${taskId}/${prefix}${Date.now()}_${safeName}`;
+    const { data, error } = await supabase.storage
+      .from("task-attachments")
+      .upload(path, file, { cacheControl: "3600", upsert: false });
+    if (!error && data) {
+      const { data: urlData } = supabase.storage.from("task-attachments").getPublicUrl(data.path);
+      uploaded.push({ name: file.name, url: urlData.publicUrl, size: file.size, type: file.type });
+    }
+  }
+  return uploaded;
+}
+
 export function renderWithLinks(text: string): React.ReactNode[] {
   const urlPattern = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g;
   const parts = text.split(urlPattern);
@@ -117,6 +147,58 @@ export function getDueDateInfo(due_date: string | null) {
   if (isPast(new Date(due_date + "T23:59:59")))
     return { label: format(d, "MMM d"), cls: "text-red-600 dark:text-red-400", overdue: true };
   return { label: format(d, "MMM d"), cls: "text-muted-foreground" };
+}
+
+// ── Attachment chip ───────────────────────────────────────────────────────────
+
+// Compact file pill shared by the create + detail sheets. When `href` is set the
+// name links out (new tab); otherwise it's a pending, not-yet-uploaded file.
+export function FileChip({
+  name,
+  size,
+  href,
+  onRemove,
+}: {
+  name: string;
+  size: number;
+  href?: string;
+  onRemove?: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] bg-muted rounded-md pl-2 pr-1.5 py-1 text-muted-foreground border border-border/50 max-w-[200px]">
+      <FileIcon className="h-3 w-3 shrink-0 text-blue-500" />
+      {href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="truncate font-medium hover:text-foreground hover:underline"
+          title={name}
+        >
+          {name}
+        </a>
+      ) : (
+        <span className="truncate font-medium" title={name}>
+          {name}
+        </span>
+      )}
+      <span className="text-muted-foreground/60 shrink-0">{formatFileSize(size)}</span>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className="ml-0.5 shrink-0 hover:text-destructive transition-colors"
+          title="Remove"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
+    </div>
+  );
 }
 
 // ── Category controls ─────────────────────────────────────────────────────────

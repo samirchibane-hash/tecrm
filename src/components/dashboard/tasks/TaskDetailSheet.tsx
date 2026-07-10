@@ -7,6 +7,8 @@ import {
   CheckCircle2,
   ListTodo,
   Loader2,
+  Paperclip,
+  Pencil,
   Trash2,
   User,
 } from "lucide-react";
@@ -27,18 +29,23 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import type { Json } from "@/integrations/supabase/types";
 import type { ChangeLogOption } from "@/hooks/useSettings";
 import { AssigneeSelect } from "@/components/AssigneeSelect";
 import { TaskComments } from "./TaskComments";
 import {
   CategoryBadge,
   CategorySelect,
+  CommentAttachment,
+  FileChip,
   PRIORITY,
   PrioritySegmented,
   Priority,
   Task,
   getDueDateInfo,
   priorityOf,
+  renderWithLinks,
+  uploadAttachments,
 } from "./shared";
 
 interface Props {
@@ -66,11 +73,19 @@ export function TaskDetailSheet({
   const [savingTitle, setSavingTitle] = useState(false);
   const [description, setDescription] = useState("");
   const [savingDescription, setSavingDescription] = useState(false);
+  const [editingDesc, setEditingDesc] = useState(false);
+
+  // Description attachments — mirrored locally so add/remove feel instant.
+  const [attachments, setAttachments] = useState<CommentAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (task) {
       setTitle(task.title);
       setDescription(task.description ?? "");
+      setAttachments(task.description_attachments ?? []);
+      setEditingDesc(false);
     }
   }, [task?.id]);
 
@@ -84,7 +99,9 @@ export function TaskDetailSheet({
       if (!task) return;
       const { error } = await supabase
         .from("tasks")
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        // `updates` is a Partial<Task>; description_attachments is typed as
+        // CommentAttachment[] here but jsonb on the column, so cast the payload.
+        .update({ ...updates, updated_at: new Date().toISOString() } as never)
         .eq("id", task.id);
       if (error) throw error;
     },
@@ -151,6 +168,43 @@ export function TaskDetailSheet({
         onError: () => setSavingDescription(false),
       }
     );
+  }
+
+  // Attachments write straight to the row (not through `patch`) so we can cast
+  // the CommentAttachment[] to the jsonb column type in one place.
+  async function persistAttachments(next: CommentAttachment[]) {
+    if (!task) return;
+    setAttachments(next);
+    const { error } = await supabase
+      .from("tasks")
+      .update({
+        description_attachments: next as unknown as Json,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", task.id);
+    if (error) {
+      toast.error(error.message);
+      setAttachments(task.description_attachments ?? []);
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    onTaskChange?.({ ...task, description_attachments: next });
+  }
+
+  async function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!task) return;
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (files.length === 0) return;
+    setUploading(true);
+    const uploaded = await uploadAttachments(task.id, files, "desc/");
+    setUploading(false);
+    if (uploaded.length === 0) {
+      toast.error("Upload failed");
+      return;
+    }
+    await persistAttachments([...attachments, ...uploaded]);
+    toast.success(uploaded.length === 1 ? "File attached" : `${uploaded.length} files attached`);
   }
 
   return (
@@ -233,22 +287,89 @@ export function TaskDetailSheet({
 
                 {/* Description */}
                 <section>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3 flex items-center gap-2">
-                    Description
-                    {savingDescription && (
-                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                      Description
+                      {savingDescription && (
+                        <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                      )}
+                    </h3>
+                    {!editingDesc && description && (
+                      <button
+                        onClick={() => setEditingDesc(true)}
+                        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Pencil className="h-3 w-3" /> Edit
+                      </button>
                     )}
-                  </h3>
-                  <Textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    onBlur={saveDescription}
-                    onKeyDown={(e) => {
-                      if (e.key === "Escape") setDescription(task.description ?? "");
-                    }}
-                    placeholder="Add details, context, or a checklist…"
-                    className="text-sm min-h-[96px] resize-y"
-                  />
+                  </div>
+
+                  {editingDesc ? (
+                    <Textarea
+                      autoFocus
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      onBlur={() => {
+                        saveDescription();
+                        setEditingDesc(false);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          setDescription(task.description ?? "");
+                          setEditingDesc(false);
+                        }
+                      }}
+                      placeholder="Add details, context, or a checklist… paste a link and it'll be clickable"
+                      className="text-sm min-h-[96px] resize-y"
+                    />
+                  ) : description ? (
+                    <div
+                      onClick={() => setEditingDesc(true)}
+                      className="text-sm text-foreground leading-relaxed whitespace-pre-wrap break-words rounded-md border border-transparent hover:border-border px-3 py-2 -mx-3 cursor-text transition-colors"
+                    >
+                      {renderWithLinks(description)}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setEditingDesc(true)}
+                      className="w-full text-left text-sm text-muted-foreground/60 italic rounded-md border border-dashed border-border px-3 py-2 hover:bg-muted/30 transition-colors"
+                    >
+                      Add details, context, or a checklist…
+                    </button>
+                  )}
+
+                  {/* Attachments */}
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                    {attachments.map((att, i) => (
+                      <FileChip
+                        key={i}
+                        name={att.name}
+                        size={att.size}
+                        href={att.url}
+                        onRemove={() => persistAttachments(attachments.filter((_, j) => j !== i))}
+                      />
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md border border-dashed border-border hover:bg-muted/40 disabled:opacity-50"
+                    >
+                      {uploading ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Paperclip className="h-3.5 w-3.5" />
+                      )}
+                      {uploading ? "Uploading…" : "Attach file"}
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={handleFiles}
+                    />
+                  </div>
                 </section>
 
                 {/* Details */}
