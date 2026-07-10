@@ -14,7 +14,6 @@ import {
   CalendarDays,
   Settings,
   Image as ImageIcon,
-  Crosshair,
   Sparkles,
   ArrowRight,
   ChevronRight,
@@ -282,9 +281,6 @@ const Index = () => {
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="ghost" size="sm" asChild>
               <Link to="/creatives"><ImageIcon className="h-4 w-4" /></Link>
-            </Button>
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/competitor-analysis"><Crosshair className="h-4 w-4" /></Link>
             </Button>
             <Button variant="ghost" size="sm" asChild>
               <Link to="/settings"><Settings className="h-4 w-4" /></Link>
