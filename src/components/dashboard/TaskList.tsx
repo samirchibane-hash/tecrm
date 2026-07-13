@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlignLeft, CheckCircle2, Circle, ListTodo, MessageSquare, Paperclip, Plus, User } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,6 +7,7 @@ import type { ChangeLogOption } from "@/hooks/useSettings";
 import { TaskDetailSheet } from "@/components/dashboard/tasks/TaskDetailSheet";
 import { NewTaskSheet } from "@/components/dashboard/tasks/NewTaskSheet";
 import {
+  CAT_SEP,
   CategoryBadge,
   PRIORITY,
   Task,
@@ -16,6 +17,11 @@ import {
   toAttachments,
 } from "@/components/dashboard/tasks/shared";
 
+// Sentinel filter values for the "no value" buckets, kept distinct from a real
+// assignee name or category label.
+const UNASSIGNED = "__unassigned__";
+const NO_CATEGORY = "__none__";
+
 interface TaskListProps {
   accounts: { account_name: string }[];
   changeLogOptions?: ChangeLogOption[];
@@ -23,6 +29,8 @@ interface TaskListProps {
 
 export function TaskList({ accounts, changeLogOptions = [] }: TaskListProps) {
   const [filter, setFilter] = useState<TaskFilter>("active");
+  const [assigneeFilter, setAssigneeFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [newOpen, setNewOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
@@ -56,14 +64,45 @@ export function TaskList({ accounts, changeLogOptions = [] }: TaskListProps) {
     },
   });
 
+  // Assignee + category filter options are derived from the tasks themselves, so
+  // the dropdowns only ever offer values that actually match something (and any
+  // legacy/orphaned assignee or category still shows up).
+  const assigneeOptions = useMemo(() => {
+    const names = new Set<string>();
+    let hasUnassigned = false;
+    tasks.forEach((t) => (t.assigned_to ? names.add(t.assigned_to) : (hasUnassigned = true)));
+    return { names: [...names].sort((a, b) => a.localeCompare(b)), hasUnassigned };
+  }, [tasks]);
+
+  const categoryOptions = useMemo(() => {
+    const labels = new Set<string>();
+    let hasNone = false;
+    tasks.forEach((t) => (t.category ? labels.add(t.category.split(CAT_SEP)[0]) : (hasNone = true)));
+    return { labels: [...labels].sort((a, b) => a.localeCompare(b)), hasNone };
+  }, [tasks]);
+
   const filtered = tasks.filter((t) => {
-    if (filter === "active") return !t.completed;
-    if (filter === "done") return t.completed;
+    if (filter === "active" && t.completed) return false;
+    if (filter === "done" && !t.completed) return false;
+
+    if (assigneeFilter === UNASSIGNED) {
+      if (t.assigned_to) return false;
+    } else if (assigneeFilter && t.assigned_to !== assigneeFilter) {
+      return false;
+    }
+
+    if (categoryFilter === NO_CATEGORY) {
+      if (t.category) return false;
+    } else if (categoryFilter && (t.category?.split(CAT_SEP)[0] ?? "") !== categoryFilter) {
+      return false;
+    }
+
     return true;
   });
 
   const activeCount = tasks.filter((t) => !t.completed).length;
   const doneCount = tasks.filter((t) => t.completed).length;
+  const hasExtraFilters = assigneeFilter !== "" || categoryFilter !== "";
 
   // Quick-toggle straight from the row without opening the sheet. Completion is
   // the "Launched" stage; un-completing drops the task back to "Assigned".
@@ -83,7 +122,7 @@ export function TaskList({ accounts, changeLogOptions = [] }: TaskListProps) {
   return (
     <div className="rounded-xl border border-border/60 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-muted/40 border-b border-border/60">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-3 bg-muted/40 border-b border-border/60">
         <div className="flex items-center gap-2">
           <ListTodo className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-semibold text-foreground">Tasks</span>
@@ -93,25 +132,57 @@ export function TaskList({ accounts, changeLogOptions = [] }: TaskListProps) {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-0.5">
-          {([
-            { key: "active" as TaskFilter, label: activeCount > 0 ? `Active (${activeCount})` : "Active" },
-            { key: "all" as TaskFilter, label: "All" },
-            { key: "done" as TaskFilter, label: doneCount > 0 ? `Done (${doneCount})` : "Done" },
-          ]).map(({ key, label }) => (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* Status */}
+          <FilterSelect value={filter} onChange={(v) => setFilter(v as TaskFilter)} aria-label="Filter by status">
+            <option value="active">{activeCount > 0 ? `Active (${activeCount})` : "Active"}</option>
+            <option value="all">All statuses</option>
+            <option value="done">{doneCount > 0 ? `Done (${doneCount})` : "Done"}</option>
+          </FilterSelect>
+
+          {/* Assignee */}
+          <FilterSelect
+            value={assigneeFilter}
+            onChange={setAssigneeFilter}
+            aria-label="Filter by assignee"
+            active={assigneeFilter !== ""}
+          >
+            <option value="">All assignees</option>
+            {assigneeOptions.hasUnassigned && <option value={UNASSIGNED}>Unassigned</option>}
+            {assigneeOptions.names.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </FilterSelect>
+
+          {/* Category */}
+          <FilterSelect
+            value={categoryFilter}
+            onChange={setCategoryFilter}
+            aria-label="Filter by category"
+            active={categoryFilter !== ""}
+          >
+            <option value="">All categories</option>
+            {categoryOptions.hasNone && <option value={NO_CATEGORY}>Uncategorized</option>}
+            {categoryOptions.labels.map((label) => (
+              <option key={label} value={label}>
+                {label}
+              </option>
+            ))}
+          </FilterSelect>
+
+          {hasExtraFilters && (
             <button
-              key={key}
-              onClick={() => setFilter(key)}
-              className={cn(
-                "text-xs px-2.5 py-1 rounded-md transition-colors",
-                filter === key
-                  ? "bg-background text-foreground font-medium shadow-sm border border-border/60"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
+              onClick={() => {
+                setAssigneeFilter("");
+                setCategoryFilter("");
+              }}
+              className="text-xs px-2 py-1 rounded-md text-muted-foreground hover:text-foreground transition-colors"
             >
-              {label}
+              Clear
             </button>
-          ))}
+          )}
         </div>
       </div>
 
@@ -119,7 +190,9 @@ export function TaskList({ accounts, changeLogOptions = [] }: TaskListProps) {
       <div className="divide-y divide-border/40">
         {filtered.length === 0 && (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            {filter === "active"
+            {hasExtraFilters
+              ? "No tasks match these filters."
+              : filter === "active"
               ? "No open tasks — you're all clear."
               : filter === "done"
               ? "No completed tasks yet."
@@ -169,6 +242,36 @@ export function TaskList({ accounts, changeLogOptions = [] }: TaskListProps) {
         onCommentCountChange={refetchCounts}
       />
     </div>
+  );
+}
+
+// Compact native select styled to sit in the Tasks header. `active` highlights
+// the control when a non-default value is chosen so applied filters stand out.
+function FilterSelect({
+  value,
+  onChange,
+  active = false,
+  children,
+  ...rest
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  active?: boolean;
+  children: React.ReactNode;
+} & Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "value" | "onChange" | "children">) {
+  return (
+    <select
+      {...rest}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={cn(
+        "text-xs h-7 pl-2 pr-6 rounded-md border transition-colors cursor-pointer max-w-[150px] truncate",
+        "border-border/60 bg-background hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring",
+        active ? "text-foreground font-medium" : "text-muted-foreground"
+      )}
+    >
+      {children}
+    </select>
   );
 }
 
