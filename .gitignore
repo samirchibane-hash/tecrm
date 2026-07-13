@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Agent tooling / skills (local)
+.agents/
+.claude/
+skills-lock.json
+
+# Nested project (has its own repo)
+funnel-studio/
+
+# Supabase CLI local cache
+supabase/.temp/
