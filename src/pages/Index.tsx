@@ -90,25 +90,47 @@ const Index = () => {
     return map;
   }, [dbAccounts]);
 
-  // Most recent change log date per account
-  const { data: lastChanges = [] } = useQuery({
-    queryKey: ["last-changes"],
+  // Most recent time a Task was launched, per account
+  const { data: launchedTasks = [] } = useQuery({
+    queryKey: ["last-launched-tasks"],
     queryFn: async () => {
       const { data } = await supabase
-        .from("campaign_updates")
-        .select("account_name, created_at")
-        .order("created_at", { ascending: false });
+        .from("tasks")
+        .select("account_name, updated_at")
+        .eq("stage", "launched")
+        .order("updated_at", { ascending: false });
       return data ?? [];
     },
   });
 
-  const lastChangeMap = useMemo(() => {
+  const lastTaskMap = useMemo(() => {
     const map: Record<string, string> = {};
-    lastChanges.forEach((r) => {
-      if (!map[r.account_name]) map[r.account_name] = r.created_at;
+    launchedTasks.forEach((r) => {
+      if (r.account_name && !map[r.account_name]) map[r.account_name] = r.updated_at;
     });
     return map;
-  }, [lastChanges]);
+  }, [launchedTasks]);
+
+  // Most recent time a Creative Request was launched, per account
+  const { data: launchedCreatives = [] } = useQuery({
+    queryKey: ["last-launched-creatives"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("creative_requests")
+        .select("account_name, updated_at")
+        .eq("status", "launched")
+        .order("updated_at", { ascending: false });
+      return data ?? [];
+    },
+  });
+
+  const lastCreativeMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    launchedCreatives.forEach((r) => {
+      if (r.account_name && !map[r.account_name]) map[r.account_name] = r.updated_at;
+    });
+    return map;
+  }, [launchedCreatives]);
 
   // ─── Date range ────────────────────────────────────────────────────────────
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -250,10 +272,11 @@ const Index = () => {
         ghlCostPerLead, prevGhlCostPerLead,
         ghlAppointments, prevGhlAppointments,
         ghlCostPerAppt, prevGhlCostPerAppt,
-        lastChange: lastChangeMap[name] ?? null,
+        lastTask: lastTaskMap[name] ?? null,
+        lastCreative: lastCreativeMap[name] ?? null,
       };
     });
-  }, [accountGroups, accountIdMap, allGhlConversions, dateRange, prevDateRange, prevGroupMap, lastChangeMap]);
+  }, [accountGroups, accountIdMap, allGhlConversions, dateRange, prevDateRange, prevGroupMap, lastTaskMap, lastCreativeMap]);
 
   const dateRangeStr = dateRange?.from
     ? dateRange.to
@@ -431,7 +454,7 @@ const Index = () => {
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[600px]">
+              <table className="w-full text-sm min-w-[680px]">
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/20">
                     <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
@@ -453,7 +476,10 @@ const Index = () => {
                       CPA
                     </th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Last Change
+                      Last Task
+                    </th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Last Creative
                     </th>
                     <th className="py-3 px-4 w-8" />
                   </tr>
@@ -561,14 +587,28 @@ const Index = () => {
                           )}
                         </td>
 
-                        {/* Last Change */}
+                        {/* Last Task */}
                         <td className="py-3.5 px-4 text-right">
-                          {row.lastChange ? (
+                          {row.lastTask ? (
                             <span
                               className="text-xs text-muted-foreground"
-                              title={new Date(row.lastChange).toLocaleString()}
+                              title={new Date(row.lastTask).toLocaleString()}
                             >
-                              {formatDistanceToNow(new Date(row.lastChange), { addSuffix: true })}
+                              {formatDistanceToNow(new Date(row.lastTask), { addSuffix: true })}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">–</span>
+                          )}
+                        </td>
+
+                        {/* Last Creative */}
+                        <td className="py-3.5 px-4 text-right">
+                          {row.lastCreative ? (
+                            <span
+                              className="text-xs text-muted-foreground"
+                              title={new Date(row.lastCreative).toLocaleString()}
+                            >
+                              {formatDistanceToNow(new Date(row.lastCreative), { addSuffix: true })}
                             </span>
                           ) : (
                             <span className="text-muted-foreground">–</span>
