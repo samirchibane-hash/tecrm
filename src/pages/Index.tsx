@@ -57,17 +57,17 @@ function pctDelta(curr: number, prev: number): { pct: string; up: boolean; flat:
 
 // Relative time rounded UP, no "about" prefix. Units step up with age:
 // ≤7 days → days, >7 days → weeks, >4 weeks → months.
-// e.g. 19h → "1 day ago", 8 days → "2 weeks ago", 30 days → "1 month ago".
+// e.g. 19h → "1 day", 8 days → "2 weeks", 30 days → "1 month".
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
   const days = Math.max(1, Math.ceil(diffMs / 86_400_000));
-  if (days <= 7) return `${days} day${days === 1 ? "" : "s"} ago`;
+  if (days <= 7) return `${days} day${days === 1 ? "" : "s"}`;
   if (days <= 28) {
     const weeks = Math.ceil(days / 7);
-    return `${weeks} week${weeks === 1 ? "" : "s"} ago`;
+    return `${weeks} week${weeks === 1 ? "" : "s"}`;
   }
   const months = Math.ceil(days / 30);
-  return `${months} month${months === 1 ? "" : "s"} ago`;
+  return `${months} month${months === 1 ? "" : "s"}`;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
