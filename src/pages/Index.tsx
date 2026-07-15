@@ -55,6 +55,14 @@ function pctDelta(curr: number, prev: number): { pct: string; up: boolean; flat:
   return { pct: Math.abs(pct).toFixed(0) + "%", up: pct > 0, flat: false };
 }
 
+// Relative time rounded UP to whole days, no "about" prefix.
+// e.g. 19 hours ago → "1 day ago", 25 hours ago → "2 days ago".
+function daysAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const days = Math.max(1, Math.ceil(diffMs / 86_400_000));
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 const Index = () => {
   const navigate = useNavigate();
@@ -594,7 +602,7 @@ const Index = () => {
                               className="text-xs text-muted-foreground"
                               title={new Date(row.lastTask).toLocaleString()}
                             >
-                              {formatDistanceToNow(new Date(row.lastTask), { addSuffix: true })}
+                              {daysAgo(row.lastTask)}
                             </span>
                           ) : (
                             <span className="text-muted-foreground">–</span>
@@ -608,7 +616,7 @@ const Index = () => {
                               className="text-xs text-muted-foreground"
                               title={new Date(row.lastCreative).toLocaleString()}
                             >
-                              {formatDistanceToNow(new Date(row.lastCreative), { addSuffix: true })}
+                              {daysAgo(row.lastCreative)}
                             </span>
                           ) : (
                             <span className="text-muted-foreground">–</span>
