@@ -55,12 +55,19 @@ function pctDelta(curr: number, prev: number): { pct: string; up: boolean; flat:
   return { pct: Math.abs(pct).toFixed(0) + "%", up: pct > 0, flat: false };
 }
 
-// Relative time rounded UP to whole days, no "about" prefix.
-// e.g. 19 hours ago → "1 day ago", 25 hours ago → "2 days ago".
-function daysAgo(iso: string): string {
+// Relative time rounded UP, no "about" prefix. Units step up with age:
+// ≤7 days → days, >7 days → weeks, >4 weeks → months.
+// e.g. 19h → "1 day ago", 8 days → "2 weeks ago", 30 days → "1 month ago".
+function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
   const days = Math.max(1, Math.ceil(diffMs / 86_400_000));
-  return `${days} day${days === 1 ? "" : "s"} ago`;
+  if (days <= 7) return `${days} day${days === 1 ? "" : "s"} ago`;
+  if (days <= 28) {
+    const weeks = Math.ceil(days / 7);
+    return `${weeks} week${weeks === 1 ? "" : "s"} ago`;
+  }
+  const months = Math.ceil(days / 30);
+  return `${months} month${months === 1 ? "" : "s"} ago`;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -602,7 +609,7 @@ const Index = () => {
                               className="text-xs text-muted-foreground"
                               title={new Date(row.lastTask).toLocaleString()}
                             >
-                              {daysAgo(row.lastTask)}
+                              {timeAgo(row.lastTask)}
                             </span>
                           ) : (
                             <span className="text-muted-foreground">–</span>
@@ -616,7 +623,7 @@ const Index = () => {
                               className="text-xs text-muted-foreground"
                               title={new Date(row.lastCreative).toLocaleString()}
                             >
-                              {daysAgo(row.lastCreative)}
+                              {timeAgo(row.lastCreative)}
                             </span>
                           ) : (
                             <span className="text-muted-foreground">–</span>
