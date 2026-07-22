@@ -4,10 +4,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCouplerData } from "@/hooks/useCouplerData";
 import { useSettings } from "@/hooks/useSettings";
-import { getPalette, ALL_KPIS, type KpiKey } from "@/components/dashboard/AccountCard";
+import { ALL_KPIS, type KpiKey } from "@/components/dashboard/AccountCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -16,22 +15,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ChartContainer } from "@/components/ui/chart";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from "recharts";
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
   ArrowLeft,
   Plus,
   Trash2,
@@ -39,18 +22,10 @@ import {
   UserCircle2,
   Link2,
   ExternalLink,
-  X,
   ClipboardList,
-  Mail,
-  Send,
   CheckCircle2,
-  Clock,
-  ImagePlus,
   SquareArrowOutUpRight,
   Phone,
-  Sparkles,
-  ChevronDown,
-  ChevronUp,
   CalendarDays,
   Circle,
   ListTodo,
@@ -66,7 +41,6 @@ import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
 
 const MIN_DATE = startOfDay(new Date(2026, 1, 12));
-const PAGE_SIZE = 8;
 
 const CHARTABLE_KEYS = new Set<KpiKey>([
   "totalSpend", "totalClicks", "totalImpressions", "totalReach",
@@ -75,19 +49,24 @@ const CHARTABLE_KEYS = new Set<KpiKey>([
   "ghlLeads", "ghlAppointments", "ghlCostPerLead", "ghlCostPerAppt",
 ]);
 
-// Hex colours matching the PALETTE dot colours in AccountCard
-const PALETTE_HEX = [
-  "#3b82f6", "#10b981", "#a855f7", "#f59e0b", "#f43f5e",
-  "#06b6d4", "#f97316", "#6366f1", "#14b8a6", "#ec4899",
-];
+// Annotations are secondary to the metric, so they share one recessive colour and
+// distinguish task vs. creative brief by icon + label — never by colour alone.
+const ANNOTATION_COLOR = "hsl(var(--muted-foreground))";
+
+type ChartAnnotationItem = {
+  kind: "task" | "brief";
+  label: string;
+  detail: string | null;
+};
 
 type ChartAnnotation = {
   date: string;
-  updates: { campaign_name: string; details: string | null }[];
-  color: string;
+  items: ChartAnnotationItem[];
 };
 
-// ─── Inline area chart (with change-log annotations) ─────────────────────────
+const ANNOTATION_ICON = { task: ListTodo, brief: ClipboardList } as const;
+
+// ─── Inline area chart (with task / creative-brief annotations) ──────────────
 
 function KpiAreaChart({ data, label, formatValue, annotations = [] }: {
   data: { date: string; value: number }[];
@@ -147,15 +126,18 @@ function KpiAreaChart({ data, label, formatValue, annotations = [] }: {
                     {val != null && <p className="font-semibold mb-1">{formatValue(val)} <span className="font-normal text-muted-foreground">{label}</span></p>}
                     {dayAnn && (
                       <div className={cn("space-y-1", val != null && "mt-1.5 pt-1.5 border-t border-border")}>
-                        {dayAnn.updates.map((u, i) => (
-                          <div key={i} className="flex items-start gap-1.5">
-                            <div className="mt-0.5 h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: dayAnn.color }} />
-                            <span className="text-muted-foreground leading-tight">
-                              <span className="font-medium text-foreground">{u.campaign_name}</span>
-                              {u.details ? ` — ${u.details.slice(0, 70)}${u.details.length > 70 ? "…" : ""}` : ""}
-                            </span>
-                          </div>
-                        ))}
+                        {dayAnn.items.map((item, i) => {
+                          const Icon = ANNOTATION_ICON[item.kind];
+                          return (
+                            <div key={i} className="flex items-start gap-1.5">
+                              <Icon className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+                              <span className="text-muted-foreground leading-tight">
+                                <span className="font-medium text-foreground">{item.label}</span>
+                                {item.detail ? ` — ${item.detail.slice(0, 70)}${item.detail.length > 70 ? "…" : ""}` : ""}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -166,19 +148,19 @@ function KpiAreaChart({ data, label, formatValue, annotations = [] }: {
               <ReferenceLine
                 key={ann.date}
                 x={ann.date}
-                stroke={ann.color}
+                stroke={ANNOTATION_COLOR}
                 strokeDasharray="3 3"
                 strokeWidth={1.5}
-                strokeOpacity={0.8}
+                strokeOpacity={0.5}
                 label={({ viewBox }: { viewBox?: { x?: number; y?: number } }) => {
                   const x = viewBox?.x;
                   const y = (viewBox?.y ?? 0) + 8;
                   if (x == null) return <g />;
                   return (
                     <g>
-                      <circle cx={x} cy={y} r={5} fill={ann.color} stroke="white" strokeWidth={1.5} />
-                      {ann.updates.length > 1 && (
-                        <text x={x} y={y + 3.5} textAnchor="middle" fontSize={7} fill="white" fontWeight="bold">{ann.updates.length}</text>
+                      <circle cx={x} cy={y} r={5} fill={ANNOTATION_COLOR} stroke="hsl(var(--background))" strokeWidth={2} />
+                      {ann.items.length > 1 && (
+                        <text x={x} y={y + 3.5} textAnchor="middle" fontSize={7} fill="hsl(var(--background))" fontWeight="bold">{ann.items.length}</text>
                       )}
                     </g>
                   );
@@ -188,6 +170,13 @@ function KpiAreaChart({ data, label, formatValue, annotations = [] }: {
             <Area type="monotone" dataKey="value" stroke="hsl(var(--chart-1))" strokeWidth={2} fill={`url(#${gradId})`} connectNulls dot={false} />
           </AreaChart>
         </ChartContainer>
+        {annotations.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/50 pt-2 text-[11px] text-muted-foreground">
+            <span className="font-medium">Markers</span>
+            <span className="flex items-center gap-1"><ListTodo className="h-3 w-3" /> Task completed</span>
+            <span className="flex items-center gap-1"><ClipboardList className="h-3 w-3" /> Creative brief</span>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -226,7 +215,25 @@ function StatCard({ label, value, icon: Icon, isActive, onClick }: {
 
 type Task = {
   id: string; title: string; account_name: string | null;
-  priority: string; completed: boolean; stage: string; due_date: string | null; created_at: string;
+  priority: string; completed: boolean; stage: string; due_date: string | null;
+  created_at: string; updated_at: string;
+};
+
+// ─── Creative briefs (requests) ───────────────────────────────────────────────
+
+type CreativeRequest = {
+  id: string; account_name: string; template_name: string; ad_angle: string;
+  offer_type: string; ad_type: string; status: string; notes: string | null;
+  assigned_to: string | null; gdrive_folder_url: string | null;
+  created_at: string; updated_at: string;
+};
+
+const BRIEF_STATUS_LABEL: Record<string, string> = {
+  assigned: "Assigned", reviewing: "Reviewing", approved: "Approved", launched: "Launched",
+};
+const BRIEF_STATUS_BADGE: Record<string, string> = {
+  assigned: "bg-slate-100 text-slate-700", reviewing: "bg-blue-100 text-blue-800",
+  approved: "bg-amber-100 text-amber-800", launched: "bg-emerald-100 text-emerald-800",
 };
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -240,7 +247,6 @@ const AccountDetail = () => {
   const queryClient = useQueryClient();
   const { data: couplerData } = useCouplerData();
   const { settings } = useSettings();
-  const changeLogOptions = settings.change_log_options ?? [];
 
   // ─── Account (stable UUID) ────────────────────────────────────────────────
   const { data: account } = useQuery({
@@ -279,16 +285,6 @@ const AccountDetail = () => {
     enabled: !!accountId,
     staleTime: 5 * 60 * 1000,
   });
-
-  // ─── Campaigns (for change log dropdown) ─────────────────────────────────
-  const campaigns = useMemo(() => {
-    if (!couplerData) return [];
-    const set = new Set<string>();
-    couplerData
-      .filter((r) => r["Account: Account name"] === decodedName)
-      .forEach((r) => set.add(r["Campaign: Campaign name"]));
-    return Array.from(set).sort();
-  }, [couplerData, decodedName]);
 
   // ─── Date range (for KPIs / chart) ──────────────────────────────────────
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -498,21 +494,6 @@ const AccountDetail = () => {
   });
 
   // Creative briefs (requests)
-  type CreativeRequest = {
-    id: string; account_name: string; template_name: string; ad_angle: string;
-    offer_type: string; ad_type: string; status: string; notes: string | null;
-    assigned_to: string | null; gdrive_folder_url: string | null;
-    created_at: string; updated_at: string;
-  };
-
-  const BRIEF_STATUS_LABEL: Record<string, string> = {
-    assigned: "Assigned", reviewing: "Reviewing", approved: "Approved", launched: "Launched",
-  };
-  const BRIEF_STATUS_BADGE: Record<string, string> = {
-    assigned: "bg-slate-100 text-slate-700", reviewing: "bg-blue-100 text-blue-800",
-    approved: "bg-amber-100 text-amber-800", launched: "bg-emerald-100 text-emerald-800",
-  };
-
   const { data: creativeRequests = [] } = useQuery({
     queryKey: ["creative-requests", decodedName],
     queryFn: async () => {
@@ -525,6 +506,39 @@ const AccountDetail = () => {
       return data as CreativeRequest[];
     },
   });
+
+  // ─── Chart annotations: completed tasks + creative briefs ─────────────────
+  // A task marks the chart on the day it was completed (the day the change landed);
+  // a brief marks the day its status last moved.
+  const chartAnnotations = useMemo((): ChartAnnotation[] => {
+    const inRange = (d: Date) => {
+      if (dateRange?.from && d < startOfDay(dateRange.from)) return false;
+      if (dateRange?.to && d > startOfDay(dateRange.to)) return false;
+      return true;
+    };
+    const grouped: Record<string, ChartAnnotationItem[]> = {};
+    const push = (at: string, item: ChartAnnotationItem) => {
+      const d = new Date(at);
+      if (!inRange(startOfDay(d))) return;
+      const date = format(d, "yyyy-MM-dd");
+      (grouped[date] ??= []).push(item);
+    };
+
+    accountTasks
+      .filter((t) => t.completed)
+      .forEach((t) => push(t.updated_at, { kind: "task", label: t.title, detail: "Task completed" }));
+    creativeRequests.forEach((req) =>
+      push(req.updated_at, {
+        kind: "brief",
+        label: req.template_name,
+        detail: BRIEF_STATUS_LABEL[req.status] ?? req.status,
+      }),
+    );
+
+    return Object.entries(grouped)
+      .map(([date, items]) => ({ date, items }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [accountTasks, creativeRequests, dateRange]);
 
   // Also fetch template meta rows (stored under any account) for type/link info
   const { data: allCreatives = [] } = useQuery({
@@ -658,163 +672,6 @@ const AccountDetail = () => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["account-links", decodedName] }),
   });
 
-  // ─── Campaign Updates (Change Log) ───────────────────────────────────────
-  const [logPage, setLogPage] = useState(0);
-  const [showForm, setShowForm] = useState(false);
-  const [selectedLogOption, setSelectedLogOption] = useState("");
-  const [details, setDetails] = useState("");
-  const [linkUrl, setLinkUrl] = useState("");
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [uploading, setUploading] = useState(false);
-
-  const { data: updates = [] } = useQuery({
-    queryKey: ["campaign-updates", decodedName],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("campaign_updates")
-        .select("*")
-        .eq("account_name", decodedName)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  useEffect(() => { setLogPage(0); }, [updates.length]);
-
-  // ─── Chart annotations from change log ───────────────────────────────────
-  const chartAnnotations = useMemo((): ChartAnnotation[] => {
-    const grouped: Record<string, { campaign_name: string; details: string | null }[]> = {};
-    updates.forEach((u) => {
-      const date = format(new Date(u.created_at), "yyyy-MM-dd");
-      if (dateRange?.from && new Date(date) < startOfDay(dateRange.from)) return;
-      if (dateRange?.to && new Date(date) > startOfDay(dateRange.to)) return;
-      if (!grouped[date]) grouped[date] = [];
-      grouped[date].push({ campaign_name: (u as any).title || u.campaign_name, details: u.details });
-    });
-    return Object.entries(grouped).map(([date, upds], i) => ({
-      date,
-      updates: upds,
-      color: PALETTE_HEX[i % PALETTE_HEX.length],
-    }));
-  }, [updates, dateRange]);
-
-  // ─── Change log entries filtered to current date range ───────────────────
-  const filteredUpdates = useMemo(() => {
-    if (!dateRange?.from) return updates;
-    const from = startOfDay(dateRange.from);
-    const to = dateRange.to ? startOfDay(dateRange.to) : from;
-    return updates.filter((u) => {
-      const d = startOfDay(new Date(u.created_at));
-      return d >= from && d <= to;
-    });
-  }, [updates, dateRange]);
-
-  // ─── Unified timeline: campaign updates + creative briefs ─────────────────
-  const filteredTimeline = useMemo(() => {
-    const items: Array<
-      | { kind: "update"; date: string; data: (typeof updates)[number] }
-      | { kind: "creative-request"; date: string; data: CreativeRequest }
-    > = [];
-    updates.forEach((u) => {
-      const d = startOfDay(new Date(u.created_at));
-      if (dateRange?.from && d < startOfDay(dateRange.from)) return;
-      if (dateRange?.to && d > startOfDay(dateRange.to)) return;
-      items.push({ kind: "update", date: u.created_at, data: u });
-    });
-    creativeRequests.forEach((req) => {
-      const d = startOfDay(new Date(req.updated_at));
-      if (dateRange?.from && d < startOfDay(dateRange.from)) return;
-      if (dateRange?.to && d > startOfDay(dateRange.to)) return;
-      items.push({ kind: "creative-request", date: req.updated_at, data: req });
-    });
-    items.sort((a, b) => b.date.localeCompare(a.date));
-    return items;
-  }, [updates, creativeRequests, dateRange]);
-
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    if (!files.length) return;
-    setImageFiles((prev) => [...prev, ...files]);
-    setImagePreviews((prev) => [...prev, ...files.map((f) => URL.createObjectURL(f))]);
-  };
-
-  const removeImage = (index: number) => {
-    setImageFiles((prev) => prev.filter((_, i) => i !== index));
-    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const addUpdate = useMutation({
-    mutationFn: async () => {
-      setUploading(true);
-      const uploadedUrls: string[] = [];
-      for (const file of imageFiles) {
-        const ext = file.name.split(".").pop();
-        const path = `${decodedName}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error: uploadErr } = await supabase.storage
-          .from("changelog-attachments")
-          .upload(path, file);
-        if (uploadErr) throw uploadErr;
-        const { data: urlData } = supabase.storage
-          .from("changelog-attachments")
-          .getPublicUrl(path);
-        uploadedUrls.push(urlData.publicUrl);
-      }
-      const sepIdx = selectedLogOption.indexOf("||");
-      const campaignName = sepIdx >= 0 ? selectedLogOption.slice(0, sepIdx) : selectedLogOption;
-      const titleValue = sepIdx >= 0 ? selectedLogOption.slice(sepIdx + 2) : "";
-      const { error } = await supabase.from("campaign_updates").insert({
-        account_name: decodedName,
-        campaign_name: campaignName,
-        category: "other" as any,
-        title: titleValue,
-        details: details || null,
-        link_url: linkUrl || null,
-        image_url: uploadedUrls.length > 0 ? uploadedUrls.join(",") : null,
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["campaign-updates", decodedName] });
-      setSelectedLogOption("");
-      setDetails("");
-      setLinkUrl("");
-      setImageFiles([]);
-      setImagePreviews([]);
-      setShowForm(false);
-      setUploading(false);
-      toast.success("Update logged");
-    },
-    onError: () => { setUploading(false); toast.error("Failed to log update"); },
-  });
-
-  const deleteUpdate = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("campaign_updates").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["campaign-updates", decodedName] });
-      toast.success("Update deleted");
-    },
-  });
-
-  const updateStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: "assigned" | "published" }) => {
-      const { error } = await supabase.from("campaign_updates").update({ status }).eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["campaign-updates", decodedName] }),
-  });
-
-  // ─── Per-entry Email Modal ────────────────────────────────────────────────
-  const [selectedRecipient, setSelectedRecipient] = useState("");
-  const [modalUpdate, setModalUpdate] = useState<(typeof updates)[number] | null>(null);
-  const [modalDraft, setModalDraft] = useState<{ subject: string; body: string } | null>(null);
-  const [modalLoading, setModalLoading] = useState(false);
-  const [modalSending, setModalSending] = useState(false);
-
   const [driveUrlInput, setDriveUrlInput] = useState((account as any)?.gdrive_folder_url ?? "");
   const [driveSaving, setDriveSaving] = useState(false);
   const [drivePopoverOpen, setDrivePopoverOpen] = useState(false);
@@ -838,83 +695,6 @@ const AccountDetail = () => {
     }
     setDriveSaving(false);
   }
-
-  const reportUrl = `https://reports.treatengine.com/report/${encodeURIComponent(decodedName)}`;
-  const contactEmail: string = (account as any)?.contact_email ?? "";
-  const getRecipientName = (email: string) => pocs.find((p) => p.email === email)?.name || "";
-
-  const openEmailModal = async (update: (typeof updates)[number]) => {
-    setModalUpdate(update);
-    setModalDraft(null);
-    setModalLoading(true);
-    const firstEmail = contactEmail || pocs[0]?.email || "";
-    setSelectedRecipient(firstEmail);
-    try {
-      const { data, error } = await supabase.functions.invoke("send-client-update", {
-        body: {
-          accountName: decodedName,
-          recipientEmail: firstEmail || "preview@example.com",
-          recipientName: getRecipientName(firstEmail),
-          reportUrl,
-          recentUpdates: [{
-            date: new Date(update.created_at).toLocaleDateString(),
-            title: (update as any).title || update.category,
-            details: update.details,
-          }],
-          dateLabel: "All time",
-          draftOnly: true,
-        },
-      });
-      if (error) throw error;
-      setModalDraft({ subject: data.subject, body: data.body });
-    } catch {
-      toast.error("Failed to generate email");
-      setModalUpdate(null);
-    } finally {
-      setModalLoading(false);
-    }
-  };
-
-  const sendModalEmail = async () => {
-    if (!modalUpdate || !modalDraft || !selectedRecipient) return;
-    setModalSending(true);
-    try {
-      const { data: sendData, error } = await supabase.functions.invoke("send-client-update", {
-        body: {
-          accountName: decodedName,
-          recipientEmail: selectedRecipient,
-          recipientName: getRecipientName(selectedRecipient),
-          reportUrl,
-          recentUpdates: [{
-            date: new Date(modalUpdate.created_at).toLocaleDateString(),
-            title: (modalUpdate as any).title || modalUpdate.category,
-            details: modalUpdate.details,
-          }],
-          dateLabel: "All time",
-        },
-      });
-      if (error) {
-        const body = await (error as any)?.context?.json?.().catch(() => null);
-        throw new Error(body?.error || error?.message);
-      }
-      if (sendData?.error) throw new Error(sendData.error);
-      await supabase
-        .from("campaign_updates")
-        .update({ emailed_at: new Date().toISOString() } as any)
-        .eq("id", modalUpdate.id);
-      queryClient.invalidateQueries({ queryKey: ["campaign-updates", decodedName] });
-      toast.success(`Email sent to ${selectedRecipient}`);
-      setModalUpdate(null);
-      setModalDraft(null);
-    } catch (err: any) {
-      toast.error(`Failed to send email: ${err?.message || "Unknown error"}`);
-    } finally {
-      setModalSending(false);
-    }
-  };
-
-  const totalLogCount = updates.length;
-  const pagedUpdates = updates.slice(logPage * PAGE_SIZE, logPage * PAGE_SIZE + PAGE_SIZE);
 
   return (
     <div className="min-h-screen bg-background">
@@ -1130,7 +910,7 @@ const AccountDetail = () => {
               </div>
             </section>
 
-            {/* ── KPIs + Chart + Change Log ── */}
+            {/* ── KPIs + Chart (annotated with tasks / creative briefs) ── */}
             <section>
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Key Metrics</h2>
@@ -1184,90 +964,6 @@ const AccountDetail = () => {
               ) : (
                 <p className="text-sm text-muted-foreground py-4">No KPIs enabled — configure them in Settings.</p>
               )}
-
-              {/* ── Change Log timeline (date-synced) ── */}
-              <div className="mt-5">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                  Change Log <span className="font-normal text-muted-foreground/60">({filteredTimeline.length})</span>
-                </h3>
-                {filteredTimeline.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-6">
-                    No updates logged for this period.
-                  </p>
-                ) : (
-                  <div className="relative">
-                    <div className="absolute left-[9px] top-2 bottom-2 w-px bg-border" />
-                    <div className="space-y-3 pl-6">
-                      {filteredTimeline.map((item, i) => {
-                        if (item.kind === "update") {
-                          const u = item.data;
-                          const pal = getPalette(u.campaign_name, changeLogOptions);
-                          const annColor = chartAnnotations.find((a) => a.date === format(new Date(u.created_at), "yyyy-MM-dd"))?.color ?? PALETTE_HEX[i % PALETTE_HEX.length];
-                          return (
-                            <div key={u.id} className="relative">
-                              <div className="absolute -left-[23px] top-3 h-2.5 w-2.5 rounded-full border-2 border-background" style={{ backgroundColor: annColor }} />
-                              <Card className="border-border/50 bg-card shadow-sm">
-                                <CardContent className="p-3 space-y-1.5">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <Badge variant="secondary" className={`text-xs px-2 py-0.5 ${pal.badge}`}>
-                                      <span className={`inline-block h-1.5 w-1.5 rounded-full mr-1 ${pal.dot}`} />
-                                      {(u as any).title || u.campaign_name}
-                                    </Badge>
-                                    <span className="text-xs text-muted-foreground">{u.campaign_name}</span>
-                                    <span className="ml-auto text-xs text-muted-foreground shrink-0">
-                                      {format(new Date(u.created_at), "MMM d, yyyy")}
-                                    </span>
-                                  </div>
-                                  {u.details && <p className="text-sm text-foreground leading-relaxed">{u.details}</p>}
-                                  {(u as any).link_url && (
-                                    <a href={(u as any).link_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                                      <ExternalLink className="h-3 w-3" />
-                                      {(() => { try { return new URL((u as any).link_url).hostname.replace(/^www\./, ""); } catch { return "View link"; } })()}
-                                    </a>
-                                  )}
-                                </CardContent>
-                              </Card>
-                            </div>
-                          );
-                        }
-
-                        // Creative brief
-                        const req = item.data;
-                        return (
-                          <div key={`req-${req.id}`} className="relative">
-                            <div className="absolute -left-[23px] top-3 h-2.5 w-2.5 rounded-full border-2 border-background bg-violet-400" />
-                            <Card className="border-border/50 bg-card shadow-sm">
-                              <CardContent className="p-3 space-y-1.5">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant="secondary" className={`text-xs px-2 py-0.5 ${BRIEF_STATUS_BADGE[req.status] ?? "bg-slate-100 text-slate-700"}`}>
-                                    <ClipboardList className="inline h-3 w-3 mr-1" />
-                                    {BRIEF_STATUS_LABEL[req.status] ?? req.status}
-                                  </Badge>
-                                  <Badge variant="secondary" className={`text-xs px-2 py-0.5 ${req.ad_type === "image_ads" ? "bg-sky-100 text-sky-800" : "bg-violet-100 text-violet-800"}`}>
-                                    {req.ad_type === "image_ads" ? <ImageIcon className="inline h-3 w-3 mr-1" /> : <Film className="inline h-3 w-3 mr-1" />}
-                                    {req.ad_type === "image_ads" ? "Image" : "Video"}
-                                  </Badge>
-                                  <span className="text-sm font-medium text-foreground">{req.template_name}</span>
-                                  <span className="ml-auto text-xs text-muted-foreground shrink-0">
-                                    {format(new Date(req.updated_at), "MMM d, yyyy")}
-                                  </span>
-                                </div>
-                                <p className="text-xs text-muted-foreground">{req.ad_angle} · {req.offer_type}</p>
-                                {req.notes && <p className="text-sm text-foreground leading-relaxed">{req.notes}</p>}
-                                {req.gdrive_folder_url && (
-                                  <a href={req.gdrive_folder_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                                    <ExternalLink className="h-3 w-3" /> View creative folder
-                                  </a>
-                                )}
-                              </CardContent>
-                            </Card>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
             </section>
 
             {/* ── Funnel Pages ── */}
@@ -1684,107 +1380,6 @@ const AccountDetail = () => {
 
         </Tabs>
       </div>
-
-      {/* ── Email Modal ──────────────────────────────────────────────────────── */}
-      <Dialog
-        open={!!modalUpdate}
-        onOpenChange={(open) => { if (!open) { setModalUpdate(null); setModalDraft(null); } }}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Mail className="h-4 w-4 text-primary" />
-              Email Client
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-1.5 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground w-12 shrink-0">From</span>
-              <span className="font-medium text-foreground">Treat Engine &lt;info@treatengine.com&gt;</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground w-12 shrink-0">Reply-to</span>
-              <span className="text-foreground">info@treatleads.com</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground w-12 shrink-0">To</span>
-              {pocs.length > 0 || contactEmail ? (
-                <select
-                  value={selectedRecipient}
-                  onChange={(e) => setSelectedRecipient(e.target.value)}
-                  className="flex-1 bg-transparent text-foreground font-medium text-xs border-none outline-none cursor-pointer"
-                >
-                  {contactEmail && <option value={contactEmail}>{contactEmail}</option>}
-                  {pocs.map((poc) => (
-                    <option key={poc.id} value={poc.email}>{poc.name} — {poc.email}</option>
-                  ))}
-                </select>
-              ) : (
-                <span className="italic text-destructive">No contact set — add one in the Profile tab</span>
-              )}
-            </div>
-            {modalUpdate && (
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground w-12 shrink-0">Re</span>
-                <span className="text-foreground">
-                  {(modalUpdate as any).title || modalUpdate.category} — {modalUpdate.campaign_name}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {modalLoading && (
-            <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-              <Sparkles className="h-4 w-4 animate-pulse text-violet-500" />
-              Drafting with AI…
-            </div>
-          )}
-
-          {modalDraft && !modalLoading && (
-            <div className="space-y-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Subject</p>
-                <Input
-                  value={modalDraft.subject}
-                  onChange={(e) => setModalDraft({ ...modalDraft, subject: e.target.value })}
-                  className="text-sm"
-                />
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Body</p>
-                <Textarea
-                  value={modalDraft.body}
-                  onChange={(e) => setModalDraft({ ...modalDraft, body: e.target.value })}
-                  rows={8}
-                  className="text-sm"
-                />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => { setModalUpdate(null); setModalDraft(null); }}
-            >
-              Cancel
-            </Button>
-            {modalDraft && (
-              <Button
-                size="sm"
-                className="gap-1.5"
-                disabled={!selectedRecipient || modalSending}
-                onClick={sendModalEmail}
-              >
-                <Send className="h-3.5 w-3.5" />
-                {modalSending ? "Sending…" : "Send Email"}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
