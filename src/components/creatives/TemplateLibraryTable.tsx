@@ -36,6 +36,8 @@ interface Props {
   requests: CreativeRequest[];
   onOpenTemplate: (row: TemplateRow) => void;
   onOpenRequest: (req: CreativeRequest) => void;
+  /** Start a brand-new brief for a template × client pair that has no request yet. */
+  onNewBrief: (templateName: string, client: string) => void;
   onUploadThumbnail: (templateName: string) => void;
   onOpenSettings: (row: TemplateRow) => void;
   onAddClient: (templateName: string) => void;
@@ -45,7 +47,7 @@ interface Props {
 
 export function TemplateLibraryTable({
   rows, clientColumns, requests,
-  onOpenTemplate, onOpenRequest, onUploadThumbnail, onOpenSettings,
+  onOpenTemplate, onOpenRequest, onNewBrief, onUploadThumbnail, onOpenSettings,
   onAddClient, onDeleteTemplate, uploadingThumbnailFor,
 }: Props) {
   // template name → client name → latest request for that pair
@@ -169,7 +171,10 @@ export function TemplateLibraryTable({
                   <Cell
                     key={client}
                     state={cellState(row.name, client, row)}
+                    templateName={row.name}
+                    client={client}
                     onOpenRequest={onOpenRequest}
+                    onNewBrief={onNewBrief}
                   />
                 ))}
 
@@ -224,12 +229,28 @@ export function TemplateLibraryTable({
   );
 }
 
-function Cell({ state, onOpenRequest }: { state: CellState; onOpenRequest: (r: CreativeRequest) => void }) {
+function Cell({
+  state, templateName, client, onOpenRequest, onNewBrief,
+}: {
+  state: CellState;
+  templateName: string;
+  client: string;
+  onOpenRequest: (r: CreativeRequest) => void;
+  onNewBrief: (templateName: string, client: string) => void;
+}) {
+  // No brief yet (produced or not) — the whole cell briefs this template for this client.
   if (state.kind === "none") {
     return (
       <td className="px-3 py-2">
-        <span className="sr-only">Not produced</span>
-        <span aria-hidden className="text-muted-foreground/30">—</span>
+        <button
+          onClick={() => onNewBrief(templateName, client)}
+          title={`New brief · ${client}`}
+          className="group/cell inline-flex w-full items-center justify-center rounded-md border border-dashed border-transparent px-2 py-1 transition-colors hover:border-border hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span className="sr-only">Not produced — create brief for {client}</span>
+          <span aria-hidden className="text-muted-foreground/30 group-hover/cell:hidden">—</span>
+          <Plus aria-hidden className="hidden h-3 w-3 text-muted-foreground group-hover/cell:block" />
+        </button>
       </td>
     );
   }
@@ -237,9 +258,13 @@ function Cell({ state, onOpenRequest }: { state: CellState; onOpenRequest: (r: C
   if (state.kind === "produced") {
     return (
       <td className="px-3 py-2">
-        <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+        <button
+          onClick={() => onNewBrief(templateName, client)}
+          title={`Produced, no brief · New brief for ${client}`}
+          className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
           Produced
-        </span>
+        </button>
       </td>
     );
   }

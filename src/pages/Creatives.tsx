@@ -131,6 +131,9 @@ const Creatives = () => {
   const [reqFilterClient, setReqFilterClient] = useState("all");
   const [reqFilterTemplate, setReqFilterTemplate] = useState("all");
   const [newBriefOpen, setNewBriefOpen] = useState(false);
+  const [newBriefDefaults, setNewBriefDefaults] = useState<{
+    client?: string; template?: string; adType?: "image_ads" | "video_ads";
+  }>({});
   const [selectedRequest, setSelectedRequest] = useState<CreativeRequest | null>(null);
   const [deleteRequestId, setDeleteRequestId] = useState<string | null>(null);
 
@@ -521,7 +524,7 @@ const Creatives = () => {
               </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setNewTplOpen(true)}><Plus className="h-4 w-4" /> New Template</Button>
-                <Button size="sm" className="gap-1.5" onClick={() => setNewBriefOpen(true)}><ClipboardList className="h-4 w-4" /> New Brief</Button>
+                <Button size="sm" className="gap-1.5" onClick={() => { setNewBriefDefaults({}); setNewBriefOpen(true); }}><ClipboardList className="h-4 w-4" /> New Brief</Button>
               </div>
             </div>
 
@@ -534,7 +537,7 @@ const Creatives = () => {
                 <p className="max-w-md text-sm text-muted-foreground">Create a template first, then brief it out to your clients.</p>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" onClick={() => setNewTplOpen(true)} className="gap-1.5"><Plus className="h-4 w-4" /> New Template</Button>
-                  <Button onClick={() => setNewBriefOpen(true)} className="gap-1.5"><ClipboardList className="h-4 w-4" /> New Brief</Button>
+                  <Button onClick={() => { setNewBriefDefaults({}); setNewBriefOpen(true); }} className="gap-1.5"><ClipboardList className="h-4 w-4" /> New Brief</Button>
                 </div>
               </div>
             )}
@@ -548,6 +551,16 @@ const Creatives = () => {
                 onOpenTemplate={({ name, templateType, templateLink, clients }) =>
                   setSelectedTemplateGroup({ name, templateType, templateLink, clients })}
                 onOpenRequest={(req) => setSelectedRequest(req)}
+                onNewBrief={(templateName, client) => {
+                  const group = templateGroups.find((g) => g.name === templateName);
+                  const adType = group?.templateType === "video"
+                    ? "video_ads"
+                    : group?.templateType === "image"
+                      ? "image_ads"
+                      : undefined;
+                  setNewBriefDefaults({ client, template: templateName, adType });
+                  setNewBriefOpen(true);
+                }}
                 onUploadThumbnail={(name) => { setThumbnailTargetTemplate(name); thumbnailInputRef.current?.click(); }}
                 onOpenSettings={({ name, templateType, templateLink }) => {
                   setSettingsOriginalName(name); setSettingsName(name);
@@ -591,7 +604,7 @@ const Creatives = () => {
                   </button>
                 )}
               </div>
-              <Button size="sm" className="gap-1.5" onClick={() => setNewBriefOpen(true)}>
+              <Button size="sm" className="gap-1.5" onClick={() => { setNewBriefDefaults({}); setNewBriefOpen(true); }}>
                 <ClipboardList className="h-4 w-4" /> New Brief
               </Button>
             </div>
@@ -603,7 +616,7 @@ const Creatives = () => {
                 <ClipboardList className="h-12 w-12 text-muted-foreground/40" />
                 <p className="text-lg font-medium">No creative requests yet</p>
                 <p className="max-w-md text-sm text-muted-foreground">Create a brief to assign a creative task to your design team.</p>
-                <Button onClick={() => setNewBriefOpen(true)} className="gap-1.5"><Plus className="h-4 w-4" /> New Brief</Button>
+                <Button onClick={() => { setNewBriefDefaults({}); setNewBriefOpen(true); }} className="gap-1.5"><Plus className="h-4 w-4" /> New Brief</Button>
               </div>
             )}
 
@@ -688,8 +701,14 @@ const Creatives = () => {
           onRequestChange={(updated) => setSelectedRequest(updated)}
         />
 
-        {/* ── New Brief Dialog ──────────────────────────────────────────────── */}
-        <NewBriefDialog open={newBriefOpen} onOpenChange={setNewBriefOpen} />
+        {/* ── New Brief side panel ──────────────────────────────────────────── */}
+        <NewBriefDialog
+          open={newBriefOpen}
+          onOpenChange={(o) => { setNewBriefOpen(o); if (!o) setNewBriefDefaults({}); }}
+          defaultClient={newBriefDefaults.client}
+          defaultTemplate={newBriefDefaults.template}
+          defaultAdType={newBriefDefaults.adType}
+        />
 
         {/* ── New Template Dialog ───────────────────────────────────────────── */}
         <Dialog open={newTplOpen} onOpenChange={(open) => { if (!open) resetNewTplForm(); }}>

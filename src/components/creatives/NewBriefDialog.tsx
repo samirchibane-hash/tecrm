@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSettings } from "@/hooks/useSettings";
@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -19,6 +19,10 @@ type View = "form" | "manage_angle" | "manage_offer";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Preconfigure the brief when launched from a Template Library cell. */
+  defaultClient?: string;
+  defaultTemplate?: string;
+  defaultAdType?: "image_ads" | "video_ads";
 }
 
 // ── Combobox ──────────────────────────────────────────────────────────────────
@@ -86,7 +90,7 @@ function Combobox({
   );
 }
 
-// ── Manage panel (rendered inside the same Dialog) ────────────────────────────
+// ── Manage panel (rendered inside the same Sheet) ─────────────────────────────
 
 function ManagePanel({
   optionType, title, onBack,
@@ -134,38 +138,39 @@ function ManagePanel({
 
   return (
     <>
-      <DialogHeader>
+      <div className="px-6 pt-6 pb-4 border-b border-border shrink-0">
         <div className="flex items-center gap-2">
           <button type="button" onClick={onBack} className="rounded-md p-1 hover:bg-muted transition-colors">
             <ArrowLeft className="h-4 w-4 text-muted-foreground" />
           </button>
-          <DialogTitle>{title}</DialogTitle>
+          <SheetTitle className="text-base font-semibold">{title}</SheetTitle>
         </div>
-      </DialogHeader>
-
-      <div className="flex gap-2 mt-1">
-        <Input
-          placeholder="Add new option…"
-          value={newValue}
-          onChange={(e) => setNewValue(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && addOption()}
-          className="text-sm h-9"
-        />
-        <Button size="sm" className="h-9 px-3 shrink-0" onClick={addOption} disabled={!newValue.trim() || adding}>
-          {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-        </Button>
       </div>
 
-      <div className="space-y-0.5 max-h-64 overflow-y-auto mt-1">
-        {isLoading && (
-          <div className="space-y-1.5 py-2">
-            {[1, 2, 3].map((i) => <div key={i} className="h-9 rounded-md bg-muted animate-pulse" />)}
-          </div>
-        )}
-        {!isLoading && options.length === 0 && (
-          <p className="text-xs text-muted-foreground text-center py-8">No options yet. Add one above.</p>
-        )}
-        {!isLoading && options.map((opt) => (
+      <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex gap-2">
+          <Input
+            placeholder="Add new option…"
+            value={newValue}
+            onChange={(e) => setNewValue(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addOption()}
+            className="text-sm h-9"
+          />
+          <Button size="sm" className="h-9 px-3 shrink-0" onClick={addOption} disabled={!newValue.trim() || adding}>
+            {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+          </Button>
+        </div>
+
+        <div className="space-y-0.5 mt-2">
+          {isLoading && (
+            <div className="space-y-1.5 py-2">
+              {[1, 2, 3].map((i) => <div key={i} className="h-9 rounded-md bg-muted animate-pulse" />)}
+            </div>
+          )}
+          {!isLoading && options.length === 0 && (
+            <p className="text-xs text-muted-foreground text-center py-8">No options yet. Add one above.</p>
+          )}
+          {!isLoading && options.map((opt) => (
           <div
             key={opt.id}
             className={cn(
@@ -192,18 +197,19 @@ function ManagePanel({
             )}
           </div>
         ))}
+        </div>
       </div>
 
-      <DialogFooter>
+      <div className="border-t border-border px-6 py-4 flex justify-end shrink-0">
         <Button variant="outline" size="sm" onClick={onBack}>← Back to Brief</Button>
-      </DialogFooter>
+      </div>
     </>
   );
 }
 
-// ── Main Dialog ───────────────────────────────────────────────────────────────
+// ── Main Sheet ────────────────────────────────────────────────────────────────
 
-export function NewBriefDialog({ open, onOpenChange }: Props) {
+export function NewBriefDialog({ open, onOpenChange, defaultClient, defaultTemplate, defaultAdType }: Props) {
   const queryClient = useQueryClient();
   const { settings } = useSettings();
   const [view, setView] = useState<View>("form");
@@ -223,6 +229,16 @@ export function NewBriefDialog({ open, onOpenChange }: Props) {
     setClient(""); setAdType("image_ads"); setTemplate("");
     setAngle(""); setOffer(""); setAssignedTo(""); setNotes(""); setSaving(false);
   };
+
+  // When opened from a Template Library cell, seed the client/template/type so the
+  // operator only has to fill in the angle and offer. Runs once per open.
+  useEffect(() => {
+    if (!open) return;
+    setView("form");
+    if (defaultAdType !== undefined) setAdType(defaultAdType);
+    if (defaultClient !== undefined) setClient(defaultClient);
+    if (defaultTemplate !== undefined) setTemplate(defaultTemplate);
+  }, [open, defaultClient, defaultTemplate, defaultAdType]);
 
   const { data: accounts = [] } = useQuery({
     queryKey: ["accounts-for-brief"],
@@ -297,8 +313,8 @@ export function NewBriefDialog({ open, onOpenChange }: Props) {
   });
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); }}>
-      <DialogContent className="max-w-lg">
+    <Sheet open={open} onOpenChange={(o) => { if (!o) reset(); }}>
+      <SheetContent side="right" className="w-full sm:max-w-md p-0 flex flex-col overflow-hidden">
 
         {/* ── Manage view ──────────────────────────────────────────────────── */}
         {view === "manage_angle" && (
@@ -311,11 +327,11 @@ export function NewBriefDialog({ open, onOpenChange }: Props) {
         {/* ── Form view ────────────────────────────────────────────────────── */}
         {view === "form" && (
           <>
-            <DialogHeader>
-              <DialogTitle>New Creative Brief</DialogTitle>
-            </DialogHeader>
+            <div className="px-6 pt-6 pb-4 border-b border-border shrink-0">
+              <SheetTitle className="text-base font-semibold">New Creative Brief</SheetTitle>
+            </div>
 
-            <div className="space-y-4">
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
               {/* Client */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Client</label>
@@ -408,16 +424,16 @@ export function NewBriefDialog({ open, onOpenChange }: Props) {
               </div>
             </div>
 
-            <DialogFooter>
+            <div className="border-t border-border px-6 py-4 flex justify-end gap-2 shrink-0">
               <Button variant="outline" onClick={reset}>Cancel</Button>
               <Button onClick={() => createBrief.mutate()} disabled={!canCreate || saving} className="gap-1.5">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardList className="h-4 w-4" />}
                 {saving ? "Creating…" : "Create Brief"}
               </Button>
-            </DialogFooter>
+            </div>
           </>
         )}
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
