@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -65,7 +65,23 @@ const Creatives = () => {
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
 
   // ── Template Library state ──────────────────────────────────────────────
-  const [filterAccount, setFilterAccount] = useState("all");
+  // Template Library columns default to every client; the operator can hide specific
+  // clients by deselecting them. The choice persists across sessions.
+  const [excludedClients, setExcludedClients] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem("te_creatives_excluded_clients");
+      return raw ? new Set<string>(JSON.parse(raw)) : new Set();
+    } catch { return new Set(); }
+  });
+  const [clientFilterOpen, setClientFilterOpen] = useState(false);
+  const toggleExcludedClient = (name: string) => setExcludedClients((prev) => {
+    const next = new Set(prev);
+    if (next.has(name)) next.delete(name); else next.add(name);
+    return next;
+  });
+  useEffect(() => {
+    localStorage.setItem("te_creatives_excluded_clients", JSON.stringify([...excludedClients]));
+  }, [excludedClients]);
   const [filterType, setFilterType] = useState("all");
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -183,27 +199,30 @@ const Creatives = () => {
         });
         return { name, previewImage, templateType, templateLink, typeMeta, clients: clientMap, items };
       })
-      .filter(({ name, templateType, clients: c }) => {
-        if (filterAccount !== "all" && !(filterAccount in c)) return false;
+      .filter(({ name, templateType }) => {
         if (filterType !== "all" && templateType !== filterType) return false;
         if (search && !name.toLowerCase().includes(search.toLowerCase())) return false;
         return true;
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [creatives, filterAccount, filterType, search]);
+  }, [creatives, filterType, search]);
 
   // Column set for the library matrix: every client that actually appears in a visible
   // template row, ordered like the accounts list so column order is stable across renders.
-  const clientColumns = useMemo(() => {
+  const allClientColumns = useMemo(() => {
     const visibleTemplates = new Set(templateGroups.map((g) => g.name));
     const present = new Set<string>();
     templateGroups.forEach((g) => Object.keys(g.clients).forEach((c) => present.add(c)));
     requests.forEach((r) => { if (visibleTemplates.has(r.template_name)) present.add(r.account_name); });
     const known = accounts.map((a) => a.account_name).filter((n) => present.has(n));
     const unknown = [...present].filter((n) => !known.includes(n)).sort();
-    const all = [...known, ...unknown];
-    return filterAccount === "all" ? all : all.filter((n) => n === filterAccount);
-  }, [templateGroups, requests, accounts, filterAccount]);
+    return [...known, ...unknown];
+  }, [templateGroups, requests, accounts]);
+
+  const clientColumns = useMemo(
+    () => allClientColumns.filter((n) => !excludedClients.has(n)),
+    [allClientColumns, excludedClients],
+  );
 
   const existingTemplates = useMemo(() =>
     [...new Set(creatives.map((c) => c.batch_name || "Uncategorized"))].sort(),
@@ -436,10 +455,69 @@ const Creatives = () => {
                     <Film className="h-3.5 w-3.5" />
                   </button>
                 </div>
-                <Select value={filterAccount} onValueChange={setFilterAccount}>
-                  <SelectTrigger className="w-[160px] h-9 text-xs"><SelectValue placeholder="All Clients" /></SelectTrigger>
-                  <SelectContent><SelectItem value="all">All Clients</SelectItem>{accounts.map((a) => <SelectItem key={a.id} value={a.account_name}>{a.account_name}</SelectItem>)}</SelectContent>
-                </Select>
+                <Popover open={clientFilterOpen} onOpenChange={setClientFilterOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={clientFilterOpen}
+                      className="w-[180px] h-9 justify-between text-xs font-normal"
+                    >
+                      <span className="truncate">
+                        {(() => {
+                          const hidden = allClientColumns.filter((n) => excludedClients.has(n)).length;
+                          return hidden === 0
+                            ? "All Clients"
+                            : `${allClientColumns.length - hidden} of ${allClientColumns.length} clients`;
+                        })()}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[240px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Filter clients…" className="text-xs" />
+                      <CommandList>
+                        <CommandEmpty>No clients.</CommandEmpty>
+                        <CommandGroup>
+                          {allClientColumns.map((name) => {
+                            const visible = !excludedClients.has(name);
+                            return (
+                              <CommandItem
+                                key={name}
+                                value={name}
+                                onSelect={() => toggleExcludedClient(name)}
+                                className="text-xs"
+                              >
+                                <div
+                                  className={cn(
+                                    "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border",
+                                    visible ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40",
+                                  )}
+                                >
+                                  {visible && <Check className="h-3 w-3" />}
+                                </div>
+                                <span className="truncate">{name}</span>
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandGroup>
+                        {allClientColumns.some((n) => excludedClients.has(n)) && (
+                          <div className="border-t border-border p-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="w-full justify-start text-xs font-normal h-8"
+                              onClick={() => setExcludedClients(new Set())}
+                            >
+                              Show all clients
+                            </Button>
+                          </div>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setNewTplOpen(true)}><Plus className="h-4 w-4" /> New Template</Button>
