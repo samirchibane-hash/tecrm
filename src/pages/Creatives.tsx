@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,7 +11,6 @@ import { format, formatDistanceToNow } from "date-fns";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -21,8 +20,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Plus, X, Trash2, Image as ImageIcon, ExternalLink,
-  Search, Camera, Upload, Film, FolderOpen,
-  AlertCircle, CheckCircle2, Loader2, Send, MessageSquare, User, Check,
+  Search, Camera, Film, Loader2, User, Check,
   ClipboardList, ChevronsUpDown,
 } from "lucide-react";
 import {
@@ -41,12 +39,6 @@ type Creative = {
 };
 
 
-type QueuedFile = {
-  id: string; file: File; status: "pending" | "uploading" | "done" | "error"; error?: string;
-  storageUrl?: string; storagePath?: string;
-};
-
-
 // ── Misc helpers ─────────────────────────────────────────────────────────────
 
 const CLIENT_COLORS = [
@@ -60,13 +52,6 @@ const CLIENT_COLORS = [
   "bg-indigo-100 text-indigo-800 hover:bg-indigo-200",
 ];
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-function isVideoMime(m: string | null) { return !!m && m.startsWith("video/"); }
-function isImageMime(m: string | null) { return !!m && m.startsWith("image/"); }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -133,26 +118,6 @@ const Creatives = () => {
   const [selectedRequest, setSelectedRequest] = useState<CreativeRequest | null>(null);
   const [deleteRequestId, setDeleteRequestId] = useState<string | null>(null);
 
-  // ── Ad Uploads state ────────────────────────────────────────────────────
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploadClient, setUploadClient] = useState("");
-  const [uploadAdType, setUploadAdType] = useState<"image_ads" | "video_ads">("image_ads");
-  const [uploadTemplate, setUploadTemplate] = useState("");
-  const [uploadAngle, setUploadAngle] = useState("");
-  const [uploadOffer, setUploadOffer] = useState("");
-  const [uploadNotes, setUploadNotes] = useState("");
-  const [queuedFiles, setQueuedFiles] = useState<QueuedFile[]>([]);
-  const [isDragging, setIsDragging] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Deep-link: ?upload=1 opens upload dialog
-  useEffect(() => {
-    if (searchParams.get("upload") === "1") setUploadOpen(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-
   // ── Queries ──────────────────────────────────────────────────────────────
 
   const { data: accounts = [] } = useQuery({
@@ -188,14 +153,6 @@ const Creatives = () => {
 
 
   // ── Derived ───────────────────────────────────────────────────────────────
-
-  const accountDriveMap = useMemo(() => {
-    const map: Record<string, string | null> = {};
-    accounts.forEach((a) => {
-      map[a.account_name] = (a as any).gdrive_folder_url ?? null;
-    });
-    return map;
-  }, [accounts]);
 
   const accountColors = useMemo(() => {
     const map: Record<string, string> = {};
@@ -419,48 +376,10 @@ const Creatives = () => {
     onError: (err: Error) => { setNewTplSaving(false); toast.error(`Failed: ${err.message}`); },
   });
 
-  // ── Upload flow ───────────────────────────────────────────────────────────
-
-  const addFilesToQueue = useCallback((newFiles: FileList | File[]) => {
-    const arr = Array.from(newFiles);
-    const valid = arr.filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
-    if (valid.length !== arr.length) toast.warning("Only image and video files are accepted");
-    setQueuedFiles((prev) => [...prev, ...valid.map((f) => ({ id: `${f.name}-${f.size}-${Date.now()}-${Math.random()}`, file: f, status: "pending" as const }))]);
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); addFilesToQueue(e.dataTransfer.files); }, [addFilesToQueue]);
-
-  const handleUploadBatch = async () => {
-    if (!uploadClient || !uploadTemplate.trim() || !uploadAngle.trim() || !uploadOffer.trim() || queuedFiles.length === 0 || uploading) return;
-    const driveUrl = accountDriveMap[uploadClient];
-    if (!driveUrl) { toast.error("This client has no Google Drive folder linked."); return; }
-    setUploading(true);
-    const uploadedFiles: Array<{ storage_path: string; storage_url: string; file_name: string; mime_type: string; file_size: number; }> = [];
-    for (const qf of queuedFiles) {
-      setQueuedFiles((prev) => prev.map((f) => f.id === qf.id ? { ...f, status: "uploading" } : f));
-      const ext = qf.file.name.split(".").pop();
-      const path = `${uploadClient}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error: storageErr } = await supabase.storage.from("creative-outputs").upload(path, qf.file);
-      if (storageErr) { setQueuedFiles((prev) => prev.map((f) => f.id === qf.id ? { ...f, status: "error", error: storageErr.message } : f)); continue; }
-      const { data: urlData } = supabase.storage.from("creative-outputs").getPublicUrl(path);
-      setQueuedFiles((prev) => prev.map((f) => f.id === qf.id ? { ...f, status: "done", storageUrl: urlData.publicUrl, storagePath: path } : f));
-      uploadedFiles.push({ storage_path: path, storage_url: urlData.publicUrl, file_name: qf.file.name, mime_type: qf.file.type, file_size: qf.file.size });
-    }
-    if (uploadedFiles.length === 0) { setUploading(false); toast.error("All files failed to upload"); return; }
-    const { data, error } = await supabase.functions.invoke("upload-creatives-to-drive", { body: { account_name: uploadClient, ad_type: uploadAdType, template_name: uploadTemplate.trim(), ad_angle: uploadAngle.trim(), offer_type: uploadOffer.trim(), notes: uploadNotes.trim() || null, gdrive_parent_folder_url: driveUrl, files: uploadedFiles } });
-    setUploading(false);
-    if (error || data?.error) { toast.error(data?.error ?? "Failed to upload to Drive"); return; }
-    toast.success(`Batch uploaded — ${uploadedFiles.length} file${uploadedFiles.length !== 1 ? "s" : ""} sent to Drive`);
-    resetUploadForm();
-  };
-
   // ── Form resets ───────────────────────────────────────────────────────────
 
   const resetAddForm = () => { setAddOpen(false); setAddTplComboOpen(false); setAddAdType("image"); setAddTemplateName(""); setAddClient(""); setAddGdriveUrl(""); setAddPreviewFile(null); setAddPreviewPreview(null); setSaving(false); };
   const resetNewTplForm = () => { setNewTplOpen(false); setNewTplName(""); setNewTplType(null); setNewTplLink(""); setNewTplFile(null); setNewTplPreview(null); setNewTplSaving(false); };
-  const resetUploadForm = () => { setUploadOpen(false); setUploadClient(""); setUploadAdType("image_ads"); setUploadTemplate(""); setUploadAngle(""); setUploadOffer(""); setUploadNotes(""); setQueuedFiles([]); setUploading(false); };
-
-  const canUpload = !!uploadClient && !!uploadTemplate.trim() && !!uploadAngle.trim() && !!uploadOffer.trim() && queuedFiles.length > 0 && !uploading;
 
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -524,8 +443,7 @@ const Creatives = () => {
               </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setNewTplOpen(true)}><Plus className="h-4 w-4" /> New Template</Button>
-                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add Production</Button>
-                <Button size="sm" className="gap-1.5" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" /> Upload Batch</Button>
+                <Button size="sm" className="gap-1.5" onClick={() => setNewBriefOpen(true)}><ClipboardList className="h-4 w-4" /> New Brief</Button>
               </div>
             </div>
 
@@ -535,10 +453,10 @@ const Creatives = () => {
               <div className="flex flex-col items-center gap-4 py-20 text-center">
                 <ImageIcon className="h-12 w-12 text-muted-foreground/40" />
                 <p className="text-lg font-medium">No templates yet</p>
-                <p className="max-w-md text-sm text-muted-foreground">Create a template first, then link client productions to it.</p>
+                <p className="max-w-md text-sm text-muted-foreground">Create a template first, then brief it out to your clients.</p>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" onClick={() => setNewTplOpen(true)} className="gap-1.5"><Plus className="h-4 w-4" /> New Template</Button>
-                  <Button onClick={() => setAddOpen(true)} className="gap-1.5"><Plus className="h-4 w-4" /> Add Production</Button>
+                  <Button onClick={() => setNewBriefOpen(true)} className="gap-1.5"><ClipboardList className="h-4 w-4" /> New Brief</Button>
                 </div>
               </div>
             )}
@@ -694,91 +612,6 @@ const Creatives = () => {
 
         {/* ── New Brief Dialog ──────────────────────────────────────────────── */}
         <NewBriefDialog open={newBriefOpen} onOpenChange={setNewBriefOpen} />
-
-        {/* ── Upload Batch Dialog ───────────────────────────────────────────── */}
-        <Dialog open={uploadOpen} onOpenChange={(open) => { if (!open && !uploading) resetUploadForm(); }}>
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>Upload Creative Batch</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Client</label>
-                <Select value={uploadClient} onValueChange={setUploadClient} disabled={uploading}>
-                  <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
-                  <SelectContent>
-                    {accounts.map((a) => (
-                      <SelectItem key={a.id} value={a.account_name}>
-                        <span className="flex items-center gap-2">{a.account_name}{!accountDriveMap[a.account_name] && <span className="text-[10px] text-amber-600 font-medium">no Drive folder</span>}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {uploadClient && !accountDriveMap[uploadClient] && <p className="text-xs text-amber-600 flex items-center gap-1 mt-1"><AlertCircle className="h-3 w-3" />This client has no Drive folder linked.</p>}
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Ad Type</label>
-                <div className="flex gap-2">
-                  {([["image_ads", "Image Ads"], ["video_ads", "Video Ads"]] as const).map(([val, label]) => (
-                    <button key={val} disabled={uploading} onClick={() => setUploadAdType(val)}
-                      className={cn("flex-1 flex items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-semibold transition-colors",
-                        uploadAdType === val ? val === "image_ads" ? "bg-sky-100 text-sky-800 border-sky-200" : "bg-violet-100 text-violet-800 border-violet-200" : "border-border text-muted-foreground hover:border-muted-foreground")}>
-                      {val === "image_ads" ? <ImageIcon className="h-3.5 w-3.5" /> : <Film className="h-3.5 w-3.5" />}{label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-1 gap-3">
-                {[["Template Name", uploadTemplate, setUploadTemplate, "e.g. VSL v3, Static Square"], ["Ad Angle", uploadAngle, setUploadAngle, "e.g. Pain Point, Before & After"], ["Offer Type", uploadOffer, setUploadOffer, "e.g. Free Estimate, $99 Special"]].map(([label, val, setter, ph]) => (
-                  <div key={label as string} className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">{label as string}</label>
-                    <Input placeholder={ph as string} value={val as string} onChange={(e) => (setter as React.Dispatch<React.SetStateAction<string>>)(e.target.value)} disabled={uploading} />
-                  </div>
-                ))}
-              </div>
-              {uploadTemplate && uploadAngle && uploadOffer && (
-                <div className="rounded-lg bg-muted/60 border border-border px-3 py-2 flex items-center gap-2">
-                  <FolderOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-xs text-muted-foreground">Folder: <span className="font-medium text-foreground">{uploadTemplate} - {uploadAngle} - {uploadOffer}</span></span>
-                </div>
-              )}
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Notes <span className="text-muted-foreground/50">(optional)</span></label>
-                <Textarea placeholder="e.g. Round 2 revisions based on client feedback" value={uploadNotes} onChange={(e) => setUploadNotes(e.target.value)} disabled={uploading} className="resize-none text-sm" rows={2} />
-              </div>
-              <div className={cn("relative rounded-xl border-2 border-dashed transition-colors", isDragging ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground/50", uploading && "pointer-events-none opacity-60")}
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={handleDrop}>
-                <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={(e) => { if (e.target.files) addFilesToQueue(e.target.files); e.target.value = ""; }} />
-                <div className="flex flex-col items-center gap-2 py-8 cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                  <Upload className={cn("h-8 w-8", isDragging ? "text-primary" : "text-muted-foreground/40")} />
-                  <div className="text-center">
-                    <p className="text-sm font-medium">Drop files here or click to browse</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Images and videos accepted</p>
-                  </div>
-                </div>
-              </div>
-              {queuedFiles.length > 0 && (
-                <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                  {queuedFiles.map((qf) => (
-                    <div key={qf.id} className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
-                      {qf.file.type.startsWith("video/") ? <Film className="h-3.5 w-3.5 text-violet-500 shrink-0" /> : <ImageIcon className="h-3.5 w-3.5 text-sky-500 shrink-0" />}
-                      <span className="text-xs flex-1 truncate">{qf.file.name}</span>
-                      <span className="text-[10px] text-muted-foreground shrink-0">{formatBytes(qf.file.size)}</span>
-                      {qf.status === "uploading" && <Loader2 className="h-3.5 w-3.5 text-primary animate-spin shrink-0" />}
-                      {qf.status === "done" && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
-                      {qf.status === "error" && <span title={qf.error}><AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0" /></span>}
-                      {qf.status === "pending" && !uploading && <button onClick={() => setQueuedFiles((p) => p.filter((f) => f.id !== qf.id))} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <DialogFooter className="mt-2">
-              <Button variant="outline" onClick={resetUploadForm} disabled={uploading}>Cancel</Button>
-              <Button onClick={handleUploadBatch} disabled={!canUpload} className="gap-1.5 min-w-[140px]">
-                {uploading ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading…</> : <><Upload className="h-4 w-4" /> Upload {queuedFiles.length > 0 ? `${queuedFiles.length} file${queuedFiles.length !== 1 ? "s" : ""}` : "Batch"}</>}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
         {/* ── New Template Dialog ───────────────────────────────────────────── */}
         <Dialog open={newTplOpen} onOpenChange={(open) => { if (!open) resetNewTplForm(); }}>
