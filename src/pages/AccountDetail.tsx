@@ -814,9 +814,9 @@ const AccountDetail = () => {
             <TabsTrigger value="profile">Overview</TabsTrigger>
             <TabsTrigger value="creatives">
               Creatives
-              {(creativeBatches.length + creativeRequests.length) > 0 && (
+              {creativeBatches.length > 0 && (
                 <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                  {creativeBatches.length + creativeRequests.length}
+                  {creativeBatches.length}
                 </span>
               )}
             </TabsTrigger>
@@ -827,6 +827,98 @@ const AccountDetail = () => {
 
           {/* ── Overview Tab ────────────────────────────────────────────────── */}
           <TabsContent value="profile" className="space-y-6">
+
+            {/* ── KPIs + Chart (annotated with tasks / creative briefs) ── */}
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Key Metrics</h2>
+                <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                  <PopoverTrigger asChild>
+                    <button className="flex items-center gap-1.5 rounded-md border border-border/60 bg-card px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
+                      <CalendarDays className="h-3.5 w-3.5 text-primary shrink-0" />
+                      {dateLabel}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-44 p-1.5" align="end">
+                    <div className="flex flex-col gap-0.5">
+                      {[
+                        { label: "Last 7 days", range: { from: max([startOfDay(subDays(new Date(), 7)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
+                        { label: "Last 30 days", range: { from: max([startOfDay(subDays(new Date(), 29)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
+                        { label: "Last month", range: { from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) } },
+                        { label: "Month to Date", range: { from: max([startOfMonth(new Date()), MIN_DATE]), to: startOfDay(new Date()) } },
+                        { label: "All time", range: { from: undefined, to: undefined } },
+                      ].map((p) => (
+                        <Button key={p.label} variant={presetLabel === p.label ? "secondary" : "ghost"} size="sm" className="justify-start text-xs h-8 rounded-sm"
+                          onClick={() => { setDateRange(p.range.from ? p.range as DateRange : undefined); setPresetLabel(p.label); setDatePickerOpen(false); }}>
+                          {p.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {enabledKpis.length > 0 ? (
+                <>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {enabledKpis.map(({ key, label, icon, format: fmt }) => (
+                      <StatCard key={key} label={label} value={fmt(kpis[key])} icon={icon}
+                        isActive={selectedChart === key}
+                        onClick={CHARTABLE_KEYS.has(key) ? () => setSelectedChart(key) : undefined}
+                      />
+                    ))}
+                  </div>
+                  {selectedKpi && CHARTABLE_KEYS.has(selectedChart) && (
+                    <div className="mt-3">
+                      <KpiAreaChart
+                        data={chartSeriesData[selectedChart] ?? []}
+                        label={selectedKpi.label}
+                        formatValue={selectedKpi.format}
+                        annotations={chartAnnotations}
+                      />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground py-4">No KPIs enabled — configure them in Settings.</p>
+              )}
+            </section>
+
+            {/* ── Creative Briefs ── */}
+            {creativeRequests.length > 0 && (
+              <section>
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                  Creative Briefs
+                  <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {creativeRequests.length}
+                  </span>
+                </h2>
+                <div className="space-y-2">
+                  {creativeRequests.map((req) => (
+                    <div key={req.id} className="rounded-xl border border-border/60 bg-card p-3 flex flex-col gap-2 shadow-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", BRIEF_STATUS_BADGE[req.status] ?? "bg-slate-100 text-slate-700")}>
+                          {BRIEF_STATUS_LABEL[req.status] ?? req.status}
+                        </span>
+                        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", req.ad_type === "image_ads" ? "bg-sky-100 text-sky-800" : "bg-violet-100 text-violet-800")}>
+                          {req.ad_type === "image_ads" ? <ImageIcon className="inline h-3 w-3 mr-0.5" /> : <Film className="inline h-3 w-3 mr-0.5" />}
+                          {req.ad_type === "image_ads" ? "Image" : "Video"}
+                        </span>
+                        <span className="text-sm font-medium text-foreground">{req.template_name}</span>
+                        <span className="ml-auto text-xs text-muted-foreground">{format(new Date(req.updated_at), "MMM d, yyyy")}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{req.ad_angle} · {req.offer_type}</p>
+                      {req.notes && <p className="text-xs text-foreground/80 whitespace-pre-wrap">{req.notes}</p>}
+                      {req.gdrive_folder_url && (
+                        <a href={req.gdrive_folder_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                          <ExternalLink className="h-3 w-3" /> View creative folder
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* ── Tasks ── */}
             <section>
@@ -908,62 +1000,6 @@ const AccountDetail = () => {
                   </button>
                 )}
               </div>
-            </section>
-
-            {/* ── KPIs + Chart (annotated with tasks / creative briefs) ── */}
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Key Metrics</h2>
-                <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
-                  <PopoverTrigger asChild>
-                    <button className="flex items-center gap-1.5 rounded-md border border-border/60 bg-card px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
-                      <CalendarDays className="h-3.5 w-3.5 text-primary shrink-0" />
-                      {dateLabel}
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-44 p-1.5" align="end">
-                    <div className="flex flex-col gap-0.5">
-                      {[
-                        { label: "Last 7 days", range: { from: max([startOfDay(subDays(new Date(), 7)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
-                        { label: "Last 30 days", range: { from: max([startOfDay(subDays(new Date(), 29)), MIN_DATE]), to: startOfDay(subDays(new Date(), 1)) } },
-                        { label: "Last month", range: { from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) } },
-                        { label: "Month to Date", range: { from: max([startOfMonth(new Date()), MIN_DATE]), to: startOfDay(new Date()) } },
-                        { label: "All time", range: { from: undefined, to: undefined } },
-                      ].map((p) => (
-                        <Button key={p.label} variant={presetLabel === p.label ? "secondary" : "ghost"} size="sm" className="justify-start text-xs h-8 rounded-sm"
-                          onClick={() => { setDateRange(p.range.from ? p.range as DateRange : undefined); setPresetLabel(p.label); setDatePickerOpen(false); }}>
-                          {p.label}
-                        </Button>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              {enabledKpis.length > 0 ? (
-                <>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {enabledKpis.map(({ key, label, icon, format: fmt }) => (
-                      <StatCard key={key} label={label} value={fmt(kpis[key])} icon={icon}
-                        isActive={selectedChart === key}
-                        onClick={CHARTABLE_KEYS.has(key) ? () => setSelectedChart(key) : undefined}
-                      />
-                    ))}
-                  </div>
-                  {selectedKpi && CHARTABLE_KEYS.has(selectedChart) && (
-                    <div className="mt-3">
-                      <KpiAreaChart
-                        data={chartSeriesData[selectedChart] ?? []}
-                        label={selectedKpi.label}
-                        formatValue={selectedKpi.format}
-                        annotations={chartAnnotations}
-                      />
-                    </div>
-                  )}
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground py-4">No KPIs enabled — configure them in Settings.</p>
-              )}
             </section>
 
             {/* ── Funnel Pages ── */}
@@ -1144,48 +1180,12 @@ const AccountDetail = () => {
 
           {/* ── Creatives Tab ───────────────────────────────────────────────── */}
           <TabsContent value="creatives">
-            {/* Creative Briefs section */}
-            {creativeRequests.length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                  Creative Briefs
-                  <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                    {creativeRequests.length}
-                  </span>
-                </h3>
-                <div className="space-y-2">
-                  {creativeRequests.map((req) => (
-                    <div key={req.id} className="rounded-xl border border-border/60 bg-card p-3 flex flex-col gap-2 shadow-sm">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", BRIEF_STATUS_BADGE[req.status] ?? "bg-slate-100 text-slate-700")}>
-                          {BRIEF_STATUS_LABEL[req.status] ?? req.status}
-                        </span>
-                        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", req.ad_type === "image_ads" ? "bg-sky-100 text-sky-800" : "bg-violet-100 text-violet-800")}>
-                          {req.ad_type === "image_ads" ? <ImageIcon className="inline h-3 w-3 mr-0.5" /> : <Film className="inline h-3 w-3 mr-0.5" />}
-                          {req.ad_type === "image_ads" ? "Image" : "Video"}
-                        </span>
-                        <span className="text-sm font-medium text-foreground">{req.template_name}</span>
-                        <span className="ml-auto text-xs text-muted-foreground">{format(new Date(req.updated_at), "MMM d, yyyy")}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">{req.ad_angle} · {req.offer_type}</p>
-                      {req.notes && <p className="text-xs text-foreground/80 whitespace-pre-wrap">{req.notes}</p>}
-                      {req.gdrive_folder_url && (
-                        <a href={req.gdrive_folder_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                          <ExternalLink className="h-3 w-3" /> View creative folder
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {creativeBatches.length === 0 && creativeRequests.length === 0 ? (
+            {creativeBatches.length === 0 ? (
               <div className="flex flex-col items-center gap-3 py-14 text-center">
                 <Layers className="h-10 w-10 text-muted-foreground/30" />
                 <p className="text-sm text-muted-foreground">No creative templates produced for this client yet.</p>
               </div>
-            ) : creativeBatches.length > 0 ? (
+            ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 {creativeBatches.map(({ name, previewImage, templateType, templateLink, myLink }) => (
                   <div key={name} className="rounded-xl border border-border/60 bg-card overflow-hidden flex flex-col shadow-sm">
@@ -1240,7 +1240,7 @@ const AccountDetail = () => {
                   </div>
                 ))}
               </div>
-            ) : null}
+            )}
           </TabsContent>
 
           {/* ── Client Profile Tab ──────────────────────────────────────────── */}
