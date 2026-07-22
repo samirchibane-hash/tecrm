@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { NewBriefDialog } from "@/components/creatives/NewBriefDialog";
 import { RequestDetailSheet } from "@/components/creatives/RequestDetailSheet";
 import { TemplateDetailSheet } from "@/components/creatives/TemplateDetailSheet";
+import { TemplateLibraryTable } from "@/components/creatives/TemplateLibraryTable";
 import { type CreativeRequest, type RequestStatus, STATUS_STEPS, STATUS_LABEL, STATUS_BADGE, STATUS_DOT } from "@/components/creatives/types";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -19,12 +20,11 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  ArrowLeft, Plus, X, MoreVertical, Trash2, Image as ImageIcon, ExternalLink,
-  Search, Info, Camera, Upload, Film, FolderOpen,
+  ArrowLeft, Plus, X, Trash2, Image as ImageIcon, ExternalLink,
+  Search, Camera, Upload, Film, FolderOpen,
   AlertCircle, CheckCircle2, Loader2, Send, MessageSquare, User, Check,
   ClipboardList, ChevronsUpDown,
 } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -108,7 +108,6 @@ const Creatives = () => {
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
   const [thumbnailTargetTemplate, setThumbnailTargetTemplate] = useState<string | null>(null);
   const [thumbnailUploading, setThumbnailUploading] = useState(false);
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const [selectedTemplateGroup, setSelectedTemplateGroup] = useState<{
     name: string;
@@ -235,6 +234,19 @@ const Creatives = () => {
       })
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [creatives, filterAccount, filterType, search]);
+
+  // Column set for the library matrix: every client that actually appears in a visible
+  // template row, ordered like the accounts list so column order is stable across renders.
+  const clientColumns = useMemo(() => {
+    const visibleTemplates = new Set(templateGroups.map((g) => g.name));
+    const present = new Set<string>();
+    templateGroups.forEach((g) => Object.keys(g.clients).forEach((c) => present.add(c)));
+    requests.forEach((r) => { if (visibleTemplates.has(r.template_name)) present.add(r.account_name); });
+    const known = accounts.map((a) => a.account_name).filter((n) => present.has(n));
+    const unknown = [...present].filter((n) => !known.includes(n)).sort();
+    const all = [...known, ...unknown];
+    return filterAccount === "all" ? all : all.filter((n) => n === filterAccount);
+  }, [templateGroups, requests, accounts, filterAccount]);
 
   const existingTemplates = useMemo(() =>
     [...new Set(creatives.map((c) => c.batch_name || "Uncategorized"))].sort(),
@@ -517,7 +529,7 @@ const Creatives = () => {
               </div>
             </div>
 
-            {creativesLoading && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="aspect-[4/3] rounded-xl" />)}</div>}
+            {creativesLoading && <div className="space-y-2">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-11 rounded-lg" />)}</div>}
 
             {!creativesLoading && templateGroups.length === 0 && (
               <div className="flex flex-col items-center gap-4 py-20 text-center">
@@ -532,90 +544,22 @@ const Creatives = () => {
             )}
 
             {!creativesLoading && templateGroups.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {templateGroups.map(({ name, previewImage, templateType, templateLink, clients: c }) => {
-                  const templateReqs = requests.filter((r) => r.template_name === name);
-
-                  return (
-                    <div
-                      key={name}
-                      className="rounded-xl border border-border bg-card overflow-hidden flex flex-col shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                      onClick={() => setSelectedTemplateGroup({ name, templateType, templateLink, clients: c })}
-                    >
-
-                      {/* Thumbnail — click opens lightbox only */}
-                      <div
-                        className="relative aspect-video bg-muted flex items-center justify-center"
-                        onClick={(e) => { e.stopPropagation(); previewImage && setLightboxUrl(previewImage); }}
-                      >
-                        {thumbnailUploading && thumbnailTargetTemplate === name && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10">
-                            <span className="text-xs text-white font-medium">Uploading…</span>
-                          </div>
-                        )}
-                        {previewImage
-                          ? <img src={previewImage} alt={name} className="w-full h-full object-cover" loading="lazy" />
-                          : <ImageIcon className="h-10 w-10 text-muted-foreground/25" />}
-                      </div>
-
-                      {/* Card body */}
-                      <div className="flex flex-col flex-1">
-
-                        {/* Header */}
-                        <div className="px-4 pt-3.5 pb-3 flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              {templateType === "video"
-                                ? <Film className="h-3.5 w-3.5 shrink-0 text-violet-500" />
-                                : templateType === "image"
-                                ? <ImageIcon className="h-3.5 w-3.5 shrink-0 text-sky-500" />
-                                : null}
-                              <h3 className="font-semibold text-sm leading-tight truncate">{name}</h3>
-                            </div>
-                            {templateLink && (
-                              <a href={templateLink} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors mt-0.5">
-                                <ExternalLink className="h-2.5 w-2.5" /> Master
-                              </a>
-                            )}
-                          </div>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 -mt-0.5 -mr-1.5" onClick={(e) => e.stopPropagation()}>
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setThumbnailTargetTemplate(name); thumbnailInputRef.current?.click(); }}>
-                                <Camera className="mr-2 h-3.5 w-3.5" /> {previewImage ? "Replace thumbnail" : "Upload thumbnail"}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => { setSettingsOriginalName(name); setSettingsName(name); setSettingsType(templateType); setSettingsLink(templateLink); setSettingsOpen(true); }}>
-                                <Info className="mr-2 h-3.5 w-3.5" /> Settings
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => { setAddTemplateName(name); setAddOpen(true); }}>
-                                <Plus className="mr-2 h-3.5 w-3.5" /> Add client
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="text-destructive" onClick={() => setDeleteTemplateName(name)}>
-                                <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete template
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-
-                        {/* Footer */}
-                        <div className="border-t border-border/60 mx-4" />
-                        <div className="px-4 py-2.5">
-                          <p className="text-[11px] text-muted-foreground">
-                            {templateReqs.length === 0
-                              ? "No briefs yet"
-                              : `${templateReqs.length} brief${templateReqs.length !== 1 ? "s" : ""}`}
-                          </p>
-                        </div>
-
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <TemplateLibraryTable
+                rows={templateGroups}
+                clientColumns={clientColumns}
+                requests={requests}
+                uploadingThumbnailFor={thumbnailUploading ? thumbnailTargetTemplate : null}
+                onOpenTemplate={({ name, templateType, templateLink, clients }) =>
+                  setSelectedTemplateGroup({ name, templateType, templateLink, clients })}
+                onOpenRequest={(req) => setSelectedRequest(req)}
+                onUploadThumbnail={(name) => { setThumbnailTargetTemplate(name); thumbnailInputRef.current?.click(); }}
+                onOpenSettings={({ name, templateType, templateLink }) => {
+                  setSettingsOriginalName(name); setSettingsName(name);
+                  setSettingsType(templateType); setSettingsLink(templateLink); setSettingsOpen(true);
+                }}
+                onAddClient={(name) => { setAddTemplateName(name); setAddOpen(true); }}
+                onDeleteTemplate={(name) => setDeleteTemplateName(name)}
+              />
             )}
           </TabsContent>
 
@@ -1081,10 +1025,6 @@ const Creatives = () => {
             </div>
             <DialogFooter><Button variant="outline" onClick={() => setEditProdOpen(false)}>Cancel</Button><Button onClick={() => updateClientProduction.mutate({ originalTemplate: editProdOriginalTemplate, originalClient: editProdClient, newTemplate: editProdTemplateName.trim(), newGdriveUrl: editProdGdriveUrl.trim() })} disabled={!editProdTemplateName.trim() || editProdSaving}>{editProdSaving ? "Saving…" : "Save"}</Button></DialogFooter>
           </DialogContent>
-        </Dialog>
-
-        <Dialog open={!!lightboxUrl} onOpenChange={() => setLightboxUrl(null)}>
-          <DialogContent className="max-w-4xl p-2">{lightboxUrl && <img src={lightboxUrl} alt="Preview" className="max-w-full max-h-[85vh] object-contain mx-auto rounded-lg" />}</DialogContent>
         </Dialog>
 
         <AlertDialog open={!!deleteTemplateName} onOpenChange={(open) => { if (!open) setDeleteTemplateName(null); }}>

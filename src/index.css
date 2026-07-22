@@ -30,6 +30,12 @@
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
+    /* Progress states: work finished vs. work in flight. */
+    --success: 152 62% 32%;
+    --success-foreground: 0 0% 100%;
+    --warning: 27 92% 40%;
+    --warning-foreground: 0 0% 100%;
+
     --border: 0 0% 91%;
     --input: 0 0% 91%;
     --ring: 0 0% 0%;
@@ -76,6 +82,12 @@
 
     --destructive: 0 62% 30%;
     --destructive-foreground: 210 40% 98%;
+
+    /* Lifted for legibility on the dark surface — same meaning, same hue family. */
+    --success: 152 58% 52%;
+    --success-foreground: 224 30% 7%;
+    --warning: 30 90% 58%;
+    --warning-foreground: 224 30% 7%;
 
     --border: 224 18% 16%;
     --input: 224 18% 16%;
