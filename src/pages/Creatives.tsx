@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { NewBriefDialog } from "@/components/creatives/NewBriefDialog";
+import { NewTemplateSheet } from "@/components/creatives/NewTemplateSheet";
 import { RequestDetailSheet } from "@/components/creatives/RequestDetailSheet";
 import { TemplateDetailSheet } from "@/components/creatives/TemplateDetailSheet";
 import { TemplateLibraryTable } from "@/components/creatives/TemplateLibraryTable";
@@ -36,6 +37,7 @@ type Creative = {
   id: string; account_name: string; batch_name: string | null;
   file_name: string; file_url: string; file_type: string;
   launch_date: string | null; created_at: string;
+  ad_angle: string | null; offer_type: string | null; notes: string | null;
 };
 
 
@@ -114,17 +116,14 @@ const Creatives = () => {
     name: string;
     templateType: "image" | "video" | null;
     templateLink: string;
+    adAngle: string | null;
+    offerType: string | null;
+    templateNotes: string | null;
     clients: Record<string, string | null>;
   } | null>(null);
 
   // ── New Template dialog state ───────────────────────────────────────────
   const [newTplOpen, setNewTplOpen] = useState(false);
-  const [newTplName, setNewTplName] = useState("");
-  const [newTplType, setNewTplType] = useState<"image" | "video" | null>(null);
-  const [newTplLink, setNewTplLink] = useState("");
-  const [newTplFile, setNewTplFile] = useState<File | null>(null);
-  const [newTplPreview, setNewTplPreview] = useState<string | null>(null);
-  const [newTplSaving, setNewTplSaving] = useState(false);
 
   // ── Creative Requests state ─────────────────────────────────────────────
   const [reqFilterStatus, setReqFilterStatus] = useState("all");
@@ -193,6 +192,9 @@ const Creatives = () => {
         const typeMeta = items.find((i) => i.file_type === "template_type");
         const templateType: "image" | "video" | null = typeMeta && (typeMeta.file_name === "image" || typeMeta.file_name === "video") ? typeMeta.file_name : null;
         const templateLink: string = typeMeta?.file_url ?? "";
+        const adAngle: string | null = typeMeta?.ad_angle ?? null;
+        const offerType: string | null = typeMeta?.offer_type ?? null;
+        const templateNotes: string | null = typeMeta?.notes ?? null;
         const clientMap: Record<string, string | null> = {};
         items.forEach((i) => {
           if (i.file_type === "template_type") return;
@@ -200,7 +202,7 @@ const Creatives = () => {
           if (i.file_type === "link") clientMap[i.account_name] = i.file_url;
           else if (!(i.account_name in clientMap)) clientMap[i.account_name] = null;
         });
-        return { name, previewImage, templateType, templateLink, typeMeta, clients: clientMap, items };
+        return { name, previewImage, templateType, templateLink, adAngle, offerType, templateNotes, typeMeta, clients: clientMap, items };
       })
       .filter(({ name, templateType }) => {
         if (filterType !== "all" && templateType !== filterType) return false;
@@ -365,43 +367,9 @@ const Creatives = () => {
     onError: (err: Error) => { setThumbnailUploading(false); toast.error(`Upload failed: ${err.message}`); },
   });
 
-  const saveNewTemplate = useMutation({
-    mutationFn: async () => {
-      if (!newTplName.trim()) return;
-      setNewTplSaving(true);
-      const { error } = await supabase.from("creatives").insert({
-        account_name: "_meta",
-        batch_name: newTplName.trim(),
-        file_name: newTplType ?? "",
-        file_url: newTplLink.trim(),
-        file_type: "template_type",
-        launch_date: null,
-      });
-      if (error) throw error;
-      if (newTplFile) {
-        const ext = newTplFile.name.split(".").pop();
-        const path = `_meta/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error: uploadErr } = await supabase.storage.from("creatives").upload(path, newTplFile);
-        if (uploadErr) throw uploadErr;
-        const { data: urlData } = supabase.storage.from("creatives").getPublicUrl(path);
-        await supabase.from("creatives").insert({
-          account_name: "_meta",
-          batch_name: newTplName.trim(),
-          file_name: newTplFile.name,
-          file_url: urlData.publicUrl,
-          file_type: "image",
-          launch_date: null,
-        });
-      }
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["creatives"] }); resetNewTplForm(); toast.success("Template created"); },
-    onError: (err: Error) => { setNewTplSaving(false); toast.error(`Failed: ${err.message}`); },
-  });
-
   // ── Form resets ───────────────────────────────────────────────────────────
 
   const resetAddForm = () => { setAddOpen(false); setAddTplComboOpen(false); setAddAdType("image"); setAddTemplateName(""); setAddClient(""); setAddGdriveUrl(""); setAddPreviewFile(null); setAddPreviewPreview(null); setSaving(false); };
-  const resetNewTplForm = () => { setNewTplOpen(false); setNewTplName(""); setNewTplType(null); setNewTplLink(""); setNewTplFile(null); setNewTplPreview(null); setNewTplSaving(false); };
 
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -548,8 +516,15 @@ const Creatives = () => {
                 clientColumns={clientColumns}
                 requests={requests}
                 uploadingThumbnailFor={thumbnailUploading ? thumbnailTargetTemplate : null}
-                onOpenTemplate={({ name, templateType, templateLink, clients }) =>
-                  setSelectedTemplateGroup({ name, templateType, templateLink, clients })}
+                onOpenTemplate={({ name, templateType, templateLink, clients }) => {
+                  const group = templateGroups.find((g) => g.name === name);
+                  setSelectedTemplateGroup({
+                    name, templateType, templateLink, clients,
+                    adAngle: group?.adAngle ?? null,
+                    offerType: group?.offerType ?? null,
+                    templateNotes: group?.templateNotes ?? null,
+                  });
+                }}
                 onOpenRequest={(req) => setSelectedRequest(req)}
                 onNewBrief={(templateName, client) => {
                   const group = templateGroups.find((g) => g.name === templateName);
@@ -710,94 +685,8 @@ const Creatives = () => {
           defaultAdType={newBriefDefaults.adType}
         />
 
-        {/* ── New Template Dialog ───────────────────────────────────────────── */}
-        <Dialog open={newTplOpen} onOpenChange={(open) => { if (!open) resetNewTplForm(); }}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>New Template</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Template Name <span className="text-destructive">*</span></label>
-                <Input
-                  placeholder="e.g. IMG001, VSL-Hero, Static-Square"
-                  value={newTplName}
-                  onChange={(e) => setNewTplName(e.target.value)}
-                  autoFocus
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Type <span className="text-muted-foreground/50">(optional)</span></label>
-                <div className="flex gap-2">
-                  {(["image", "video"] as const).map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => setNewTplType(newTplType === t ? null : t)}
-                      className={cn(
-                        "flex-1 flex items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-semibold transition-colors",
-                        newTplType === t
-                          ? t === "video" ? "bg-violet-100 text-violet-800 border-violet-200" : "bg-sky-100 text-sky-800 border-sky-200"
-                          : "border-border text-muted-foreground hover:border-muted-foreground"
-                      )}
-                    >
-                      {t === "video" ? <Film className="h-3.5 w-3.5" /> : <ImageIcon className="h-3.5 w-3.5" />}
-                      {t === "video" ? "Video" : "Image"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Master Template Link <span className="text-muted-foreground/50">(optional)</span></label>
-                <Input
-                  placeholder="https://drive.google.com/…"
-                  value={newTplLink}
-                  onChange={(e) => setNewTplLink(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Thumbnail <span className="text-muted-foreground/50">(optional)</span></label>
-                <div className="relative rounded-xl border-2 border-dashed border-border p-4 text-center">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (!f) return;
-                      setNewTplFile(f);
-                      setNewTplPreview(URL.createObjectURL(f));
-                    }}
-                  />
-                  {newTplPreview ? (
-                    <div className="relative inline-block">
-                      <img src={newTplPreview} alt="Preview" className="max-h-32 rounded-lg mx-auto" />
-                      <button
-                        className="absolute -top-1 -right-1 bg-background rounded-full border border-border p-0.5"
-                        onClick={(e) => { e.stopPropagation(); setNewTplFile(null); setNewTplPreview(null); }}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-1.5 py-2">
-                      <Camera className="h-5 w-5 text-muted-foreground/40" />
-                      <p className="text-xs text-muted-foreground">Click to upload a thumbnail</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={resetNewTplForm}>Cancel</Button>
-              <Button
-                onClick={() => saveNewTemplate.mutate()}
-                disabled={!newTplName.trim() || newTplSaving}
-              >
-                {newTplSaving ? "Creating…" : "Create Template"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* ── New Template side panel ───────────────────────────────────────── */}
+        <NewTemplateSheet open={newTplOpen} onOpenChange={setNewTplOpen} />
 
         {/* ── Library dialogs ───────────────────────────────────────────────── */}
         <Dialog open={addOpen} onOpenChange={(open) => { if (!open) resetAddForm(); }}>

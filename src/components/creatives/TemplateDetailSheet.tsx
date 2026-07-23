@@ -22,6 +22,9 @@ interface TemplateGroup {
   name: string;
   templateType: "image" | "video" | null;
   templateLink: string;
+  adAngle: string | null;
+  offerType: string | null;
+  templateNotes: string | null;
   clients: Record<string, string | null>;
 }
 
@@ -36,7 +39,8 @@ interface Props {
 export function TemplateDetailSheet({ group, requests, accountColors, onClose, onSelectRequest }: Props) {
   if (!group) return null;
 
-  const { name, templateType, templateLink, clients } = group;
+  const { name, templateType, templateLink, adAngle, offerType, templateNotes, clients } = group;
+  const hasDefaults = !!(adAngle || offerType || templateNotes);
 
   // Group requests by ad_angle
   const angles = [...new Set(requests.map((r) => r.ad_angle))].sort();
@@ -105,6 +109,34 @@ export function TemplateDetailSheet({ group, requests, accountColors, onClose, o
 
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+
+          {/* Template production defaults */}
+          {hasDefaults && (
+            <section>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2.5">
+                Template Defaults
+              </h3>
+              <div className="rounded-xl border border-border px-4 py-3 space-y-2">
+                {(adAngle || offerType) && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {adAngle && (
+                      <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                        Angle · {adAngle}
+                      </span>
+                    )}
+                    {offerType && (
+                      <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                        Offer · {offerType}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {templateNotes && (
+                  <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">{templateNotes}</p>
+                )}
+              </div>
+            </section>
+          )}
 
           {requests.length === 0 && clientsWithoutBriefs.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-10">

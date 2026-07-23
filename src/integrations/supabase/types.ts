@@ -655,6 +655,7 @@ export type Database = {
         Row: {
           account_id: string | null
           account_name: string
+          ad_angle: string | null
           batch_name: string
           created_at: string
           file_name: string
@@ -663,11 +664,13 @@ export type Database = {
           id: string
           launch_date: string | null
           notes: string | null
+          offer_type: string | null
           status: string
         }
         Insert: {
           account_id?: string | null
           account_name: string
+          ad_angle?: string | null
           batch_name?: string
           created_at?: string
           file_name: string
@@ -676,11 +679,13 @@ export type Database = {
           id?: string
           launch_date?: string | null
           notes?: string | null
+          offer_type?: string | null
           status?: string
         }
         Update: {
           account_id?: string | null
           account_name?: string
+          ad_angle?: string | null
           batch_name?: string
           created_at?: string
           file_name?: string
@@ -689,6 +694,7 @@ export type Database = {
           id?: string
           launch_date?: string | null
           notes?: string | null
+          offer_type?: string | null
           status?: string
         }
         Relationships: [
