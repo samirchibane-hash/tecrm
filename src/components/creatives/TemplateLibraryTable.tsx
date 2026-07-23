@@ -161,18 +161,7 @@ export function TemplateLibraryTable({
 
                 {/* Type — video templates show their part (Hook / Body) */}
                 <td className="px-3 py-2">
-                  {row.templateType ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                      {row.templateType === "video"
-                        ? <Film className="h-3 w-3" />
-                        : <ImageIcon className="h-3 w-3" />}
-                      {row.templateType === "video"
-                        ? row.videoPart === "hook" ? "Hook" : row.videoPart === "body" ? "Body" : "Video"
-                        : "Image"}
-                    </span>
-                  ) : (
-                    <span className="text-[11px] text-muted-foreground/50">Not set</span>
-                  )}
+                  <TypeBadge templateType={row.templateType} videoPart={row.videoPart} />
                 </td>
 
                 {/* One cell per client account */}
@@ -235,6 +224,33 @@ export function TemplateLibraryTable({
         </span>
       </div>
     </div>
+  );
+}
+
+/**
+ * Color-coded Type pill. Image is sky; video is the violet family, with Hook
+ * and Body given distinct shades so the two parts read apart at a glance.
+ */
+function TypeBadge({
+  templateType, videoPart,
+}: { templateType: "image" | "video" | null; videoPart: "hook" | "body" | null }) {
+  if (!templateType) {
+    return <span className="text-[11px] text-muted-foreground/50">Not set</span>;
+  }
+  const isVideo = templateType === "video";
+  const label = isVideo
+    ? videoPart === "hook" ? "Hook" : videoPart === "body" ? "Body" : "Video"
+    : "Image";
+  const color = !isVideo
+    ? "bg-sky-100 text-sky-800"
+    : videoPart === "body"
+      ? "bg-fuchsia-100 text-fuchsia-800"
+      : "bg-violet-100 text-violet-800";
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium", color)}>
+      {isVideo ? <Film className="h-3 w-3" /> : <ImageIcon className="h-3 w-3" />}
+      {label}
+    </span>
   );
 }
 
