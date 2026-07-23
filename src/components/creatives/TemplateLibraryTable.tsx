@@ -8,7 +8,7 @@ import {
 import {
   Image as ImageIcon, Film, MoreVertical, Camera, Info, Plus, Trash2, ExternalLink,
 } from "lucide-react";
-import { type CreativeRequest, STATUS_LABEL, type RequestStatus } from "./types";
+import { type CreativeRequest, STATUS_LABEL, STATUS_DOT, type RequestStatus } from "./types";
 
 export interface TemplateRow {
   name: string;
@@ -34,6 +34,8 @@ interface Props {
   /** Client accounts that become the columns, in display order. */
   clientColumns: string[];
   requests: CreativeRequest[];
+  /** template name → its own production request (is_template), when one exists. */
+  productionByTemplate: Record<string, CreativeRequest>;
   onOpenTemplate: (row: TemplateRow) => void;
   onOpenRequest: (req: CreativeRequest) => void;
   /** Start a brand-new brief for a template × client pair that has no request yet. */
@@ -46,7 +48,7 @@ interface Props {
 }
 
 export function TemplateLibraryTable({
-  rows, clientColumns, requests,
+  rows, clientColumns, requests, productionByTemplate,
   onOpenTemplate, onOpenRequest, onNewBrief, onUploadThumbnail, onOpenSettings,
   onAddClient, onDeleteTemplate, uploadingThumbnailFor,
 }: Props) {
@@ -117,9 +119,12 @@ export function TemplateLibraryTable({
                     <HoverCardTrigger asChild>
                       <button
                         onClick={() => onOpenTemplate(row)}
-                        className="max-w-[220px] truncate rounded-sm text-left text-sm text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="flex max-w-[220px] flex-col items-start gap-1 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
-                        {row.name}
+                        <span className="max-w-full truncate text-sm text-foreground underline-offset-4 group-hover:underline">
+                          {row.name}
+                        </span>
+                        <ProductionSignal production={productionByTemplate[row.name]} />
                       </button>
                     </HoverCardTrigger>
                     <HoverCardContent side="right" align="start" className="w-64 p-2">
@@ -226,6 +231,26 @@ export function TemplateLibraryTable({
         </span>
       </div>
     </div>
+  );
+}
+
+/**
+ * A template is only "official" once its own production request reaches
+ * Launched. Until then, signal that it's still a draft / in production.
+ * Templates that predate this workflow have no production request and
+ * render nothing (treated as already official).
+ */
+function ProductionSignal({ production }: { production?: CreativeRequest }) {
+  if (!production || production.status === "launched") return null;
+  const status = production.status as RequestStatus;
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground"
+      title={`In production · ${STATUS_LABEL[status]}`}
+    >
+      <span aria-hidden className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT[status])} />
+      Draft · {STATUS_LABEL[status]}
+    </span>
   );
 }
 

@@ -173,6 +173,13 @@ const Creatives = () => {
   // production pipeline, not the template × client matrix.
   const clientRequests = useMemo(() => requests.filter((r) => !r.is_template), [requests]);
 
+  // template name → its own production request, so the library can flag drafts.
+  const productionByTemplate = useMemo(() => {
+    const map: Record<string, CreativeRequest> = {};
+    requests.forEach((r) => { if (r.is_template) map[r.template_name] = r; });
+    return map;
+  }, [requests]);
+
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -531,6 +538,7 @@ const Creatives = () => {
                 rows={templateGroups}
                 clientColumns={clientColumns}
                 requests={clientRequests}
+                productionByTemplate={productionByTemplate}
                 uploadingThumbnailFor={thumbnailUploading ? thumbnailTargetTemplate : null}
                 onOpenTemplate={({ name, templateType, templateLink, clients }) => {
                   const group = templateGroups.find((g) => g.name === name);
