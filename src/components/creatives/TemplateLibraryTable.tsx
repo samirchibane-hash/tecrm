@@ -14,6 +14,8 @@ export interface TemplateRow {
   name: string;
   previewImage: string | null;
   templateType: "image" | "video" | null;
+  /** For video templates: whether it's the ad's Hook or Body. */
+  videoPart: "hook" | "body" | null;
   templateLink: string;
   /** client name → Drive folder url (or null when the production has no link) */
   clients: Record<string, string | null>;
@@ -157,14 +159,16 @@ export function TemplateLibraryTable({
                   </HoverCard>
                 </th>
 
-                {/* Type */}
+                {/* Type — video templates show their part (Hook / Body) */}
                 <td className="px-3 py-2">
                   {row.templateType ? (
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                       {row.templateType === "video"
                         ? <Film className="h-3 w-3" />
                         : <ImageIcon className="h-3 w-3" />}
-                      {row.templateType === "video" ? "Video" : "Image"}
+                      {row.templateType === "video"
+                        ? row.videoPart === "hook" ? "Hook" : row.videoPart === "body" ? "Body" : "Video"
+                        : "Image"}
                     </span>
                   ) : (
                     <span className="text-[11px] text-muted-foreground/50">Not set</span>

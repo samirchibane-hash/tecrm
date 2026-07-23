@@ -21,6 +21,7 @@ const CLIENT_COLORS = [
 interface TemplateGroup {
   name: string;
   templateType: "image" | "video" | null;
+  videoPart: "hook" | "body" | null;
   templateLink: string;
   adAngle: string | null;
   offerType: string | null;
@@ -41,7 +42,10 @@ interface Props {
 export function TemplateDetailSheet({ group, requests, production, accountColors, onClose, onSelectRequest }: Props) {
   if (!group) return null;
 
-  const { name, templateType, templateLink, adAngle, offerType, templateNotes, clients } = group;
+  const { name, templateType, videoPart, templateLink, adAngle, offerType, templateNotes, clients } = group;
+  const typeLabel = templateType === "video"
+    ? videoPart === "hook" ? "Hook" : videoPart === "body" ? "Body" : "Video"
+    : "Image";
   const hasDefaults = !!(adAngle || offerType || templateNotes);
 
   // Group requests by ad_angle
@@ -83,7 +87,7 @@ export function TemplateDetailSheet({ group, requests, production, accountColors
                     "rounded-full px-2 py-0.5 text-[10px] font-semibold",
                     templateType === "video" ? "bg-violet-100 text-violet-800" : "bg-sky-100 text-sky-800"
                   )}>
-                    {templateType === "video" ? "Video" : "Image"}
+                    {typeLabel}
                   </span>
                 )}
               </div>

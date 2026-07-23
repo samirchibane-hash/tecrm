@@ -38,6 +38,7 @@ type Creative = {
   file_name: string; file_url: string; file_type: string;
   launch_date: string | null; created_at: string;
   ad_angle: string | null; offer_type: string | null; notes: string | null;
+  video_part: string | null;
 };
 
 
@@ -99,6 +100,7 @@ const Creatives = () => {
   const [settingsOriginalName, setSettingsOriginalName] = useState("");
   const [settingsName, setSettingsName] = useState("");
   const [settingsType, setSettingsType] = useState<"image" | "video" | null>(null);
+  const [settingsVideoPart, setSettingsVideoPart] = useState<"hook" | "body" | null>(null);
   const [settingsLink, setSettingsLink] = useState("");
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [editProdOpen, setEditProdOpen] = useState(false);
@@ -115,6 +117,7 @@ const Creatives = () => {
   const [selectedTemplateGroup, setSelectedTemplateGroup] = useState<{
     name: string;
     templateType: "image" | "video" | null;
+    videoPart: "hook" | "body" | null;
     templateLink: string;
     adAngle: string | null;
     offerType: string | null;
@@ -203,6 +206,7 @@ const Creatives = () => {
         const typeMeta = items.find((i) => i.file_type === "template_type");
         const templateType: "image" | "video" | null = typeMeta && (typeMeta.file_name === "image" || typeMeta.file_name === "video") ? typeMeta.file_name : null;
         const templateLink: string = typeMeta?.file_url ?? "";
+        const videoPart: "hook" | "body" | null = typeMeta?.video_part === "hook" || typeMeta?.video_part === "body" ? typeMeta.video_part : null;
         const adAngle: string | null = typeMeta?.ad_angle ?? null;
         const offerType: string | null = typeMeta?.offer_type ?? null;
         const templateNotes: string | null = typeMeta?.notes ?? null;
@@ -213,7 +217,7 @@ const Creatives = () => {
           if (i.file_type === "link") clientMap[i.account_name] = i.file_url;
           else if (!(i.account_name in clientMap)) clientMap[i.account_name] = null;
         });
-        return { name, previewImage, templateType, templateLink, adAngle, offerType, templateNotes, typeMeta, clients: clientMap, items };
+        return { name, previewImage, templateType, videoPart, templateLink, adAngle, offerType, templateNotes, typeMeta, clients: clientMap, items };
       })
       .filter(({ name, templateType }) => {
         if (filterType !== "all" && templateType !== filterType) return false;
@@ -319,8 +323,9 @@ const Creatives = () => {
   });
 
   const saveTemplateSettings = useMutation({
-    mutationFn: async ({ originalName, newName, type, link, existingMetaId, accountName }: { originalName: string; newName: string; type: "image" | "video" | null; link: string; existingMetaId: string | null; accountName: string; }) => {
+    mutationFn: async ({ originalName, newName, type, videoPart, link, existingMetaId, accountName }: { originalName: string; newName: string; type: "image" | "video" | null; videoPart: "hook" | "body" | null; link: string; existingMetaId: string | null; accountName: string; }) => {
       setSettingsSaving(true);
+      const part = type === "video" ? videoPart : null;
       if (newName !== originalName) {
         for (const item of creatives.filter((c) => (c.batch_name || "Uncategorized") === originalName)) {
           await supabase.from("creatives").update({ batch_name: newName }).eq("id", item.id);
@@ -330,9 +335,9 @@ const Creatives = () => {
           .eq("template_name", originalName).eq("is_template", true);
       }
       if (existingMetaId) {
-        await supabase.from("creatives").update({ file_name: type ?? "", file_url: link, batch_name: newName }).eq("id", existingMetaId);
+        await supabase.from("creatives").update({ file_name: type ?? "", file_url: link, batch_name: newName, video_part: part }).eq("id", existingMetaId);
       } else if (type || link) {
-        await supabase.from("creatives").insert({ account_name: accountName, batch_name: newName, file_name: type ?? "", file_url: link, file_type: "template_type", launch_date: null });
+        await supabase.from("creatives").insert({ account_name: accountName, batch_name: newName, file_name: type ?? "", file_url: link, file_type: "template_type", video_part: part, launch_date: null });
       }
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["creatives"] }); queryClient.invalidateQueries({ queryKey: ["creative-requests"] }); setSettingsOpen(false); setSettingsSaving(false); toast.success("Template updated"); },
@@ -540,10 +545,10 @@ const Creatives = () => {
                 requests={clientRequests}
                 productionByTemplate={productionByTemplate}
                 uploadingThumbnailFor={thumbnailUploading ? thumbnailTargetTemplate : null}
-                onOpenTemplate={({ name, templateType, templateLink, clients }) => {
+                onOpenTemplate={({ name, templateType, videoPart, templateLink, clients }) => {
                   const group = templateGroups.find((g) => g.name === name);
                   setSelectedTemplateGroup({
-                    name, templateType, templateLink, clients,
+                    name, templateType, videoPart, templateLink, clients,
                     adAngle: group?.adAngle ?? null,
                     offerType: group?.offerType ?? null,
                     templateNotes: group?.templateNotes ?? null,
@@ -561,9 +566,10 @@ const Creatives = () => {
                   setNewBriefOpen(true);
                 }}
                 onUploadThumbnail={(name) => { setThumbnailTargetTemplate(name); thumbnailInputRef.current?.click(); }}
-                onOpenSettings={({ name, templateType, templateLink }) => {
+                onOpenSettings={({ name, templateType, videoPart, templateLink }) => {
                   setSettingsOriginalName(name); setSettingsName(name);
-                  setSettingsType(templateType); setSettingsLink(templateLink); setSettingsOpen(true);
+                  setSettingsType(templateType); setSettingsVideoPart(videoPart);
+                  setSettingsLink(templateLink); setSettingsOpen(true);
                 }}
                 onAddClient={(name) => { setAddTemplateName(name); setAddOpen(true); }}
                 onDeleteTemplate={(name) => setDeleteTemplateName(name)}
@@ -861,10 +867,15 @@ const Creatives = () => {
             <DialogHeader><DialogTitle>Template Settings</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground">Name</label><Input value={settingsName} onChange={(e) => setSettingsName(e.target.value)} /></div>
-              <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground">Type</label><div className="flex gap-2">{(["image", "video"] as const).map((t) => (<button key={t} onClick={() => setSettingsType(settingsType === t ? null : t)} className={cn("flex-1 rounded-lg border py-2 text-xs font-semibold transition-colors", settingsType === t ? t === "video" ? "bg-violet-100 text-violet-800 border-violet-200" : "bg-sky-100 text-sky-800 border-sky-200" : "border-border text-muted-foreground hover:border-muted-foreground")}>{t === "video" ? "Video" : "Image"}</button>))}</div></div>
+              <div className="space-y-2">
+                <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground">Type</label><div className="flex gap-2">{(["image", "video"] as const).map((t) => (<button key={t} onClick={() => { const next = settingsType === t ? null : t; setSettingsType(next); if (next !== "video") setSettingsVideoPart(null); }} className={cn("flex-1 rounded-lg border py-2 text-xs font-semibold transition-colors", settingsType === t ? t === "video" ? "bg-violet-100 text-violet-800 border-violet-200" : "bg-sky-100 text-sky-800 border-sky-200" : "border-border text-muted-foreground hover:border-muted-foreground")}>{t === "video" ? "Video" : "Image"}</button>))}</div></div>
+                {settingsType === "video" && (
+                  <div className="flex gap-2">{(["hook", "body"] as const).map((p) => (<button key={p} onClick={() => setSettingsVideoPart(settingsVideoPart === p ? null : p)} className={cn("flex-1 rounded-lg border py-2 text-xs font-semibold transition-colors", settingsVideoPart === p ? "bg-violet-100 text-violet-800 border-violet-200" : "border-border text-muted-foreground hover:border-muted-foreground")}>{p === "hook" ? "Hook" : "Body"}</button>))}</div>
+                )}
+              </div>
               <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground">Template Link <span className="text-muted-foreground/60">(optional)</span></label><Input value={settingsLink} onChange={(e) => setSettingsLink(e.target.value)} placeholder="https://drive.google.com/…" /></div>
             </div>
-            <DialogFooter><Button variant="outline" onClick={() => setSettingsOpen(false)}>Cancel</Button><Button onClick={() => { const group = templateGroups.find((g) => g.name === settingsOriginalName); saveTemplateSettings.mutate({ originalName: settingsOriginalName, newName: settingsName.trim() || settingsOriginalName, type: settingsType, link: settingsLink.trim(), existingMetaId: group?.typeMeta?.id ?? null, accountName: group?.items[0]?.account_name ?? "_meta" }); }} disabled={!settingsName.trim() || settingsSaving}>{settingsSaving ? "Saving…" : "Save"}</Button></DialogFooter>
+            <DialogFooter><Button variant="outline" onClick={() => setSettingsOpen(false)}>Cancel</Button><Button onClick={() => { const group = templateGroups.find((g) => g.name === settingsOriginalName); saveTemplateSettings.mutate({ originalName: settingsOriginalName, newName: settingsName.trim() || settingsOriginalName, type: settingsType, videoPart: settingsVideoPart, link: settingsLink.trim(), existingMetaId: group?.typeMeta?.id ?? null, accountName: group?.items[0]?.account_name ?? "_meta" }); }} disabled={!settingsName.trim() || settingsSaving}>{settingsSaving ? "Saving…" : "Save"}</Button></DialogFooter>
           </DialogContent>
         </Dialog>
 

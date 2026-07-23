@@ -669,6 +669,7 @@ export type Database = {
           notes: string | null
           offer_type: string | null
           status: string
+          video_part: string | null
         }
         Insert: {
           account_id?: string | null
@@ -684,6 +685,7 @@ export type Database = {
           notes?: string | null
           offer_type?: string | null
           status?: string
+          video_part?: string | null
         }
         Update: {
           account_id?: string | null
@@ -699,6 +701,7 @@ export type Database = {
           notes?: string | null
           offer_type?: string | null
           status?: string
+          video_part?: string | null
         }
         Relationships: [
           {

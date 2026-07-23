@@ -26,6 +26,7 @@ export function NewTemplateSheet({ open, onOpenChange }: Props) {
 
   const [name, setName] = useState("");
   const [type, setType] = useState<"image" | "video" | null>(null);
+  const [videoPart, setVideoPart] = useState<"hook" | "body" | null>(null);
   const [link, setLink] = useState("");
   const [angle, setAngle] = useState("");
   const [offer, setOffer] = useState("");
@@ -37,7 +38,7 @@ export function NewTemplateSheet({ open, onOpenChange }: Props) {
   const reset = () => {
     onOpenChange(false);
     setView("form");
-    setName(""); setType(null); setLink(""); setAngle(""); setOffer("");
+    setName(""); setType(null); setVideoPart(null); setLink(""); setAngle(""); setOffer("");
     setNotes(""); setFile(null); setPreview(null); setSaving(false);
   };
 
@@ -73,6 +74,7 @@ export function NewTemplateSheet({ open, onOpenChange }: Props) {
         file_name: type ?? "",
         file_url: link.trim(),
         file_type: "template_type",
+        video_part: type === "video" ? videoPart : null,
         ad_angle: angle.trim() || null,
         offer_type: offer.trim() || null,
         notes: notes.trim() || null,
@@ -163,7 +165,8 @@ export function NewTemplateSheet({ open, onOpenChange }: Props) {
                 <label className="text-xs font-medium text-muted-foreground">Type <span className="text-muted-foreground/50">(optional)</span></label>
                 <div className="grid grid-cols-2 gap-2">
                   {(["image", "video"] as const).map((t) => (
-                    <button key={t} type="button" onClick={() => setType(type === t ? null : t)}
+                    <button key={t} type="button"
+                      onClick={() => { const next = type === t ? null : t; setType(next); if (next !== "video") setVideoPart(null); }}
                       className={cn(
                         "flex items-center justify-center gap-2 rounded-lg border py-2.5 text-xs font-semibold transition-all",
                         type === t
@@ -175,6 +178,23 @@ export function NewTemplateSheet({ open, onOpenChange }: Props) {
                     </button>
                   ))}
                 </div>
+
+                {/* Video templates are a Hook or a Body of the ad */}
+                {type === "video" && (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    {(["hook", "body"] as const).map((p) => (
+                      <button key={p} type="button" onClick={() => setVideoPart(videoPart === p ? null : p)}
+                        className={cn(
+                          "flex items-center justify-center gap-2 rounded-lg border py-2 text-xs font-semibold transition-all",
+                          videoPart === p
+                            ? "bg-violet-100 text-violet-800 border-violet-300 shadow-sm"
+                            : "border-border text-muted-foreground hover:bg-muted/40 hover:border-muted-foreground/40"
+                        )}>
+                        {p === "hook" ? "Hook" : "Body"}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Master Template Link */}
