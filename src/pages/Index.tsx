@@ -761,7 +761,12 @@ function CreativeRequestsSection() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground">{req.account_name}</span>
+                    <span className="text-sm font-medium text-foreground">{req.is_template ? req.template_name : req.account_name}</span>
+                    {req.is_template && (
+                      <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold shrink-0 bg-indigo-100 text-indigo-800">
+                        Template
+                      </span>
+                    )}
                     <span className={cn(
                       "rounded-full px-1.5 py-0.5 text-[10px] font-semibold shrink-0",
                       REQ_STATUS_BADGE[req.status] ?? "bg-muted text-muted-foreground"
@@ -770,7 +775,9 @@ function CreativeRequestsSection() {
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground truncate mt-0.5">
-                    {req.template_name} · {req.ad_angle} · {req.offer_type}
+                    {req.is_template
+                      ? [req.ad_angle, req.offer_type].filter(Boolean).join(" · ") || "Master template production"
+                      : `${req.template_name} · ${req.ad_angle} · ${req.offer_type}`}
                     {req.assigned_to && <span className="text-muted-foreground/60"> — {req.assigned_to}</span>}
                   </p>
                 </div>

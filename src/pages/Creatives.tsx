@@ -169,6 +169,10 @@ const Creatives = () => {
     },
   });
 
+  // Client briefs only — template-production requests (is_template) belong to the
+  // production pipeline, not the template × client matrix.
+  const clientRequests = useMemo(() => requests.filter((r) => !r.is_template), [requests]);
+
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -218,11 +222,11 @@ const Creatives = () => {
     const visibleTemplates = new Set(templateGroups.map((g) => g.name));
     const present = new Set<string>();
     templateGroups.forEach((g) => Object.keys(g.clients).forEach((c) => present.add(c)));
-    requests.forEach((r) => { if (visibleTemplates.has(r.template_name)) present.add(r.account_name); });
+    clientRequests.forEach((r) => { if (visibleTemplates.has(r.template_name)) present.add(r.account_name); });
     const known = accounts.map((a) => a.account_name).filter((n) => present.has(n));
     const unknown = [...present].filter((n) => !known.includes(n)).sort();
     return [...known, ...unknown];
-  }, [templateGroups, requests, accounts]);
+  }, [templateGroups, clientRequests, accounts]);
 
   const clientColumns = useMemo(
     () => allClientColumns.filter((n) => !excludedClients.has(n)),
@@ -235,13 +239,13 @@ const Creatives = () => {
 
   const requestsByTemplate = useMemo(() => {
     const map: Record<string, { total: number; open: number }> = {};
-    requests.forEach((r) => {
+    clientRequests.forEach((r) => {
       if (!map[r.template_name]) map[r.template_name] = { total: 0, open: 0 };
       map[r.template_name].total++;
       if (r.status !== "launched") map[r.template_name].open++;
     });
     return map;
-  }, [requests]);
+  }, [clientRequests]);
 
   const addFilteredTemplates = useMemo(() => {
     const typed = new Set(
@@ -314,6 +318,9 @@ const Creatives = () => {
         for (const item of creatives.filter((c) => (c.batch_name || "Uncategorized") === originalName)) {
           await supabase.from("creatives").update({ batch_name: newName }).eq("id", item.id);
         }
+        // Keep the template's production request pointing at the renamed template.
+        await supabase.from("creative_requests").update({ template_name: newName })
+          .eq("template_name", originalName).eq("is_template", true);
       }
       if (existingMetaId) {
         await supabase.from("creatives").update({ file_name: type ?? "", file_url: link, batch_name: newName }).eq("id", existingMetaId);
@@ -321,7 +328,7 @@ const Creatives = () => {
         await supabase.from("creatives").insert({ account_name: accountName, batch_name: newName, file_name: type ?? "", file_url: link, file_type: "template_type", launch_date: null });
       }
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["creatives"] }); setSettingsOpen(false); setSettingsSaving(false); toast.success("Template updated"); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["creatives"] }); queryClient.invalidateQueries({ queryKey: ["creative-requests"] }); setSettingsOpen(false); setSettingsSaving(false); toast.success("Template updated"); },
     onError: (err: Error) => { setSettingsSaving(false); toast.error(`Failed: ${err.message}`); },
   });
 
@@ -334,8 +341,17 @@ const Creatives = () => {
         }
         await supabase.from("creatives").delete().eq("id", item.id);
       }
+      // Remove the template's own production request so it doesn't orphan.
+      await supabase.from("creative_requests").delete()
+        .eq("template_name", templateName).eq("is_template", true);
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["creatives"] }); setDeleteTemplateName(null); toast.success("Template deleted"); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["creatives"] });
+      queryClient.invalidateQueries({ queryKey: ["creative-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-creative-requests"] });
+      setDeleteTemplateName(null);
+      toast.success("Template deleted");
+    },
     onError: (err: Error) => toast.error(`Failed: ${err.message}`),
   });
 
@@ -514,7 +530,7 @@ const Creatives = () => {
               <TemplateLibraryTable
                 rows={templateGroups}
                 clientColumns={clientColumns}
-                requests={requests}
+                requests={clientRequests}
                 uploadingThumbnailFor={thumbnailUploading ? thumbnailTargetTemplate : null}
                 onOpenTemplate={({ name, templateType, templateLink, clients }) => {
                   const group = templateGroups.find((g) => g.name === name);
@@ -621,13 +637,21 @@ const Creatives = () => {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-sm font-semibold text-foreground">{req.account_name}</span>
-                                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", req.ad_type === "image_ads" ? "bg-sky-100 text-sky-800" : "bg-violet-100 text-violet-800")}>
-                                    {req.ad_type === "image_ads" ? "Image Ads" : "Video Ads"}
-                                  </span>
+                                  <span className="text-sm font-semibold text-foreground">{req.is_template ? req.template_name : req.account_name}</span>
+                                  {req.is_template ? (
+                                    <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold bg-indigo-100 text-indigo-800">
+                                      Template production
+                                    </span>
+                                  ) : (
+                                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", req.ad_type === "image_ads" ? "bg-sky-100 text-sky-800" : "bg-violet-100 text-violet-800")}>
+                                      {req.ad_type === "image_ads" ? "Image Ads" : "Video Ads"}
+                                    </span>
+                                  )}
                                 </div>
                                 <p className="text-xs text-muted-foreground truncate mt-0.5">
-                                  {req.template_name} · {req.ad_angle} · {req.offer_type}
+                                  {req.is_template
+                                    ? [req.ad_angle, req.offer_type].filter(Boolean).join(" · ") || "Master template — build before briefing to clients"
+                                    : `${req.template_name} · ${req.ad_angle} · ${req.offer_type}`}
                                 </p>
                               </div>
                               <div className="shrink-0 text-right hidden sm:block space-y-0.5">
@@ -663,7 +687,8 @@ const Creatives = () => {
         {/* ── Template Detail Sheet ─────────────────────────────────────────── */}
         <TemplateDetailSheet
           group={selectedTemplateGroup}
-          requests={selectedTemplateGroup ? requests.filter((r) => r.template_name === selectedTemplateGroup.name) : []}
+          requests={selectedTemplateGroup ? clientRequests.filter((r) => r.template_name === selectedTemplateGroup.name) : []}
+          production={selectedTemplateGroup ? requests.find((r) => r.is_template && r.template_name === selectedTemplateGroup.name) ?? null : null}
           accountColors={accountColors}
           onClose={() => setSelectedTemplateGroup(null)}
           onSelectRequest={(req) => { setSelectedTemplateGroup(null); setSelectedRequest(req); }}

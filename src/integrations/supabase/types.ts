@@ -524,6 +524,7 @@ export type Database = {
           created_by: string | null
           gdrive_folder_url: string | null
           id: string
+          is_template: boolean
           notes: string | null
           offer_type: string
           status: string
@@ -539,6 +540,7 @@ export type Database = {
           created_by?: string | null
           gdrive_folder_url?: string | null
           id?: string
+          is_template?: boolean
           notes?: string | null
           offer_type: string
           status?: string
@@ -554,6 +556,7 @@ export type Database = {
           created_by?: string | null
           gdrive_folder_url?: string | null
           id?: string
+          is_template?: boolean
           notes?: string | null
           offer_type?: string
           status?: string

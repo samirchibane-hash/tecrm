@@ -31,12 +31,14 @@ interface TemplateGroup {
 interface Props {
   group: TemplateGroup | null;
   requests: CreativeRequest[];
+  /** The template's own production request, tracked through the stage pipeline. */
+  production: CreativeRequest | null;
   accountColors: Record<string, string>;
   onClose: () => void;
   onSelectRequest: (req: CreativeRequest) => void;
 }
 
-export function TemplateDetailSheet({ group, requests, accountColors, onClose, onSelectRequest }: Props) {
+export function TemplateDetailSheet({ group, requests, production, accountColors, onClose, onSelectRequest }: Props) {
   if (!group) return null;
 
   const { name, templateType, templateLink, adAngle, offerType, templateNotes, clients } = group;
@@ -109,6 +111,40 @@ export function TemplateDetailSheet({ group, requests, accountColors, onClose, o
 
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+
+          {/* Template's own production status */}
+          {production && (
+            <section>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2.5">
+                Production
+              </h3>
+              <button
+                onClick={() => onSelectRequest(production)}
+                className="w-full flex items-center gap-3 rounded-xl border border-border px-4 py-3 hover:bg-muted/50 transition-colors text-left group"
+              >
+                <span
+                  className={cn("h-2 w-2 rounded-full shrink-0", STATUS_DOT[production.status as RequestStatus])}
+                  title={STATUS_LABEL[production.status as RequestStatus]}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", STATUS_BADGE[production.status as RequestStatus])}>
+                      {STATUS_LABEL[production.status as RequestStatus]}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {production.status === "launched"
+                        ? "Official — ready to brief to clients"
+                        : "In production — not yet official"}
+                    </span>
+                  </div>
+                  {production.assigned_to && (
+                    <p className="text-[11px] text-muted-foreground/70 mt-0.5">{production.assigned_to}</p>
+                  )}
+                </div>
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0 group-hover:text-muted-foreground/60 transition-colors" />
+              </button>
+            </section>
+          )}
 
           {/* Template production defaults */}
           {hasDefaults && (

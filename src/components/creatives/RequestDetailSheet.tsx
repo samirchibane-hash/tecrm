@@ -192,7 +192,12 @@ export function RequestDetailSheet({ request, onClose, onRequestChange }: Props)
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-base font-semibold text-foreground">{request.account_name}</h2>
+                    <h2 className="text-base font-semibold text-foreground">{request.is_template ? request.template_name : request.account_name}</h2>
+                    {request.is_template && (
+                      <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold bg-indigo-100 text-indigo-800">
+                        Template production
+                      </span>
+                    )}
                     <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", request.ad_type === "image_ads" ? "bg-sky-100 text-sky-800" : "bg-violet-100 text-violet-800")}>
                       {request.ad_type === "image_ads" ? "Image Ads" : "Video Ads"}
                     </span>
@@ -201,7 +206,9 @@ export function RequestDetailSheet({ request, onClose, onRequestChange }: Props)
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 truncate">
-                    {request.template_name} · {request.ad_angle} · {request.offer_type}
+                    {[request.is_template ? "Master template" : request.template_name, request.ad_angle, request.offer_type]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </p>
                 </div>
               </div>

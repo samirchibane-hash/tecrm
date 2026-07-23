@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Combobox, ManagePanel } from "./creativeOptionControls";
 import { useAddCreativeOption } from "./creativeOptions";
+import { TEMPLATE_PRODUCTION_ACCOUNT } from "./types";
 import { Image as ImageIcon, Film, Loader2, Settings2, Camera, X, Plus } from "lucide-react";
 
 type View = "form" | "manage_angle" | "manage_offer";
@@ -78,6 +79,22 @@ export function NewTemplateSheet({ open, onOpenChange }: Props) {
         launch_date: null,
       });
       if (error) throw error;
+
+      // The template has to be produced before it's official and duplicatable
+      // for clients, so open a production request that flows through the same
+      // Assigned → Reviewing → Approved → Launched pipeline as a client brief.
+      const { error: reqError } = await supabase.from("creative_requests").insert({
+        account_name: TEMPLATE_PRODUCTION_ACCOUNT,
+        ad_type: type === "video" ? "video_ads" : "image_ads",
+        template_name: name.trim(),
+        ad_angle: angle.trim(),
+        offer_type: offer.trim(),
+        notes: notes.trim() || null,
+        status: "assigned",
+        is_template: true,
+      });
+      if (reqError) throw reqError;
+
       if (file) {
         const ext = file.name.split(".").pop();
         const path = `_meta/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
@@ -94,7 +111,13 @@ export function NewTemplateSheet({ open, onOpenChange }: Props) {
         });
       }
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["creatives"] }); reset(); toast.success("Template created"); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["creatives"] });
+      queryClient.invalidateQueries({ queryKey: ["creative-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-creative-requests"] });
+      reset();
+      toast.success("Template created — sent to production");
+    },
     onError: (err: Error) => { setSaving(false); toast.error(`Failed: ${err.message}`); },
   });
 

@@ -10,9 +10,17 @@ export type CreativeRequest = {
   assigned_to: string | null;
   created_by: string | null;
   gdrive_folder_url: string | null;
+  is_template: boolean;
   created_at: string;
   updated_at: string;
 };
+
+/**
+ * A template's own production request (`is_template = true`) is not tied to a
+ * client. This label fills the required `account_name` and reads sensibly
+ * wherever a request title is shown.
+ */
+export const TEMPLATE_PRODUCTION_ACCOUNT = "Master Template";
 
 export type RequestComment = {
   id: string;
