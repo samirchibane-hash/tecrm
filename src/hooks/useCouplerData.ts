@@ -39,7 +39,17 @@ export interface AdRow {
 
 async function fetchCouplerData(): Promise<AdRow[]> {
   const { data, error } = await supabase.functions.invoke("coupler-proxy");
-  if (error) throw new Error(error.message);
+  if (error) {
+    // On a non-2xx, supabase-js gives a generic message and stashes the real
+    // Response in `context`. Pull the function's JSON error so the dashboard
+    // can show something actionable (e.g. "Meta token expired…").
+    let message = error.message;
+    try {
+      const body = await (error as { context?: Response }).context?.json();
+      if (body?.error) message = body.error as string;
+    } catch { /* body wasn't JSON */ }
+    throw new Error(message);
+  }
   return Array.isArray(data) ? data : data.data ?? data.results ?? [];
 }
 
@@ -49,5 +59,6 @@ export function useCouplerData() {
     queryFn: fetchCouplerData,
     staleTime: 5 * 60 * 1000,
     refetchInterval: 10 * 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 }

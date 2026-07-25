@@ -8,6 +8,11 @@ const corsHeaders = {
 
 const FIELDS = "account_name,campaign_id,campaign_name,spend,clicks,impressions,reach,cpc,cpm,ctr,frequency,date_start,date_stop";
 
+// Raised when Meta rejects the access token itself (expired / revoked / wrong
+// scope). This is a global problem, not a single-account one, so it must be
+// surfaced clearly rather than silently zeroing the dashboard.
+class MetaAuthError extends Error {}
+
 function zeroRow(accountName: string, date: string) {
   return {
     "Account: Account name": accountName,
@@ -63,7 +68,19 @@ async function fetchAccountInsights(accountId: string, token: string) {
 
   while (nextUrl) {
     const res = await fetch(nextUrl);
-    if (!res.ok) throw new Error(`Meta API error for ${accountId}: ${res.status} ${await res.text()}`);
+    if (!res.ok) {
+      const body = await res.text();
+      let code: number | undefined;
+      let type: string | undefined;
+      try { const j = JSON.parse(body); code = j.error?.code; type = j.error?.type; } catch { /* non-JSON */ }
+      // Meta signals a bad token with HTTP 401 or error code 190 / OAuthException.
+      if (res.status === 401 || code === 190 || type === "OAuthException") {
+        throw new MetaAuthError(
+          "Meta access token is invalid or expired. Update META_ACCESS_TOKEN in Supabase → Edge Functions → Secrets."
+        );
+      }
+      throw new Error(`Meta API error for ${accountId}: ${res.status} ${body}`);
+    }
     const json = await res.json();
     rows.push(...(json.data ?? []));
     nextUrl = json.paging?.next ?? null;
@@ -146,11 +163,36 @@ serve(async (req) => {
       });
     }
 
-    const results = await Promise.all(
+    // Fetch every account independently so one failing account can't blank the
+    // whole dashboard. Partial data beats no data; a total failure is surfaced.
+    const settled = await Promise.allSettled(
       adAccountIds.map((id) => fetchAccountInsights(id, token))
     );
 
-    return new Response(JSON.stringify(results.flat()), {
+    const rows = settled
+      .filter((s): s is PromiseFulfilledResult<unknown[]> => s.status === "fulfilled")
+      .flatMap((s) => s.value);
+    const failures = settled
+      .filter((s): s is PromiseRejectedResult => s.status === "rejected")
+      .map((s) => s.reason);
+
+    if (failures.length > 0) {
+      console.error("coupler-proxy account failures:", failures.map((e) => (e instanceof Error ? e.message : String(e))));
+    }
+
+    // A bad token (or every account failing) means the numbers would be wrong,
+    // not zero — return an error the UI can show instead of misleading data.
+    const authError = failures.find((e) => e instanceof MetaAuthError) as MetaAuthError | undefined;
+    if (rows.length === 0 && failures.length > 0) {
+      const first = failures[0];
+      const msg = authError?.message ?? (first instanceof Error ? first.message : "Meta request failed");
+      return new Response(JSON.stringify({ error: msg, code: authError ? "META_AUTH" : "META_ERROR" }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify(rows), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
