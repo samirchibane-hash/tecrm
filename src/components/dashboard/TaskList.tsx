@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlignLeft, CheckCircle2, Circle, ListTodo, MessageSquare, Paperclip, Plus, User } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { ChangeLogOption } from "@/hooks/useSettings";
 import { TaskDetailSheet } from "@/components/dashboard/tasks/TaskDetailSheet";
@@ -25,16 +26,18 @@ const NO_CATEGORY = "__none__";
 interface TaskListProps {
   accounts: { account_name: string }[];
   changeLogOptions?: ChangeLogOption[];
+  /** Status bucket shown on first render. The dedicated All Tasks page opens on "all". */
+  defaultFilter?: TaskFilter;
 }
 
-export function TaskList({ accounts, changeLogOptions = [] }: TaskListProps) {
-  const [filter, setFilter] = useState<TaskFilter>("active");
+export function TaskList({ accounts, changeLogOptions = [], defaultFilter = "active" }: TaskListProps) {
+  const [filter, setFilter] = useState<TaskFilter>(defaultFilter);
   const [assigneeFilter, setAssigneeFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [newOpen, setNewOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
-  const { data: tasks = [], refetch } = useQuery({
+  const { data: tasks = [], refetch, isPending, isError } = useQuery({
     queryKey: ["tasks"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -186,9 +189,30 @@ export function TaskList({ accounts, changeLogOptions = [] }: TaskListProps) {
         </div>
       </div>
 
-      {/* Rows */}
+      {/* Rows — loading / error / empty are three distinct states, never one blank list */}
       <div className="divide-y divide-border/40">
-        {filtered.length === 0 && (
+        {isPending && (
+          <div className="px-4 py-3 space-y-2.5" aria-live="polite" aria-busy="true">
+            <span className="sr-only">Loading tasks…</span>
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-5 w-full" />
+            ))}
+          </div>
+        )}
+
+        {isError && (
+          <div className="py-8 px-4 text-center">
+            <p className="text-sm text-muted-foreground">Couldn't load tasks.</p>
+            <button
+              onClick={() => refetch()}
+              className="mt-2 text-xs font-medium text-foreground underline underline-offset-2 hover:no-underline focus:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {!isPending && !isError && filtered.length === 0 && (
           <p className="py-8 text-center text-sm text-muted-foreground">
             {hasExtraFilters
               ? "No tasks match these filters."
@@ -200,7 +224,7 @@ export function TaskList({ accounts, changeLogOptions = [] }: TaskListProps) {
           </p>
         )}
 
-        {filtered.map((task) => (
+        {!isPending && !isError && filtered.map((task) => (
           <TaskRow
             key={task.id}
             task={task}

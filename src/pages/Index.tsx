@@ -20,6 +20,7 @@ import {
   Clock,
   Film,
   ClipboardList,
+  ListTodo,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
@@ -318,10 +319,13 @@ const Index = () => {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="ghost" size="sm" asChild>
-              <Link to="/creatives"><ImageIcon className="h-4 w-4" /></Link>
+              <Link to="/tasks" aria-label="All Tasks" title="All Tasks"><ListTodo className="h-4 w-4" /></Link>
             </Button>
             <Button variant="ghost" size="sm" asChild>
-              <Link to="/settings"><Settings className="h-4 w-4" /></Link>
+              <Link to="/creatives" aria-label="Creatives" title="Creatives"><ImageIcon className="h-4 w-4" /></Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/settings" aria-label="Settings" title="Settings"><Settings className="h-4 w-4" /></Link>
             </Button>
           </div>
         </div>

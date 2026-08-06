@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import AccountDetail from "./pages/AccountDetail";
 import Creatives from "./pages/Creatives";
+import AllTasks from "./pages/AllTasks";
 import Settings from "./pages/Settings";
 import ClientReport from "./pages/ClientReport";
 import CallCenterReport from "./pages/CallCenterReport";
@@ -29,6 +30,7 @@ const App = () => (
           {/* Admin — passcode protected */}
           <Route path="/" element={<PasscodeGate><Index /></PasscodeGate>} />
           <Route path="/account/:accountName" element={<PasscodeGate><AccountDetail /></PasscodeGate>} />
+          <Route path="/tasks" element={<PasscodeGate><AllTasks /></PasscodeGate>} />
           <Route path="/creatives" element={<PasscodeGate><Creatives /></PasscodeGate>} />
           <Route path="/settings" element={<PasscodeGate><Settings /></PasscodeGate>} />
           <Route path="/onboarding/:clientId" element={<PasscodeGate><ClientOnboarding /></PasscodeGate>} />
