@@ -4,7 +4,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCouplerData } from "@/hooks/useCouplerData";
 import { useSettings } from "@/hooks/useSettings";
-import { ALL_KPIS, type KpiKey } from "@/components/dashboard/AccountCard";
+import { ALL_KPIS, dependsOnMeta, type KpiKey } from "@/components/dashboard/AccountCard";
+import { KpiStatCard } from "@/components/dashboard/KpiStatCard";
+import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
+import { resolveChartKpi } from "@/lib/kpis";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -68,9 +71,10 @@ const ANNOTATION_ICON = { task: ListTodo, brief: ClipboardList } as const;
 
 // ─── Inline area chart (with task / creative-brief annotations) ──────────────
 
-function KpiAreaChart({ data, label, formatValue, annotations = [] }: {
+function KpiAreaChart({ data, label, caption, formatValue, annotations = [] }: {
   data: { date: string; value: number }[];
   label: string;
+  caption?: string;
   formatValue: (v: number) => string;
   annotations?: ChartAnnotation[];
 }) {
@@ -86,11 +90,22 @@ function KpiAreaChart({ data, label, formatValue, annotations = [] }: {
     return [...data, ...extras].sort((a, b) => a.date.localeCompare(b.date));
   }, [data, annotations]);
 
+  // The charted series can switch on its own when a feed drops out — always name it.
+  const header = (
+    <div className="mb-1 px-1">
+      <p className="text-xs font-semibold text-foreground">{label}</p>
+      {caption && <p className="text-[11px] text-muted-foreground">{caption}</p>}
+    </div>
+  );
+
   if (data.length === 0 && annotations.length === 0) {
     return (
       <Card className="border-border/50 bg-card shadow-sm">
-        <CardContent className="flex h-[160px] items-center justify-center text-sm text-muted-foreground">
-          No data for this period
+        <CardContent className="px-4 pb-3 pt-4">
+          {header}
+          <div className="flex h-[160px] items-center justify-center text-sm text-muted-foreground">
+            No data for this period
+          </div>
         </CardContent>
       </Card>
     );
@@ -98,6 +113,7 @@ function KpiAreaChart({ data, label, formatValue, annotations = [] }: {
   return (
     <Card className="border-border/50 bg-card shadow-sm">
       <CardContent className="px-4 pb-3 pt-4">
+        {header}
         <ChartContainer config={{ value: { label, color: "hsl(var(--chart-1))" } }} className="h-[200px] w-full">
           <AreaChart data={mergedData} margin={{ top: 18, right: 8, left: 0, bottom: 0 }}>
             <defs>
@@ -184,33 +200,6 @@ function KpiAreaChart({ data, label, formatValue, annotations = [] }: {
 
 // ─── KPI stat card ─────────────────────────────────────────────────────────────
 
-function StatCard({ label, value, icon: Icon, isActive, onClick }: {
-  label: string; value: string; icon: React.ElementType; isActive?: boolean; onClick?: () => void;
-}) {
-  return (
-    <Card
-      onClick={onClick}
-      className={cn(
-        "border-border/50 bg-card shadow-sm transition-all",
-        onClick && "cursor-pointer hover:shadow-md",
-        isActive && "ring-2 ring-primary border-primary/30",
-      )}
-    >
-      <CardContent className="p-3">
-        <div className="flex items-center gap-2.5">
-          <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", isActive ? "bg-primary" : "bg-primary/10")}>
-            <Icon className={cn("h-4 w-4", isActive ? "text-primary-foreground" : "text-primary")} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-base font-bold tracking-tight text-foreground leading-tight">{value}</p>
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground truncate">{label}</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 // ─── Task types ───────────────────────────────────────────────────────────────
 
 type Task = {
@@ -245,7 +234,14 @@ const AccountDetail = () => {
   const decodedName = decodeURIComponent(accountName ?? "");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: couplerData } = useCouplerData();
+  // Meta outages degrade only Meta-derived KPIs — GHL metrics stay live.
+  const {
+    data: couplerData,
+    isError: metaDown,
+    error: metaError,
+    refetch: refetchAds,
+    isFetching: adFetching,
+  } = useCouplerData();
   const { settings } = useSettings();
 
   // ─── Account (stable UUID) ────────────────────────────────────────────────
@@ -472,7 +468,12 @@ const AccountDetail = () => {
 
   // ─── KPI meta ─────────────────────────────────────────────────────────────
   const enabledKpis = ALL_KPIS.filter((k) => settings.enabled_kpis.includes(k.key));
-  const selectedKpi = ALL_KPIS.find((k) => k.key === selectedChart);
+
+  // Chart only KPIs whose feed is live; when Meta is down the default (Spend)
+  // falls through to the first enabled live KPI instead of charting nothing.
+  const isChartable = (key: KpiKey) => CHARTABLE_KEYS.has(key) && !(metaDown && dependsOnMeta(key));
+  const activeChart = resolveChartKpi(selectedChart, enabledKpis.map((k) => k.key), isChartable);
+  const selectedKpi = ALL_KPIS.find((k) => k.key === activeChart);
 
   const dateRangeStr = dateRange?.from
     ? dateRange.to
@@ -860,19 +861,35 @@ const AccountDetail = () => {
 
               {enabledKpis.length > 0 ? (
                 <>
+                  {metaDown && (
+                    <SourceUnavailableNotice
+                      className="mb-3"
+                      source="Meta Ads"
+                      stillLive="GoHighLevel (leads, appointments, revenue)"
+                      message={(metaError as Error | null)?.message}
+                      onRetry={() => refetchAds()}
+                      retrying={adFetching}
+                    />
+                  )}
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {enabledKpis.map(({ key, label, icon, format: fmt }) => (
-                      <StatCard key={key} label={label} value={fmt(kpis[key])} icon={icon}
-                        isActive={selectedChart === key}
-                        onClick={CHARTABLE_KEYS.has(key) ? () => setSelectedChart(key) : undefined}
-                      />
-                    ))}
+                    {enabledKpis.map(({ key, label, icon, format: fmt }) => {
+                      const unavailable = metaDown && dependsOnMeta(key);
+                      return (
+                        <KpiStatCard key={key} label={label} value={fmt(kpis[key])} icon={icon}
+                          unavailable={unavailable}
+                          unavailableReason={unavailable ? "Meta Ads disconnected" : undefined}
+                          isActive={activeChart === key}
+                          onClick={isChartable(key) ? () => setSelectedChart(key) : undefined}
+                        />
+                      );
+                    })}
                   </div>
-                  {selectedKpi && CHARTABLE_KEYS.has(selectedChart) && (
+                  {selectedKpi && activeChart && (
                     <div className="mt-3">
                       <KpiAreaChart
-                        data={chartSeriesData[selectedChart] ?? []}
+                        data={chartSeriesData[activeChart] ?? []}
                         label={selectedKpi.label}
+                        caption={dateRangeStr ?? "All time"}
                         formatValue={selectedKpi.format}
                         annotations={chartAnnotations}
                       />

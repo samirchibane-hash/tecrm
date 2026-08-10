@@ -7,9 +7,9 @@ import { NewBriefDialog } from "@/components/creatives/NewBriefDialog";
 import { RequestDetailSheet } from "@/components/creatives/RequestDetailSheet";
 import { type CreativeRequest } from "@/components/creatives/types";
 import { TaskList } from "@/components/dashboard/TaskList";
+import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  AlertCircle,
   RefreshCw,
   CalendarDays,
   Settings,
@@ -218,6 +218,10 @@ const Index = () => {
 
   const accountGroups = useMemo(() => {
     const map: Record<string, AdRow[]> = {};
+    // Seed from the accounts table so the roster survives a Meta outage — rows
+    // then carry GHL metrics with their Meta columns empty, instead of the whole
+    // dashboard going blank because the ad feed is what enumerated the accounts.
+    dbAccounts.forEach((a) => { map[a.account_name] = []; });
     filteredData.forEach((row) => {
       const name = row["Account: Account name"];
       if (!map[name]) map[name] = [];
@@ -238,7 +242,7 @@ const Index = () => {
         const spendB = b.reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
         return spendB - spendA;
       });
-  }, [filteredData, data, settings.hidden_accounts]);
+  }, [filteredData, data, dbAccounts, settings.hidden_accounts]);
 
   // ─── Table rows ────────────────────────────────────────────────────────────
   const tableRows = useMemo(() => {
@@ -380,14 +384,18 @@ const Index = () => {
           </div>
         )}
 
-        {/* ── Error ─────────────────────────────────────────────────────────── */}
+        {/* ── Meta feed down ─────────────────────────────────────────────────
+            Inline, not a takeover: the accounts below still carry live GHL
+            metrics, so replacing the whole page would hide working data. */}
         {isError && (
-          <div className="flex flex-col items-center gap-4 py-20 text-center">
-            <AlertCircle className="h-12 w-12 text-destructive" />
-            <p className="text-lg font-medium">Failed to load data</p>
-            <p className="max-w-md text-sm text-muted-foreground">{(error as Error).message}</p>
-            <Button variant="outline" onClick={() => refetch()}>Retry</Button>
-          </div>
+          <SourceUnavailableNotice
+            className="mb-4"
+            source="Meta Ads"
+            stillLive="GoHighLevel (leads, appointments, revenue)"
+            message={(error as Error | null)?.message}
+            onRetry={() => refetch()}
+            retrying={isFetching}
+          />
         )}
 
         {/* ── Accounts Table ────────────────────────────────────────────────── */}

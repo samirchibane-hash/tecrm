@@ -119,30 +119,46 @@ export type KpiKey =
   | "ghlLeads" | "ghlAppointments" | "ghlCostPerLead" | "ghlCostPerAppt"
   | "soldCount" | "totalRevenue" | "adRoi";
 
-export const ALL_KPIS: { key: KpiKey; label: string; icon: typeof DollarSign; format: (v: number) => string }[] = [
-  { key: "totalSpend", label: "Spend", icon: DollarSign, format: (v) => `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-  { key: "totalClicks", label: "Clicks", icon: MousePointerClick, format: (v) => v.toLocaleString() },
-  { key: "totalImpressions", label: "Impressions", icon: Eye, format: (v) => v.toLocaleString() },
-  { key: "totalReach", label: "Reach", icon: Users, format: (v) => v.toLocaleString() },
-  { key: "avgCTR", label: "Avg CTR", icon: TrendingUp, format: (v) => `${v.toFixed(2)}%` },
-  { key: "avgCPC", label: "Avg CPC", icon: BarChart3, format: (v) => `$${v.toFixed(2)}` },
-  { key: "avgCPM", label: "Avg CPM", icon: BarChart3, format: (v) => `$${v.toFixed(2)}` },
-  { key: "webApptTotal", label: "Web Appts", icon: CalendarCheck, format: (v) => v.toLocaleString() },
-  { key: "webApptCost", label: "Cost/Web Appt", icon: CalendarCheck, format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
-  { key: "apptTotal", label: "Appts Scheduled", icon: PhoneCall, format: (v) => v.toLocaleString() },
-  { key: "apptCost", label: "Cost/Appt", icon: PhoneCall, format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
-  { key: "leadsTotal", label: "Leads", icon: UserCheck, format: (v) => v.toLocaleString() },
-  { key: "leadsCost", label: "Cost/Lead", icon: UserCheck, format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
-  { key: "fbLeadsTotal", label: "FB Leads", icon: Target, format: (v) => v.toLocaleString() },
-  { key: "fbLeadsCost", label: "Cost/FB Lead", icon: Target, format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
-  { key: "ghlLeads", label: "GHL Leads", icon: UserCheck, format: (v) => v.toLocaleString() },
-  { key: "ghlAppointments", label: "GHL Appts", icon: CalendarCheck, format: (v) => v.toLocaleString() },
-  { key: "ghlCostPerLead", label: "Cost/GHL Lead", icon: DollarSign, format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
-  { key: "ghlCostPerAppt", label: "Cost/GHL Appt", icon: DollarSign, format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
-  { key: "soldCount", label: "Deals Sold", icon: Trophy, format: (v) => v.toLocaleString() },
-  { key: "totalRevenue", label: "Revenue", icon: DollarSign, format: (v) => v > 0 ? `$${v.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "–" },
-  { key: "adRoi", label: "ROAS", icon: Zap, format: (v) => v > 0 ? `${v.toFixed(1)}x` : "–" },
+/**
+ * Which upstream feed a KPI is derived from. Drives graceful degradation: when one
+ * source is down, its KPIs must read "unavailable" rather than 0 (design rule #5 —
+ * "no data" is never "0"). `blended` KPIs divide Meta spend by GHL volume, so they
+ * are unavailable if *either* source is.
+ */
+export type KpiSource = "meta" | "ghl" | "blended";
+
+export const ALL_KPIS: { key: KpiKey; label: string; icon: typeof DollarSign; source: KpiSource; format: (v: number) => string }[] = [
+  { key: "totalSpend", label: "Spend", icon: DollarSign, source: "meta", format: (v) => `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+  { key: "totalClicks", label: "Clicks", icon: MousePointerClick, source: "meta", format: (v) => v.toLocaleString() },
+  { key: "totalImpressions", label: "Impressions", icon: Eye, source: "meta", format: (v) => v.toLocaleString() },
+  { key: "totalReach", label: "Reach", icon: Users, source: "meta", format: (v) => v.toLocaleString() },
+  { key: "avgCTR", label: "Avg CTR", icon: TrendingUp, source: "meta", format: (v) => `${v.toFixed(2)}%` },
+  { key: "avgCPC", label: "Avg CPC", icon: BarChart3, source: "meta", format: (v) => `$${v.toFixed(2)}` },
+  { key: "avgCPM", label: "Avg CPM", icon: BarChart3, source: "meta", format: (v) => `$${v.toFixed(2)}` },
+  { key: "webApptTotal", label: "Web Appts", icon: CalendarCheck, source: "meta", format: (v) => v.toLocaleString() },
+  { key: "webApptCost", label: "Cost/Web Appt", icon: CalendarCheck, source: "meta", format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
+  { key: "apptTotal", label: "Appts Scheduled", icon: PhoneCall, source: "meta", format: (v) => v.toLocaleString() },
+  { key: "apptCost", label: "Cost/Appt", icon: PhoneCall, source: "meta", format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
+  { key: "leadsTotal", label: "Leads", icon: UserCheck, source: "meta", format: (v) => v.toLocaleString() },
+  { key: "leadsCost", label: "Cost/Lead", icon: UserCheck, source: "meta", format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
+  { key: "fbLeadsTotal", label: "FB Leads", icon: Target, source: "meta", format: (v) => v.toLocaleString() },
+  { key: "fbLeadsCost", label: "Cost/FB Lead", icon: Target, source: "meta", format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
+  { key: "ghlLeads", label: "GHL Leads", icon: UserCheck, source: "ghl", format: (v) => v.toLocaleString() },
+  { key: "ghlAppointments", label: "GHL Appts", icon: CalendarCheck, source: "ghl", format: (v) => v.toLocaleString() },
+  { key: "ghlCostPerLead", label: "Cost/GHL Lead", icon: DollarSign, source: "blended", format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
+  { key: "ghlCostPerAppt", label: "Cost/GHL Appt", icon: DollarSign, source: "blended", format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
+  { key: "soldCount", label: "Deals Sold", icon: Trophy, source: "ghl", format: (v) => v.toLocaleString() },
+  { key: "totalRevenue", label: "Revenue", icon: DollarSign, source: "ghl", format: (v) => v > 0 ? `$${v.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "–" },
+  { key: "adRoi", label: "ROAS", icon: Zap, source: "blended", format: (v) => v > 0 ? `${v.toFixed(1)}x` : "–" },
 ];
+
+const KPI_SOURCE = new Map<KpiKey, KpiSource>(ALL_KPIS.map((k) => [k.key, k.source]));
+
+/** True when this KPI cannot be computed without the Meta ad feed. */
+export function dependsOnMeta(key: KpiKey): boolean {
+  const source = KPI_SOURCE.get(key);
+  return source === "meta" || source === "blended";
+}
 
 interface AccountCardProps {
   accountName: string;
