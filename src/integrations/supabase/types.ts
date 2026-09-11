@@ -360,6 +360,7 @@ export type Database = {
           business_name: string | null
           business_phone: string | null
           business_type: string | null
+          cancelled_at: string | null
           city: string | null
           currency: string | null
           ein: string | null
@@ -371,6 +372,8 @@ export type Database = {
           id: string
           legal_business_name: string | null
           offers: Json | null
+          onboarded_at: string | null
+          onboarding_data: Json | null
           onboarding_link: string | null
           owner_cell: string | null
           owner_email: string | null
@@ -382,6 +385,8 @@ export type Database = {
           session_id: string
           state: string | null
           status: string | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
           submitted_at: string | null
           website_url: string | null
         }
@@ -396,6 +401,7 @@ export type Database = {
           business_name?: string | null
           business_phone?: string | null
           business_type?: string | null
+          cancelled_at?: string | null
           city?: string | null
           currency?: string | null
           ein?: string | null
@@ -407,6 +413,8 @@ export type Database = {
           id?: string
           legal_business_name?: string | null
           offers?: Json | null
+          onboarded_at?: string | null
+          onboarding_data?: Json | null
           onboarding_link?: string | null
           owner_cell?: string | null
           owner_email?: string | null
@@ -418,6 +426,8 @@ export type Database = {
           session_id: string
           state?: string | null
           status?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
           submitted_at?: string | null
           website_url?: string | null
         }
@@ -432,6 +442,7 @@ export type Database = {
           business_name?: string | null
           business_phone?: string | null
           business_type?: string | null
+          cancelled_at?: string | null
           city?: string | null
           currency?: string | null
           ein?: string | null
@@ -443,6 +454,8 @@ export type Database = {
           id?: string
           legal_business_name?: string | null
           offers?: Json | null
+          onboarded_at?: string | null
+          onboarding_data?: Json | null
           onboarding_link?: string | null
           owner_cell?: string | null
           owner_email?: string | null
@@ -454,6 +467,8 @@ export type Database = {
           session_id?: string
           state?: string | null
           status?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
           submitted_at?: string | null
           website_url?: string | null
         }
