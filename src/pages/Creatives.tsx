@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { NewBriefDialog } from "@/components/creatives/NewBriefDialog";
@@ -19,8 +19,9 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/layout/PageHeader";
 import {
-  ArrowLeft, Plus, X, Trash2, Image as ImageIcon, ExternalLink,
+  Plus, X, Trash2, Image as ImageIcon, ExternalLink,
   Search, Camera, Film, Loader2, User, Check,
   ClipboardList, ChevronsUpDown,
 } from "lucide-react";
@@ -403,19 +404,13 @@ const Creatives = () => {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+    <div className="bg-background">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:py-10 sm:px-6 lg:px-8">
 
-        {/* Page header */}
-        <div className="mb-8 flex items-center gap-3">
-          <Button variant="ghost" size="icon" asChild>
-            <Link to="/"><ArrowLeft className="h-4 w-4" /></Link>
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">Creatives</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Template library, creative requests, and ad output management</p>
-          </div>
-        </div>
+        <PageHeader
+          title="Creatives"
+          description="Template library, creative requests, and ad output management"
+        />
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
           <TabsList className="mb-6">

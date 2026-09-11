@@ -9,10 +9,10 @@ import { type CreativeRequest } from "@/components/creatives/types";
 import { TaskList } from "@/components/dashboard/TaskList";
 import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/layout/PageHeader";
 import {
   RefreshCw,
   CalendarDays,
-  Settings,
   Image as ImageIcon,
   Sparkles,
   ArrowRight,
@@ -20,8 +20,6 @@ import {
   Clock,
   Film,
   ClipboardList,
-  ListTodo,
-  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
@@ -309,40 +307,12 @@ const Index = () => {
     : dateRangeStr ?? "All time";
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background">
       <div className="mx-auto max-w-5xl px-4 py-6 sm:py-10 sm:px-6 lg:px-8">
 
         {/* ── Header ───────────────────────────────────────────────────────── */}
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <img
-              src="/Treat Engine Logo .png"
-              alt="Treat Engine"
-              className="h-8 sm:h-10 w-auto"
-            />
-            <p className="mt-1 text-sm text-muted-foreground">Campaign performance overview</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/tasks" aria-label="All Tasks" title="All Tasks"><ListTodo className="h-4 w-4" /></Link>
-            </Button>
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/creatives" aria-label="Creatives" title="Creatives"><ImageIcon className="h-4 w-4" /></Link>
-            </Button>
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/settings" aria-label="Settings" title="Settings"><Settings className="h-4 w-4" /></Link>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-label="Sign out"
-              title="Sign out"
-              onClick={() => supabase.auth.signOut()}
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+        <PageHeader title="Performance" description="Campaign performance overview" />
+
 
         {/* ── New Clients ──────────────────────────────────────────────────── */}
         {newClients && newClients.length > 0 && (

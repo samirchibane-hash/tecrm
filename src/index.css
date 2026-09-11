@@ -35,6 +35,10 @@
     --success-foreground: 0 0% 100%;
     --warning: 27 92% 40%;
     --warning-foreground: 0 0% 100%;
+    /* Status text for failures (past due, sync failed). --destructive is a
+       button fill and goes too dark to read as text on the dark surface. */
+    --danger: 0 72% 45%;
+    --danger-foreground: 0 0% 100%;
 
     --border: 0 0% 91%;
     --input: 0 0% 91%;
@@ -52,7 +56,9 @@
     --sidebar-foreground: 0 0% 0%;
     --sidebar-primary: 0 0% 0%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 96%;
+    /* One step darker than --muted: on the 98% rail, 96% was too faint to
+       show which page you're on. */
+    --sidebar-accent: 0 0% 92%;
     --sidebar-accent-foreground: 0 0% 0%;
     --sidebar-border: 0 0% 91%;
     --sidebar-ring: 0 0% 0%;
@@ -88,6 +94,8 @@
     --success-foreground: 224 30% 7%;
     --warning: 30 90% 58%;
     --warning-foreground: 224 30% 7%;
+    --danger: 0 84% 66%;
+    --danger-foreground: 224 30% 7%;
 
     --border: 224 18% 16%;
     --input: 224 18% 16%;

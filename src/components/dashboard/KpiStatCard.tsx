@@ -16,6 +16,7 @@ export function KpiStatCard({
   onClick,
   unavailable = false,
   unavailableReason,
+  detail,
   size = "compact",
 }: {
   label: string;
@@ -25,6 +26,8 @@ export function KpiStatCard({
   onClick?: () => void;
   unavailable?: boolean;
   unavailableReason?: string;
+  /** One quiet line of context under the label, e.g. "12 active · 7 paused". */
+  detail?: string;
   size?: "compact" | "comfortable";
 }) {
   const interactive = !!onClick && !unavailable;
@@ -70,6 +73,11 @@ export function KpiStatCard({
           >
             {label}
           </p>
+          {!unavailable && detail && (
+            <p className="mt-0.5 truncate text-[11px] font-normal text-muted-foreground/80" title={detail}>
+              {detail}
+            </p>
+          )}
           {unavailable && unavailableReason && (
             <p className="mt-0.5 text-[10px] font-normal normal-case tracking-normal text-muted-foreground/80 truncate">
               {unavailableReason}

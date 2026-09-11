@@ -5,7 +5,10 @@ GHL conversions, and call center metrics. React 18 + Vite + TypeScript + Tailwin
 shadcn/ui + Supabase, deployed on Vercel.
 
 **Two audiences, two bars.** Internal operator screens (`Index`, `AccountDetail`,
-`Creatives`, `Settings`) optimize for density and speed. Client-facing screens
+`Creatives`, `AllTasks`, `Revenue`, `ClaudeLog`, `Settings`) optimize for density and speed.
+They all render inside `components/layout/AppShell` (left sidebar); the menu and the
+Settings sub-pages are defined once in `components/layout/navigation.ts`, and each
+Settings sub-page is its own component in `components/settings/`. Client-facing screens
 (`ClientReport`, `CallCenterReport`) are the product clients judge the agency by —
 they get the higher polish bar and stricter data-honesty rules below.
 
@@ -41,7 +44,9 @@ benefits. Do not fork a local variant inside a page file.
 
 - Metric tiles → the shared stat tile component, not a bespoke `<Card>` per page
 - Currency/number/percent → shared helpers in `src/lib/`, never inline `toLocaleString`
-- Status coloring → shared status component driven by a `status` prop, not class maps
+- Status coloring → `components/StatusPill` (`status="success" | "warning" | "danger" | …`), not class maps.
+  Failure text uses `text-danger`; `--destructive` is a button fill and is unreadable as text in dark.
+- Page titles → `components/layout/PageHeader`
 
 Known debt: `components/dashboard/KPICards.tsx` is unimported dead code while ~13 files
 reimplement its label pattern inline. Consolidating toward one primitive is always
@@ -103,6 +108,23 @@ The anon key ships in the bundle, so RLS is the only boundary. Keep it that way:
   `verify_jwt` alone accepts the public anon key. Deploy with the `_shared` file included.
 - Service role (edge functions, website sync) and the `postgres` role (n8n's GHL sync)
   bypass RLS.
+
+## Synced mirrors
+
+Both run hourly from pg_cron (authorized by the Vault `stripe_sync_cron_secret`, which
+`verify_cron_secret()` checks for every CRM cron job) and can be run from the UI.
+Each run is logged to a `*_sync_runs` table; screens show freshness via `SyncStatus`.
+
+- **Stripe** (`stripe-sync`, :07): customers, subscriptions, invoices, and
+  `stripe_payments` (succeeded PaymentIntents since Jun 2024 with charge date + refunds).
+  **Revenue = `stripe_payments`, not paid invoices**: checkout/one-off charges have no
+  invoice. The restricted key can't read refunds or balance transactions directly, so
+  refunds come from the expanded charge and land in the original payment's month.
+- **GitHub** (`github-sync`, :17): commits since 2026-09-01 on each repo's default
+  branch → `github_commits`, linked to accounts by `github_client_rules`
+  (repo / path prefix / subject keyword). Keyword rules match the **subject only** —
+  bodies name other clients as provenance. The token lives in Vault (`set_github_token`,
+  admin-only, write-only from the UI).
 
 ## Working agreement
 

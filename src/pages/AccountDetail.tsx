@@ -6,6 +6,7 @@ import { useCouplerData } from "@/hooks/useCouplerData";
 import { useSettings } from "@/hooks/useSettings";
 import { ALL_KPIS, dependsOnMeta, type KpiKey } from "@/components/dashboard/AccountCard";
 import { KpiStatCard } from "@/components/dashboard/KpiStatCard";
+import { AccountWorkLog } from "@/components/claude-log/AccountWorkLog";
 import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
 import { resolveChartKpi } from "@/lib/kpis";
 import { Button } from "@/components/ui/button";
@@ -706,6 +707,7 @@ const AccountDetail = () => {
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => navigate("/")}
+              aria-label="Back to Performance"
               className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg border border-border/60 bg-card text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -1022,6 +1024,8 @@ const AccountDetail = () => {
                 )}
               </div>
             </section>
+
+            <AccountWorkLog accountId={accountId} />
 
             {/* ── Funnel Pages ── */}
             <Card>
