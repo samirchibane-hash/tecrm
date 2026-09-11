@@ -4,7 +4,8 @@ import { isAdminRequest, unauthorizedResponse } from "../_shared/admin-auth.ts";
 
 // Mirrors commits from every repo the GitHub token can see into the Claude Log,
 // starting 2026-09-01, then re-links them to CRM accounts from
-// github_client_rules. Read-only against GitHub.
+// github_client_rules. Then lists every funnel page in each funnel_sites folder
+// into that client's Funnel Pages (account_links). Read-only against GitHub.
 //
 // Runs hourly from pg_cron (x-cron-secret header, checked against Vault) or on
 // demand by a signed-in admin. The token is set in Settings → Integrations and
@@ -76,6 +77,82 @@ function parseMessage(message: string) {
     body: body || null,
     claude_coauthored: /co-authored-by:\s*claude/i.test(message),
   };
+}
+
+const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", mdash: "—", ndash: "–" };
+
+function pageTitle(html: string): string | null {
+  const raw = html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1];
+  if (!raw) return null;
+  const title = raw.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+    if (e[0] !== "#") return ENTITIES[e.toLowerCase()] ?? m;
+    const n = e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+    return Number.isFinite(n) ? String.fromCodePoint(n) : m;
+  }).replace(/\s+/g, " ").trim();
+  return title || null;
+}
+
+// "broadway-1" → "Broadway 1", "dfw-schedule" → "DFW Schedule"
+function pageLabel(slug: string): string {
+  return slug.split(/[-_]+/).filter(Boolean)
+    .map((w) => (/^[a-z]{1,3}$/i.test(w) ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1)))
+    .join(" ");
+}
+
+// Every dist/<site>/<page>/index.html on the default branch (what Vercel
+// serves) becomes a Funnel Pages link. Root index.html files are only
+// redirects to LP1, so they're skipped.
+async function syncFunnelPages(db: ReturnType<typeof createClient>, token: string, repos: GitHubObject[]) {
+  const { data: sites, error } = await db.from("funnel_sites").select("id, repo, root_dir, domain");
+  if (error) throw new Error(`funnel_sites: ${error.message}`);
+
+  const { data: known } = await db.from("account_links")
+    .select("repo, repo_path, blob_sha, page_title").eq("source", "funnel_repo");
+  const titles = new Map((known ?? []).map((k) => [`${k.repo}:${k.repo_path}`, k]));
+
+  const totals = { sites: sites?.length ?? 0, pages: 0, added: 0, adopted: 0, removed: 0 };
+  const trees = new Map<string, GitHubObject[]>();
+
+  for (const site of sites ?? []) {
+    if (!trees.has(site.repo)) {
+      const branch = repos.find((r) => r.full_name.toLowerCase() === site.repo.toLowerCase())?.default_branch;
+      if (!branch) throw new Error(`funnel pages: token can't see ${site.repo}`);
+      const { body } = await gh(`/repos/${site.repo}/git/trees/${branch}?recursive=1`, token);
+      // A partial tree would read as deleted pages, so refuse it outright.
+      if (body.truncated) throw new Error(`funnel pages: ${site.repo} tree is truncated`);
+      trees.set(site.repo, body.tree ?? []);
+    }
+
+    const prefix = `${site.root_dir}/`;
+    const entries = trees.get(site.repo)!.filter((e) =>
+      e.type === "blob" && e.path.startsWith(prefix) && /^[^/]+\/index\.html$/.test(e.path.slice(prefix.length)));
+
+    const pages = await mapLimit(entries, 5, async (e) => {
+      const slug = e.path.slice(prefix.length).split("/")[0];
+      const prev = titles.get(`${site.repo}:${e.path}`);
+      let title = prev?.page_title ?? null;
+      if (!prev || prev.blob_sha !== e.sha) {
+        const { body } = await gh(`/repos/${site.repo}/git/blobs/${e.sha}`, token);
+        const bytes = Uint8Array.from(atob(String(body.content ?? "").replace(/\n/g, "")), (c) => c.charCodeAt(0));
+        title = pageTitle(new TextDecoder().decode(bytes));
+      }
+      return {
+        repo_path: e.path,
+        url: `https://${site.domain}/${slug}`,
+        label: pageLabel(slug),
+        page_title: title,
+        blob_sha: e.sha,
+      };
+    });
+
+    const { data: result, error: syncError } = await db.rpc("sync_funnel_pages", { p_site_id: site.id, p_pages: pages });
+    if (syncError) throw new Error(`sync_funnel_pages ${site.root_dir}: ${syncError.message}`);
+    totals.pages += pages.length;
+    totals.added += result?.added ?? 0;
+    totals.adopted += result?.adopted ?? 0;
+    totals.removed += result?.removed ?? 0;
+  }
+  return totals;
 }
 
 serve(async (req) => {
@@ -159,7 +236,8 @@ serve(async (req) => {
     }
 
     const { data: links } = await db.rpc("link_github_commits");
-    const counts = { repos: repos.length, active_repos: active.length, new_commits: fetched, unchanged: skipped, links: links ?? 0 };
+    const funnel_pages = await syncFunnelPages(db, token, repos);
+    const counts = { repos: repos.length, active_repos: active.length, new_commits: fetched, unchanged: skipped, links: links ?? 0, funnel_pages };
     if (run) await db.from("github_sync_runs").update({ finished_at: new Date().toISOString(), ok: true, counts }).eq("id", run.id);
 
     return new Response(JSON.stringify({ ok: true, counts }), {

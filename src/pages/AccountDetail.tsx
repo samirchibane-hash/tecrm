@@ -7,6 +7,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { ALL_KPIS, dependsOnMeta, type KpiKey } from "@/components/dashboard/AccountCard";
 import { KpiStatCard } from "@/components/dashboard/KpiStatCard";
 import { AccountWorkLog } from "@/components/claude-log/AccountWorkLog";
+import { FunnelPagesCard } from "@/components/funnel-pages/FunnelPagesCard";
 import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
 import { resolveChartKpi } from "@/lib/kpis";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,6 @@ import {
   Trash2,
   Loader2,
   UserCircle2,
-  Link2,
   ExternalLink,
   ClipboardList,
   CheckCircle2,
@@ -629,51 +629,6 @@ const AccountDetail = () => {
     setDeletingPocId(null);
   };
 
-  // ─── Account Links ────────────────────────────────────────────────────────
-  const [newLinkLabel, setNewLinkLabel] = useState("");
-  const [newLinkUrl, setNewLinkUrl] = useState("");
-  const [showLinkForm, setShowLinkForm] = useState(false);
-
-  const { data: accountLinks = [] } = useQuery({
-    queryKey: ["account-links", decodedName],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("account_links")
-        .select("*")
-        .eq("account_name", decodedName)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const addLink = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("account_links").insert({
-        account_name: decodedName,
-        label: newLinkLabel.trim(),
-        url: newLinkUrl.trim(),
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["account-links", decodedName] });
-      setNewLinkLabel("");
-      setNewLinkUrl("");
-      setShowLinkForm(false);
-      toast.success("Link saved");
-    },
-    onError: () => toast.error("Failed to save link"),
-  });
-
-  const deleteLink = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("account_links").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["account-links", decodedName] }),
-  });
-
   const [driveUrlInput, setDriveUrlInput] = useState((account as any)?.gdrive_folder_url ?? "");
   const [driveSaving, setDriveSaving] = useState(false);
   const [drivePopoverOpen, setDrivePopoverOpen] = useState(false);
@@ -1027,90 +982,7 @@ const AccountDetail = () => {
 
             <AccountWorkLog accountId={accountId} />
 
-            {/* ── Funnel Pages ── */}
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                    <Link2 className="h-4 w-4 text-muted-foreground" />
-                    Funnel Pages
-                    {accountLinks.length > 0 && (
-                      <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                        {accountLinks.length}
-                      </span>
-                    )}
-                  </CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground"
-                    onClick={() => setShowLinkForm((v) => !v)}
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add Link
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {showLinkForm && (
-                  <div className="flex items-end gap-2 rounded-xl border border-border p-3 bg-muted/20">
-                    <div className="flex-1 min-w-0 space-y-2">
-                      <div>
-                        <Label className="text-xs text-muted-foreground mb-1 block">Label</Label>
-                        <Input placeholder="e.g. Landing Page" value={newLinkLabel} onChange={(e) => setNewLinkLabel(e.target.value)} className="h-8 text-sm" />
-                      </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground mb-1 block">URL</Label>
-                        <Input placeholder="https://..." value={newLinkUrl} onChange={(e) => setNewLinkUrl(e.target.value)} className="h-8 text-sm" />
-                      </div>
-                    </div>
-                    <div className="flex gap-1.5 shrink-0">
-                      <Button size="sm" className="h-8" disabled={!newLinkLabel.trim() || !newLinkUrl.trim() || addLink.isPending} onClick={() => addLink.mutate()}>Save</Button>
-                      <Button variant="ghost" size="sm" className="h-8" onClick={() => { setShowLinkForm(false); setNewLinkLabel(""); setNewLinkUrl(""); }}>Cancel</Button>
-                    </div>
-                  </div>
-                )}
-                {accountLinks.length === 0 && !showLinkForm ? (
-                  <p className="text-sm text-muted-foreground py-2">No funnel pages added yet.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {accountLinks.map((link) => (
-                      <div key={link.id} className="group flex items-center gap-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{link.label}</p>
-                          <p className="text-xs text-muted-foreground truncate">{link.url}</p>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            onClick={() => { navigator.clipboard.writeText(link.url); toast.success("Link copied"); }}
-                            className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                            title="Copy link"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                          </button>
-                          <a
-                            href={link.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                            title="Open in new tab"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                          <button
-                            onClick={() => deleteLink.mutate(link.id)}
-                            className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <FunnelPagesCard accountId={accountId} accountName={decodedName} />
 
             {/* ── Google Drive ── */}
             <Card>

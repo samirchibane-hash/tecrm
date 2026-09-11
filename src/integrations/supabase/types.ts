@@ -46,23 +46,41 @@ export type Database = {
       account_links: {
         Row: {
           account_name: string
+          blob_sha: string | null
           created_at: string | null
           id: string
           label: string
+          page_title: string | null
+          repo: string | null
+          repo_path: string | null
+          source: string
+          synced_at: string | null
           url: string
         }
         Insert: {
           account_name: string
+          blob_sha?: string | null
           created_at?: string | null
           id?: string
           label: string
+          page_title?: string | null
+          repo?: string | null
+          repo_path?: string | null
+          source?: string
+          synced_at?: string | null
           url: string
         }
         Update: {
           account_name?: string
+          blob_sha?: string | null
           created_at?: string | null
           id?: string
           label?: string
+          page_title?: string | null
+          repo?: string | null
+          repo_path?: string | null
+          source?: string
+          synced_at?: string | null
           url?: string
         }
         Relationships: []
@@ -727,6 +745,41 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "creatives_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funnel_sites: {
+        Row: {
+          account_id: string
+          created_at: string
+          domain: string
+          id: string
+          repo: string
+          root_dir: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          domain: string
+          id?: string
+          repo?: string
+          root_dir: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          domain?: string
+          id?: string
+          repo?: string
+          root_dir?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funnel_sites_account_id_fkey"
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
