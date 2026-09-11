@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { format, formatDistanceToNowStrict, parseISO } from "date-fns";
-import { ArrowDown, ArrowUp, ArrowUpDown, DollarSign, Film, Image as ImageIcon, Megaphone, RefreshCw, Target } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, DollarSign, Film, Image as ImageIcon, Megaphone, RefreshCw, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -24,11 +24,16 @@ const SORT_LABELS: Record<CreativeSortKey, string> = {
   spend: "Spend",
   results: "Results",
   costPer: "Cost / result",
+  appointments: "Appts",
+  costPerAppt: "Cost / appt",
   linkCtr: "Link CTR",
 };
 
-// Cheapest cost per result first; everything else biggest first.
-const defaultDir = (key: CreativeSortKey) => (key === "costPer" ? "asc" : "desc");
+// Cheapest cost first; everything else biggest first.
+const defaultDir = (key: CreativeSortKey) => (key === "costPer" || key === "costPerAppt" ? "asc" : "desc");
+
+// Tailwind needs literal class names, so the tile row's width is looked up.
+const TILE_COLS: Record<number, string> = { 3: "lg:grid-cols-3", 4: "lg:grid-cols-4", 5: "lg:grid-cols-5" };
 
 function periodText(since: string, until: string) {
   const a = parseISO(since);
@@ -95,6 +100,10 @@ function costPerResult(ad: LiveAd): ReactNode {
   return ad.result?.costPer != null ? formatUsd(ad.result.costPer, { decimals: true }) : <Dash title="No results in this period" />;
 }
 
+function costPerAppt(ad: LiveAd): ReactNode {
+  return ad.costPerAppointment != null ? formatUsd(ad.costPerAppointment, { decimals: true }) : <Dash title="No appointments in this period" />;
+}
+
 /**
  * Every ad live in the client's Meta account right now, with spend and Meta's own
  * Results / Cost per result for the chosen period. Read live from the Graph API
@@ -106,7 +115,8 @@ export function CreativePerformanceCard({ accountId }: { accountId: string }) {
   const [sort, setSort] = useState<{ key: CreativeSortKey; dir: "asc" | "desc" }>({ key: "spend", dir: "desc" });
   const { data, isLoading, isError, error, refetch, isFetching } = useCreativePerformance(accountId, period);
 
-  const summary = useMemo(() => summarizeCreatives(data?.ads ?? []), [data]);
+  const summary = useMemo(() => summarizeCreatives(data?.ads ?? [], data?.appointmentsTracked), [data]);
+  const apptsTracked = !!data?.appointmentsTracked;
   const rows = useMemo(() => sortCreatives(data?.ads ?? [], sort.key, sort.dir), [data, sort]);
   const periodLabel = CREATIVE_PERIODS.find((p) => p.value === period)?.label ?? period;
   const usesActionCounts = rows.some((ad) => ad.result?.source === "actions");
@@ -165,7 +175,7 @@ export function CreativePerformanceCard({ accountId }: { accountId: string }) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {(["spend", "results", "costPer"] as const).map((k) => (
+                {(["spend", "results", "costPer", ...(apptsTracked ? (["appointments", "costPerAppt"] as const) : [])] as const).map((k) => (
                   <SelectItem key={k} value={k} className="text-xs">{SORT_LABELS[k]}</SelectItem>
                 ))}
               </SelectContent>
@@ -205,7 +215,7 @@ export function CreativePerformanceCard({ accountId }: { accountId: string }) {
         </p>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className={cn("grid grid-cols-2 gap-2 sm:grid-cols-3", TILE_COLS[3 + Math.max(1, Math.min(summary.results.length, RESULT_TILES))])}>
             <KpiStatCard
               label="Live ads"
               value={formatCount(summary.live)}
@@ -231,6 +241,22 @@ export function CreativePerformanceCard({ accountId }: { accountId: string }) {
                 />
               ))
             )}
+            {summary.appointments !== null ? (
+              <KpiStatCard
+                label="Appts scheduled"
+                value={formatCount(summary.appointments)}
+                icon={CalendarCheck}
+                detail={summary.costPerAppointment !== null ? `${formatUsd(summary.costPerAppointment, { decimals: true })} per appt` : "None in period"}
+              />
+            ) : (
+              <KpiStatCard
+                label="Appts scheduled"
+                value="—"
+                icon={CalendarCheck}
+                unavailable
+                unavailableReason="Not tracked: no Schedule event"
+              />
+            )}
           </div>
 
           {isMobile ? (
@@ -254,6 +280,18 @@ export function CreativePerformanceCard({ accountId }: { accountId: string }) {
                           <dt className="text-muted-foreground">Cost / result</dt>
                           <dd className="font-medium tabular-nums text-foreground">{costPerResult(ad)}</dd>
                         </div>
+                        {apptsTracked && (
+                          <>
+                            <div>
+                              <dt className="text-muted-foreground">Appts</dt>
+                              <dd className="font-medium tabular-nums text-foreground">{formatCount(ad.appointments ?? 0)}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-muted-foreground">Cost / appt</dt>
+                              <dd className="font-medium tabular-nums text-foreground">{costPerAppt(ad)}</dd>
+                            </div>
+                          </>
+                        )}
                       </dl>
                     ) : (
                       <p className="mt-1 text-xs text-muted-foreground">No delivery in this period</p>
@@ -271,6 +309,8 @@ export function CreativePerformanceCard({ accountId }: { accountId: string }) {
                     {sortHead("spend")}
                     {sortHead("results")}
                     {sortHead("costPer")}
+                    {apptsTracked && sortHead("appointments")}
+                    {apptsTracked && sortHead("costPerAppt")}
                     {sortHead("linkCtr")}
                   </TableRow>
                 </TableHeader>
@@ -291,12 +331,18 @@ export function CreativePerformanceCard({ accountId }: { accountId: string }) {
                             {ad.result && <span className="block text-[11px] text-muted-foreground">{ad.result.label}</span>}
                           </TableCell>
                           <TableCell className="py-2 text-right tabular-nums">{costPerResult(ad)}</TableCell>
+                          {apptsTracked && (
+                            <>
+                              <TableCell className="py-2 text-right tabular-nums">{formatCount(ad.appointments ?? 0)}</TableCell>
+                              <TableCell className="py-2 text-right tabular-nums">{costPerAppt(ad)}</TableCell>
+                            </>
+                          )}
                           <TableCell className="py-2 text-right tabular-nums">
                             {ad.linkCtr !== null ? formatPercent(ad.linkCtr) : <Dash title="No link clicks in this period" />}
                           </TableCell>
                         </>
                       ) : (
-                        <TableCell colSpan={4} className="py-2 text-right text-xs text-muted-foreground">
+                        <TableCell colSpan={apptsTracked ? 6 : 4} className="py-2 text-right text-xs text-muted-foreground">
                           No delivery in this period
                         </TableCell>
                       )}
@@ -310,6 +356,7 @@ export function CreativePerformanceCard({ accountId }: { accountId: string }) {
           <p className="text-[11px] leading-relaxed text-muted-foreground">
             Results and cost per result are Meta's own: each ad set's optimization event, counted with the ad account's
             attribution setting. Only compare cost per result between ads with the same result type. Spend covers live ads only.
+            {apptsTracked && <> Appts are Meta Schedule events (website bookings) credited to each ad, whatever its goal.</>}
             {usesActionCounts && (
               <> * Meta leaves Results empty for instant-form ads, so these count form leads from Meta's action data.</>
             )}

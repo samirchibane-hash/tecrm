@@ -25,6 +25,8 @@ const ad = (name: string, spend: number, r: CreativeResult | null, delivered = t
   impressions: 0,
   linkCtr,
   result: r,
+  appointments: null,
+  costPerAppointment: null,
 });
 
 describe("summarizeCreatives", () => {
@@ -50,6 +52,25 @@ describe("summarizeCreatives", () => {
   it("counts live vs delivered ads and leaves result-less ads out of the totals", () => {
     const s = summarizeCreatives([ad("a", 10, null), ad("b", 0, null, false)]);
     expect(s).toMatchObject({ live: 2, delivered: 1, results: [] });
+  });
+});
+
+describe("summarizeCreatives appointments", () => {
+  it("totals appointments and divides live spend by them when the account tracks them", () => {
+    const withAppts = (name: string, spend: number, appts: number): LiveAd => ({ ...ad(name, spend, null), appointments: appts, costPerAppointment: appts ? spend / appts : null });
+    const s = summarizeCreatives([withAppts("a", 745.11, 6), withAppts("b", 641.6, 4), withAppts("c", 100, 0)], true);
+    expect(s.appointments).toBe(10);
+    expect(s.costPerAppointment).toBeCloseTo((745.11 + 641.6 + 100) / 10);
+  });
+
+  it("reports 0, not 'untracked', when a tracking account's ads booked nothing this period", () => {
+    const s = summarizeCreatives([ad("a", 50, null, false)], true);
+    expect(s.appointments).toBe(0);
+    expect(s.costPerAppointment).toBeNull();
+  });
+
+  it("reports null when the account doesn't track appointments", () => {
+    expect(summarizeCreatives([ad("a", 50, null)], false).appointments).toBeNull();
   });
 });
 

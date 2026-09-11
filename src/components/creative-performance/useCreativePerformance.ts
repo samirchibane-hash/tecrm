@@ -25,12 +25,17 @@ export interface LiveAd {
   impressions: number;
   linkCtr: number | null;
   result: CreativeResult | null;
+  /** Meta Schedule conversions; null when the account doesn't track them. */
+  appointments: number | null;
+  costPerAppointment: number | null; // null when there were none, never $0
 }
 
 export interface CreativePerformance {
   adAccount: { id: string; name: string; currency: string } | null;
   period: { since: string; until: string } | null;
   accountSpend: number | null;
+  /** Meta saw a Schedule event in the last 90 days; otherwise appointments aren't reported. */
+  appointmentsTracked: boolean;
   ads: LiveAd[];
   fetchedAt: string;
 }

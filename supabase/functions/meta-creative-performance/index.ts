@@ -11,6 +11,11 @@ import { isAdminRequest, unauthorizedResponse } from "../_shared/admin-auth.ts";
 // with the account's attribution setting. Meta leaves `results` empty for
 // instant-form (LEAD_GENERATION) ads, so those fall back to the form-lead
 // action count, and the response says which source each number came from.
+//
+// Appointments scheduled are Meta's `schedule_total` conversions, reported per
+// ad whatever its goal. They're only reported for accounts that track them —
+// Meta saw at least one in the last 90 days — so a funnel that never sends a
+// Schedule event reads "not tracked" instead of "0 appointments".
 
 const GRAPH = "https://graph.facebook.com/v25.0";
 
@@ -130,17 +135,18 @@ serve(async (req) => {
 
     // Not an error: the account simply isn't linked to Meta yet.
     const actId = account.fb_ad_account_id as string | null;
-    if (!actId) return json({ adAccount: null, period: null, accountSpend: null, ads: [], fetchedAt: new Date().toISOString() });
+    if (!actId) return json({ adAccount: null, period: null, accountSpend: null, appointmentsTracked: false, ads: [], fetchedAt: new Date().toISOString() });
 
-    const [meta, firstPage] = await Promise.all([
+    const [meta, tracking, firstPage] = await Promise.all([
       graph(actId, { fields: `name,currency,insights.date_preset(${preset}){spend,date_start,date_stop}` }, token),
+      graph(`${actId}/insights`, { date_preset: "last_90d", fields: "conversions" }, token),
       graph(`${actId}/ads`, {
         fields: [
           "id,name,effective_status,created_time",
           "campaign{name}",
           "adset{name,optimization_goal}",
           "creative.thumbnail_width(320).thumbnail_height(320){id,object_type,video_id,thumbnail_url}",
-          `insights.date_preset(${preset}){spend,impressions,inline_link_click_ctr,results,cost_per_result,actions,date_start,date_stop}`,
+          `insights.date_preset(${preset}){spend,impressions,inline_link_click_ctr,results,cost_per_result,actions,conversions,date_start,date_stop}`,
         ].join(","),
         filtering: JSON.stringify([{ field: "effective_status", operator: "IN", value: ["ACTIVE"] }]),
         limit: "100",
@@ -154,10 +160,15 @@ serve(async (req) => {
       next = page.paging?.next;
     }
 
+    const scheduleCount = (ins: Graph | undefined) =>
+      num((ins?.conversions ?? []).find((c: Graph) => c.action_type === "schedule_total")?.value) ?? 0;
+    const appointmentsTracked = scheduleCount(tracking.data?.[0]) > 0;
+
     const actNumber = actId.replace(/^act_/, "");
     const ads = rawAds.map((ad) => {
       const ins: Graph | undefined = ad.insights?.data?.[0];
       const spend = num(ins?.spend) ?? 0;
+      const appointments = appointmentsTracked && ins ? scheduleCount(ins) : null;
       return {
         id: ad.id as string,
         name: ad.name as string,
@@ -174,6 +185,8 @@ serve(async (req) => {
         impressions: num(ins?.impressions) ?? 0,
         linkCtr: num(ins?.inline_link_click_ctr),
         result: ins ? summarizeResult(ins, ad.adset?.optimization_goal, spend) : null,
+        appointments,
+        costPerAppointment: appointments ? spend / appointments : null,
       };
     });
 
@@ -182,6 +195,7 @@ serve(async (req) => {
       adAccount: { id: actId, name: meta.name ?? actId, currency: meta.currency ?? "USD" },
       period: accountInsights ? { since: accountInsights.date_start, until: accountInsights.date_stop } : null,
       accountSpend: num(accountInsights?.spend) ?? 0,
+      appointmentsTracked,
       ads,
       fetchedAt: new Date().toISOString(),
     });
