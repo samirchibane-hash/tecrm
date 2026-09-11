@@ -87,6 +87,23 @@ rather than new breakpoint logic. Interactive elements need accessible names, vi
 focus rings (`--ring`), and real keyboard paths. Prefer Radix primitives already in
 `components/ui/` over hand-rolled interaction.
 
+## Security model (since 2026-09-11)
+
+The anon key ships in the bundle, so RLS is the only boundary. Keep it that way:
+
+- **Admin access** = Supabase Auth session whose email is in `public.admin_users`
+  (`public.is_admin()`). Every table has an `admin_all` policy for `authenticated`.
+  **A new table needs its own `admin_all` policy** (copy the pattern in
+  `migrations/*_lock_down_rls.sql`) or the dashboard can't read it.
+- **Client report pages** (`/report/:token`, `/cc-report/:token`) run as `anon` with an
+  `x-report-token` header, via `ReportClientProvider`. `report_*` policies scope them to
+  that one account. Anything rendered inside a report must use `useSupabase()`, never the
+  `supabase` singleton, or it will query as the wrong identity.
+- **Edge functions** must call `isAdminRequest()` from `_shared/admin-auth.ts`.
+  `verify_jwt` alone accepts the public anon key. Deploy with the `_shared` file included.
+- Service role (edge functions, website sync) and the `postgres` role (n8n's GHL sync)
+  bypass RLS.
+
 ## Working agreement
 
 - **Match surrounding code.** Same naming, same import style, same component idiom.
