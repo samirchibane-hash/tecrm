@@ -782,6 +782,196 @@ export type Database = {
         }
         Relationships: []
       }
+      github_client_rules: {
+        Row: {
+          account_id: string
+          created_at: string
+          id: string
+          kind: string
+          pattern: string
+          repo: string | null
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          id?: string
+          kind: string
+          pattern: string
+          repo?: string | null
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          pattern?: string
+          repo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "github_client_rules_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      github_commit_accounts: {
+        Row: {
+          account_id: string
+          matched_by: string
+          repo: string
+          sha: string
+        }
+        Insert: {
+          account_id: string
+          matched_by: string
+          repo: string
+          sha: string
+        }
+        Update: {
+          account_id?: string
+          matched_by?: string
+          repo?: string
+          sha?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "github_commit_accounts_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "github_commit_accounts_repo_sha_fkey"
+            columns: ["repo", "sha"]
+            isOneToOne: false
+            referencedRelation: "github_commits"
+            referencedColumns: ["repo", "sha"]
+          },
+        ]
+      }
+      github_commits: {
+        Row: {
+          additions: number | null
+          author_login: string | null
+          author_name: string | null
+          body: string | null
+          claude_coauthored: boolean
+          committed_at: string
+          deletions: number | null
+          files: string[]
+          html_url: string | null
+          repo: string
+          sha: string
+          source: string
+          subject: string
+          synced_at: string
+        }
+        Insert: {
+          additions?: number | null
+          author_login?: string | null
+          author_name?: string | null
+          body?: string | null
+          claude_coauthored?: boolean
+          committed_at: string
+          deletions?: number | null
+          files?: string[]
+          html_url?: string | null
+          repo: string
+          sha: string
+          source?: string
+          subject: string
+          synced_at?: string
+        }
+        Update: {
+          additions?: number | null
+          author_login?: string | null
+          author_name?: string | null
+          body?: string | null
+          claude_coauthored?: boolean
+          committed_at?: string
+          deletions?: number | null
+          files?: string[]
+          html_url?: string | null
+          repo?: string
+          sha?: string
+          source?: string
+          subject?: string
+          synced_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "github_commits_repo_fkey"
+            columns: ["repo"]
+            isOneToOne: false
+            referencedRelation: "github_repos"
+            referencedColumns: ["full_name"]
+          },
+        ]
+      }
+      github_repos: {
+        Row: {
+          archived: boolean
+          default_branch: string | null
+          description: string | null
+          full_name: string
+          html_url: string | null
+          is_private: boolean | null
+          pushed_at: string | null
+          synced_at: string
+        }
+        Insert: {
+          archived?: boolean
+          default_branch?: string | null
+          description?: string | null
+          full_name: string
+          html_url?: string | null
+          is_private?: boolean | null
+          pushed_at?: string | null
+          synced_at?: string
+        }
+        Update: {
+          archived?: boolean
+          default_branch?: string | null
+          description?: string | null
+          full_name?: string
+          html_url?: string | null
+          is_private?: boolean | null
+          pushed_at?: string | null
+          synced_at?: string
+        }
+        Relationships: []
+      }
+      github_sync_runs: {
+        Row: {
+          counts: Json | null
+          error: string | null
+          finished_at: string | null
+          id: number
+          ok: boolean | null
+          started_at: string
+        }
+        Insert: {
+          counts?: Json | null
+          error?: string | null
+          finished_at?: string | null
+          id?: number
+          ok?: boolean | null
+          started_at?: string
+        }
+        Update: {
+          counts?: Json | null
+          error?: string | null
+          finished_at?: string | null
+          id?: number
+          ok?: boolean | null
+          started_at?: string
+        }
+        Relationships: []
+      }
       onboarding_comments: {
         Row: {
           author: string
@@ -860,6 +1050,252 @@ export type Database = {
           onboarding_checklists?: Json | null
           updated_at?: string
           visible_kpis?: Json
+        }
+        Relationships: []
+      }
+      stripe_customers: {
+        Row: {
+          account_id: string | null
+          client_id: string | null
+          created_at: string | null
+          deleted: boolean
+          delinquent: boolean | null
+          email: string | null
+          id: string
+          name: string | null
+          phone: string | null
+          synced_at: string
+        }
+        Insert: {
+          account_id?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          deleted?: boolean
+          delinquent?: boolean | null
+          email?: string | null
+          id: string
+          name?: string | null
+          phone?: string | null
+          synced_at?: string
+        }
+        Update: {
+          account_id?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          deleted?: boolean
+          delinquent?: boolean | null
+          email?: string | null
+          id?: string
+          name?: string | null
+          phone?: string | null
+          synced_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stripe_customers_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stripe_customers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stripe_invoices: {
+        Row: {
+          amount_due: number | null
+          amount_paid: number | null
+          amount_remaining: number | null
+          attempt_count: number | null
+          billing_reason: string | null
+          created_at: string | null
+          currency: string | null
+          customer_id: string | null
+          hosted_invoice_url: string | null
+          id: string
+          lines: Json
+          next_payment_attempt: string | null
+          number: string | null
+          paid_at: string | null
+          status: string | null
+          subscription_id: string | null
+          synced_at: string
+        }
+        Insert: {
+          amount_due?: number | null
+          amount_paid?: number | null
+          amount_remaining?: number | null
+          attempt_count?: number | null
+          billing_reason?: string | null
+          created_at?: string | null
+          currency?: string | null
+          customer_id?: string | null
+          hosted_invoice_url?: string | null
+          id: string
+          lines?: Json
+          next_payment_attempt?: string | null
+          number?: string | null
+          paid_at?: string | null
+          status?: string | null
+          subscription_id?: string | null
+          synced_at?: string
+        }
+        Update: {
+          amount_due?: number | null
+          amount_paid?: number | null
+          amount_remaining?: number | null
+          attempt_count?: number | null
+          billing_reason?: string | null
+          created_at?: string | null
+          currency?: string | null
+          customer_id?: string | null
+          hosted_invoice_url?: string | null
+          id?: string
+          lines?: Json
+          next_payment_attempt?: string | null
+          number?: string | null
+          paid_at?: string | null
+          status?: string | null
+          subscription_id?: string | null
+          synced_at?: string
+        }
+        Relationships: []
+      }
+      stripe_payments: {
+        Row: {
+          amount: number
+          amount_refunded: number
+          charge_id: string | null
+          created_at: string | null
+          currency: string | null
+          customer_id: string | null
+          description: string | null
+          disputed: boolean
+          id: string
+          invoice_id: string | null
+          paid_at: string
+          synced_at: string
+        }
+        Insert: {
+          amount: number
+          amount_refunded?: number
+          charge_id?: string | null
+          created_at?: string | null
+          currency?: string | null
+          customer_id?: string | null
+          description?: string | null
+          disputed?: boolean
+          id: string
+          invoice_id?: string | null
+          paid_at: string
+          synced_at?: string
+        }
+        Update: {
+          amount?: number
+          amount_refunded?: number
+          charge_id?: string | null
+          created_at?: string | null
+          currency?: string | null
+          customer_id?: string | null
+          description?: string | null
+          disputed?: boolean
+          id?: string
+          invoice_id?: string | null
+          paid_at?: string
+          synced_at?: string
+        }
+        Relationships: []
+      }
+      stripe_subscriptions: {
+        Row: {
+          cancel_at_period_end: boolean | null
+          canceled_at: string | null
+          collection_paused: boolean
+          created_at: string | null
+          currency: string | null
+          current_period_end: string | null
+          customer_id: string
+          ended_at: string | null
+          id: string
+          items: Json
+          mrr_cents: number
+          pause_behavior: string | null
+          pause_resumes_at: string | null
+          started_at: string | null
+          status: string
+          synced_at: string
+          trial_end: string | null
+        }
+        Insert: {
+          cancel_at_period_end?: boolean | null
+          canceled_at?: string | null
+          collection_paused?: boolean
+          created_at?: string | null
+          currency?: string | null
+          current_period_end?: string | null
+          customer_id: string
+          ended_at?: string | null
+          id: string
+          items?: Json
+          mrr_cents?: number
+          pause_behavior?: string | null
+          pause_resumes_at?: string | null
+          started_at?: string | null
+          status: string
+          synced_at?: string
+          trial_end?: string | null
+        }
+        Update: {
+          cancel_at_period_end?: boolean | null
+          canceled_at?: string | null
+          collection_paused?: boolean
+          created_at?: string | null
+          currency?: string | null
+          current_period_end?: string | null
+          customer_id?: string
+          ended_at?: string | null
+          id?: string
+          items?: Json
+          mrr_cents?: number
+          pause_behavior?: string | null
+          pause_resumes_at?: string | null
+          started_at?: string | null
+          status?: string
+          synced_at?: string
+          trial_end?: string | null
+        }
+        Relationships: []
+      }
+      stripe_sync_runs: {
+        Row: {
+          counts: Json | null
+          error: string | null
+          finished_at: string | null
+          id: number
+          ok: boolean | null
+          started_at: string
+        }
+        Insert: {
+          counts?: Json | null
+          error?: string | null
+          finished_at?: string | null
+          id?: number
+          ok?: boolean | null
+          started_at?: string
+        }
+        Update: {
+          counts?: Json | null
+          error?: string | null
+          finished_at?: string | null
+          id?: number
+          ok?: boolean | null
+          started_at?: string
         }
         Relationships: []
       }
@@ -969,9 +1405,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      github_token_status: { Args: never; Returns: Json }
       is_admin: { Args: never; Returns: boolean }
       report_account_id: { Args: never; Returns: string }
       report_account_name: { Args: never; Returns: string }
+      set_github_token: { Args: { token: string }; Returns: undefined }
     }
     Enums: {
       update_category:

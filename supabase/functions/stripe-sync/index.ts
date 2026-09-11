@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isAdminRequest, unauthorizedResponse } from "../_shared/admin-auth.ts";
 
-// Mirrors Stripe customers, subscriptions and invoices into the CRM for
+// Mirrors Stripe customers, subscriptions, invoices and payments into the CRM for
 // customer management and revenue review. Read-only against Stripe: it uses
 // the restricted key in STRIPE_SYNC_KEY and never writes back.
 //
@@ -22,13 +22,19 @@ const STRIPE_VERSION = "2024-06-20";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type StripeObject = Record<string, any>;
 
-async function stripeList(path: string, key: string, params: Record<string, string> = {}): Promise<StripeObject[]> {
+// Payments are mirrored from here on (the Revenue page starts at July 2024);
+// a month of slack catches intents created in June that captured in July.
+const PAYMENTS_SINCE = Math.floor(Date.UTC(2024, 5, 1) / 1000);
+
+async function stripeList(path: string, key: string, params: Record<string, string | string[]> = {}): Promise<StripeObject[]> {
   const out: StripeObject[] = [];
   let startingAfter: string | null = null;
   for (;;) {
     const url = new URL(`https://api.stripe.com/v1/${path}`);
     url.searchParams.set("limit", "100");
-    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+    for (const [k, v] of Object.entries(params)) {
+      for (const one of Array.isArray(v) ? v : [v]) url.searchParams.append(k, one);
+    }
     if (startingAfter) url.searchParams.set("starting_after", startingAfter);
 
     const res = await fetch(url, {
@@ -101,11 +107,20 @@ serve(async (req) => {
   try {
     if (!key) throw new Error("STRIPE_SYNC_KEY is not set");
 
-    const [products, customers, subscriptions, invoices] = await Promise.all([
+    const [products, customers, subscriptions, invoices, paymentsResult] = await Promise.all([
       stripeList("products", key),
       stripeList("customers", key),
       stripeList("subscriptions", key, { status: "all" }),
       stripeList("invoices", key),
+      // Needs PaymentIntents read on the restricted key. Kept separate so a
+      // missing permission fails the run loudly without freezing MRR data.
+      stripeList("payment_intents", key, {
+        "created[gte]": String(PAYMENTS_SINCE),
+        "expand[]": "data.latest_charge",
+      }).then(
+        (rows) => ({ rows, error: null as string | null }),
+        (e) => ({ rows: [] as StripeObject[], error: e instanceof Error ? e.message : String(e) }),
+      ),
     ]);
     const productName = new Map(products.map((p) => [p.id, p.name as string]));
 
@@ -178,6 +193,30 @@ serve(async (req) => {
       synced_at: runStart,
     })));
 
+    // Only money that moved: succeeded intents with a captured charge.
+    const payments = paymentsResult.rows.filter((pi) => pi.status === "succeeded" && pi.latest_charge?.created);
+    await upsertInChunks(db, "stripe_payments", payments.map((pi) => {
+      const charge = pi.latest_charge;
+      // 2024-06-20 exposes `invoice` directly; newer versions moved it to payment_details.
+      const orderRef = pi.payment_details?.order_reference;
+      const invoiceId = typeof pi.invoice === "string" ? pi.invoice
+        : pi.invoice?.id ?? (typeof orderRef === "string" && orderRef.startsWith("in_") ? orderRef : null);
+      return {
+        id: pi.id,
+        charge_id: charge.id,
+        customer_id: typeof pi.customer === "string" ? pi.customer : pi.customer?.id ?? null,
+        invoice_id: invoiceId,
+        description: pi.description,
+        amount: charge.amount_captured ?? pi.amount_received ?? 0,
+        amount_refunded: charge.amount_refunded ?? 0,
+        currency: pi.currency,
+        disputed: !!charge.disputed,
+        paid_at: iso(charge.created),
+        created_at: iso(pi.created),
+        synced_at: runStart,
+      };
+    }));
+
     const { data: linked } = await db.rpc("link_stripe_customers");
 
     const counts = {
@@ -185,11 +224,15 @@ serve(async (req) => {
       customers: customers.length,
       subscriptions: subscriptions.length,
       invoices: invoices.length,
+      payments: payments.length,
       newly_linked: linked ?? 0,
     };
-    if (run) await db.from("stripe_sync_runs").update({ finished_at: new Date().toISOString(), ok: true, counts }).eq("id", run.id);
+    const ok = !paymentsResult.error;
+    const error = paymentsResult.error ? `payments: ${paymentsResult.error}` : null;
+    if (run) await db.from("stripe_sync_runs").update({ finished_at: new Date().toISOString(), ok, counts, error }).eq("id", run.id);
 
-    return new Response(JSON.stringify({ ok: true, counts }), {
+    return new Response(JSON.stringify({ ok, counts, error }), {
+      status: ok ? 200 : 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
