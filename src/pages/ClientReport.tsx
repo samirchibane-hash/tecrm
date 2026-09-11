@@ -8,7 +8,7 @@ import { ALL_KPIS, dependsOnMeta, getPalette, type KpiKey } from "@/components/d
 import { KpiStatCard } from "@/components/dashboard/KpiStatCard";
 import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
 import { useSettings } from "@/hooks/useSettings";
-import { resolveChartKpi } from "@/lib/kpis";
+import { resolveChartKpi, untrackedKpis } from "@/lib/kpis";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -562,11 +562,14 @@ function ClientReportView({ accountId, decodedName }: { accountId: string; decod
   // ── Selected chart (driven by clicking a KPI card) ───────────────────────
   const [selectedChart, setSelectedChart] = useState<KpiKey>("totalSpend");
 
+  // Conversion KPIs this funnel doesn't send to Meta read "Not tracked yet", never 0.
+  const untracked = useMemo(() => untrackedKpis(filteredAdData), [filteredAdData]);
+
   // A KPI is charted only if it is still backed by a live feed. When Meta is
   // down the default (Spend) would render an empty chart, so fall through to the
   // first enabled KPI that *is* live — GHL Leads / GHL Appts in practice. This is
   // derived rather than pushed into state, so reconnecting restores the user's pick.
-  const isChartable = (key: KpiKey) => CHARTABLE_KEYS.has(key) && !(metaDown && dependsOnMeta(key));
+  const isChartable = (key: KpiKey) => CHARTABLE_KEYS.has(key) && !(metaDown && dependsOnMeta(key)) && !untracked.has(key);
   const activeChart = resolveChartKpi(selectedChart, enabledKpis.map((k) => k.key), isChartable);
   const selectedKpi = ALL_KPIS.find((k) => k.key === activeChart);
 
@@ -986,7 +989,8 @@ function ClientReportView({ accountId, decodedName }: { accountId: string; decod
                 )}
                 <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                   {enabledKpis.map(({ key, label, icon, format: fmt }) => {
-                    const unavailable = metaDown && dependsOnMeta(key);
+                    const metaGap = metaDown && dependsOnMeta(key);
+                    const unavailable = metaGap || untracked.has(key);
                     return (
                       <KpiStatCard
                         key={key}
@@ -995,7 +999,7 @@ function ClientReportView({ accountId, decodedName }: { accountId: string; decod
                         icon={icon}
                         size="comfortable"
                         unavailable={unavailable}
-                        unavailableReason={unavailable ? "Meta Ads disconnected" : undefined}
+                        unavailableReason={metaGap ? "Meta Ads disconnected" : unavailable ? "Not tracked yet" : undefined}
                         isActive={activeChart === key}
                         onClick={isChartable(key) ? () => setSelectedChart(key) : undefined}
                       />

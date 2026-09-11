@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import { useParams, useNavigate, Link as RouterLink } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCouplerData } from "@/hooks/useCouplerData";
+import { metaUnavailableReason, useCouplerData, useMetaUnavailable } from "@/hooks/useCouplerData";
 import { useSettings } from "@/hooks/useSettings";
 import { ALL_KPIS, dependsOnMeta, type KpiKey } from "@/components/dashboard/AccountCard";
 import { KpiStatCard } from "@/components/dashboard/KpiStatCard";
@@ -10,7 +10,7 @@ import { AccountWorkLog } from "@/components/claude-log/AccountWorkLog";
 import { FunnelPagesCard } from "@/components/funnel-pages/FunnelPagesCard";
 import { CreativePerformanceCard } from "@/components/creative-performance/CreativePerformanceCard";
 import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
-import { resolveChartKpi } from "@/lib/kpis";
+import { NOT_TRACKED_REASON, resolveChartKpi, untrackedKpis } from "@/lib/kpis";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -239,11 +239,12 @@ const AccountDetail = () => {
   // Meta outages degrade only Meta-derived KPIs — GHL metrics stay live.
   const {
     data: couplerData,
-    isError: metaDown,
+    isError: metaFeedDown,
     error: metaError,
     refetch: refetchAds,
     isFetching: adFetching,
   } = useCouplerData();
+  const metaUnavailable = useMetaUnavailable();
   const { settings } = useSettings();
 
   // ─── Account (stable UUID) ────────────────────────────────────────────────
@@ -252,14 +253,14 @@ const AccountDetail = () => {
     queryFn: async () => {
       const { data: existing } = await supabase
         .from("accounts")
-        .select("id, account_name, gdrive_folder_url, report_token")
+        .select("id, account_name, gdrive_folder_url, report_token, fb_ad_account_id")
         .eq("account_name", decodedName)
         .maybeSingle();
       if (existing) return existing;
       const { data: inserted, error } = await supabase
         .from("accounts")
         .insert({ account_name: decodedName })
-        .select("id, account_name, gdrive_folder_url, report_token")
+        .select("id, account_name, gdrive_folder_url, report_token, fb_ad_account_id")
         .single();
       if (error) throw error;
       return inserted;
@@ -267,6 +268,11 @@ const AccountDetail = () => {
     staleTime: Infinity,
   });
   const accountId = account?.id ?? "";
+  // Meta can be down for everyone, or unable to read just this client's ad account
+  // while the rest load; either way this account's Meta metrics are unknown, not $0.
+  const accountMetaGap = metaUnavailable.find((a) => a.id === account?.fb_ad_account_id);
+  const metaDown = metaFeedDown || !!accountMetaGap;
+  const metaDownMessage = accountMetaGap ? metaUnavailableReason(accountMetaGap.code) : (metaError as Error | null)?.message;
 
   // ─── Linked onboarding client ─────────────────────────────────────────────
   const { data: linkedClient } = useQuery({
@@ -306,6 +312,9 @@ const AccountDetail = () => {
       return rowDate >= from && rowDate <= to;
     });
   }, [couplerData, decodedName, dateRange]);
+
+  // Conversion KPIs this client's funnel doesn't send to Meta read "Not tracked".
+  const untracked = useMemo(() => untrackedKpis(filteredAdData), [filteredAdData]);
 
   // ─── GHL conversions ──────────────────────────────────────────────────────
   const { data: ghlRaw = [] } = useQuery({
@@ -473,7 +482,7 @@ const AccountDetail = () => {
 
   // Chart only KPIs whose feed is live; when Meta is down the default (Spend)
   // falls through to the first enabled live KPI instead of charting nothing.
-  const isChartable = (key: KpiKey) => CHARTABLE_KEYS.has(key) && !(metaDown && dependsOnMeta(key));
+  const isChartable = (key: KpiKey) => CHARTABLE_KEYS.has(key) && !(metaDown && dependsOnMeta(key)) && !untracked.has(key);
   const activeChart = resolveChartKpi(selectedChart, enabledKpis.map((k) => k.key), isChartable);
   const selectedKpi = ALL_KPIS.find((k) => k.key === activeChart);
 
@@ -828,18 +837,19 @@ const AccountDetail = () => {
                       className="mb-3"
                       source="Meta Ads"
                       stillLive="GoHighLevel (leads, appointments, revenue)"
-                      message={(metaError as Error | null)?.message}
+                      message={metaDownMessage}
                       onRetry={() => refetchAds()}
                       retrying={adFetching}
                     />
                   )}
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {enabledKpis.map(({ key, label, icon, format: fmt }) => {
-                      const unavailable = metaDown && dependsOnMeta(key);
+                      const metaGap = metaDown && dependsOnMeta(key);
+                      const unavailable = metaGap || untracked.has(key);
                       return (
                         <KpiStatCard key={key} label={label} value={fmt(kpis[key])} icon={icon}
                           unavailable={unavailable}
-                          unavailableReason={unavailable ? "Meta Ads disconnected" : undefined}
+                          unavailableReason={metaGap ? (accountMetaGap ? "Meta can't read this ad account" : "Meta Ads disconnected") : unavailable ? NOT_TRACKED_REASON : undefined}
                           isActive={activeChart === key}
                           onClick={isChartable(key) ? () => setSelectedChart(key) : undefined}
                         />

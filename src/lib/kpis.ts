@@ -1,4 +1,34 @@
 import type { KpiKey } from "@/components/dashboard/AccountCard";
+import type { AdRow } from "@/hooks/useCouplerData";
+
+// Meta conversion KPIs and the proxy column each one is built from.
+const CONVERSION_FIELD: Partial<Record<KpiKey, keyof AdRow>> = {
+  webApptTotal: "Conversions: Website Appointments Scheduled - Total",
+  webApptCost: "Conversions: Website Appointments Scheduled - Total",
+  apptTotal: "Conversions: Appointments Scheduled - Total",
+  apptCost: "Conversions: Appointments Scheduled - Total",
+  leadsTotal: "Conversions: Leads - Total",
+  leadsCost: "Conversions: Leads - Total",
+  fbLeadsTotal: "Conversions: All On-Facebook Leads - Total",
+  fbLeadsCost: "Conversions: All On-Facebook Leads - Total",
+};
+
+export const NOT_TRACKED_REASON = "Not tracked: this client's funnel doesn't send the event to Meta";
+
+/**
+ * Conversion KPIs this account doesn't track. coupler-proxy leaves a column
+ * null for every row when Meta never saw the event in its 90-day window (e.g.
+ * a funnel with no Schedule event), so these must read "Not tracked", not 0.
+ * With no rows at all nothing is claimed either way.
+ */
+export function untrackedKpis(rows: readonly AdRow[]): Set<KpiKey> {
+  const out = new Set<KpiKey>();
+  if (rows.length === 0) return out;
+  for (const [key, field] of Object.entries(CONVERSION_FIELD) as [KpiKey, keyof AdRow][]) {
+    if (rows.every((r) => r[field] === null || r[field] === undefined)) out.add(key);
+  }
+  return out;
+}
 
 /**
  * Decide which KPI the single adaptive chart plots.

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCouplerData } from "@/hooks/useCouplerData";
+import { metaUnavailableReason, useCouplerData, useMetaGapAccounts } from "@/hooks/useCouplerData";
 import { NewBriefDialog } from "@/components/creatives/NewBriefDialog";
 import { RequestDetailSheet } from "@/components/creatives/RequestDetailSheet";
 import { type CreativeRequest } from "@/components/creatives/types";
@@ -75,6 +75,9 @@ const Index = () => {
   const navigate = useNavigate();
   const { data, isLoading, isError, error, refetch, isFetching } = useCouplerData();
   const { settings } = useSettings();
+  // Clients whose ad account Meta refused while the rest loaded: their spend is
+  // unknown, so it must read "—", never $0.
+  const metaGaps = useMetaGapAccounts();
 
   const { data: newClients } = useQuery({
     queryKey: ["new_clients"],
@@ -297,6 +300,8 @@ const Index = () => {
     });
   }, [accountGroups, accountIdMap, allGhlConversions, dateRange, prevDateRange, prevGroupMap, lastTaskMap, lastCreativeMap]);
 
+  const gapNames = tableRows.filter((r) => metaGaps.has(r.name)).map((r) => r.name);
+
   const dateRangeStr = dateRange?.from
     ? dateRange.to
       ? `${format(dateRange.from, "MM/dd")} – ${format(dateRange.to, "MM/dd/yyyy")}`
@@ -373,6 +378,16 @@ const Index = () => {
             source="Meta Ads"
             stillLive="GoHighLevel (leads, appointments, revenue)"
             message={(error as Error | null)?.message}
+            onRetry={() => refetch()}
+            retrying={isFetching}
+          />
+        )}
+        {!isError && gapNames.length > 0 && (
+          <SourceUnavailableNotice
+            className="mb-4"
+            source="Meta Ads"
+            stillLive="Every other client's Meta data"
+            message={`${gapNames.join(", ")}: ${metaUnavailableReason(metaGaps.get(gapNames[0])!.code)}`}
             onRetry={() => refetch()}
             retrying={isFetching}
           />
@@ -516,10 +531,14 @@ const Index = () => {
 
                         {/* Spend */}
                         <td className="py-3.5 px-4 text-right tabular-nums">
-                          <span className="font-semibold text-foreground">
-                            ${row.totalSpend.toLocaleString("en-US", { maximumFractionDigits: 0 })}
-                          </span>
-                          {spendDelta && (
+                          {metaGaps.has(row.name) ? (
+                            <span className="text-muted-foreground" title="Meta can't read this ad account">—</span>
+                          ) : (
+                            <span className="font-semibold text-foreground">
+                              ${row.totalSpend.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                            </span>
+                          )}
+                          {!metaGaps.has(row.name) && spendDelta && (
                             <span className={`ml-1.5 text-[11px] ${spendDelta.flat ? "text-muted-foreground" : "text-muted-foreground"}`}>
                               {spendDelta.flat ? "→" : spendDelta.up ? "↑" : "↓"}{spendDelta.pct}
                             </span>
