@@ -250,14 +250,14 @@ const AccountDetail = () => {
     queryFn: async () => {
       const { data: existing } = await supabase
         .from("accounts")
-        .select("id, account_name, gdrive_folder_url")
+        .select("id, account_name, gdrive_folder_url, report_token")
         .eq("account_name", decodedName)
         .maybeSingle();
       if (existing) return existing;
       const { data: inserted, error } = await supabase
         .from("accounts")
         .insert({ account_name: decodedName })
-        .select("id, account_name, gdrive_folder_url")
+        .select("id, account_name, gdrive_folder_url, report_token")
         .single();
       if (error) throw error;
       return inserted;
@@ -788,24 +788,28 @@ const AccountDetail = () => {
                 </PopoverContent>
               </Popover>
             )}
-            <RouterLink
-              to={`/report/${encodeURIComponent(decodedName)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 rounded-md border border-border/60 bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-            >
-              <SquareArrowOutUpRight className="h-3.5 w-3.5" />
-              Client Report
-            </RouterLink>
-            <RouterLink
-              to={`/cc-report/${encodeURIComponent(decodedName)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 rounded-md border border-border/60 bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-sky-600 hover:bg-muted/50 transition-colors"
-            >
-              <Phone className="h-3.5 w-3.5" />
-              CC Report
-            </RouterLink>
+            {account?.report_token && (
+              <>
+                <RouterLink
+                  to={`/report/${account.report_token}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 rounded-md border border-border/60 bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                >
+                  <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+                  Client Report
+                </RouterLink>
+                <RouterLink
+                  to={`/cc-report/${account.report_token}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 rounded-md border border-border/60 bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-sky-600 hover:bg-muted/50 transition-colors"
+                >
+                  <Phone className="h-3.5 w-3.5" />
+                  CC Report
+                </RouterLink>
+              </>
+            )}
           </div>
         </div>
 

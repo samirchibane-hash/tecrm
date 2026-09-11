@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
+import { useSupabase, useSupabaseScope } from "@/integrations/supabase/SupabaseContext";
 import type { KpiKey } from "@/components/dashboard/AccountCard";
 
 export type ChangeLogOption = {
@@ -83,7 +85,7 @@ function normalizeOnboardingChecklists(raw: unknown): OnboardingChecklists {
   } as OnboardingChecklists;
 }
 
-async function fetchSettings(): Promise<Omit<SettingsRow, "id" | "updated_at">> {
+async function fetchSettings(supabase: SupabaseClient<Database>): Promise<Omit<SettingsRow, "id" | "updated_at">> {
   const { data, error } = await supabase
     .from("settings" as any)
     .select("*")
@@ -102,16 +104,19 @@ async function fetchSettings(): Promise<Omit<SettingsRow, "id" | "updated_at">> 
 
 export function useSettings() {
   const queryClient = useQueryClient();
+  const supabase = useSupabase();
+  const scope = useSupabaseScope();
+  const settingsKey = ["settings", scope];
 
   const { data: settings, isLoading } = useQuery({
-    queryKey: ["settings"],
-    queryFn: fetchSettings,
+    queryKey: settingsKey,
+    queryFn: () => fetchSettings(supabase),
     staleTime: 30_000,
   });
 
   const mutation = useMutation({
     mutationFn: async (patch: Partial<Omit<SettingsRow, "id" | "updated_at">>) => {
-      const current = queryClient.getQueryData<Omit<SettingsRow, "id" | "updated_at">>(["settings"]) ?? DEFAULTS;
+      const current = queryClient.getQueryData<Omit<SettingsRow, "id" | "updated_at">>(settingsKey) ?? DEFAULTS;
       const merged = { ...current, ...patch };
       const { error } = await supabase
         .from("settings" as any)
@@ -129,17 +134,17 @@ export function useSettings() {
     },
     onMutate: async (patch) => {
       // Optimistic update so the UI reflects changes immediately
-      await queryClient.cancelQueries({ queryKey: ["settings"] });
-      const previous = queryClient.getQueryData(["settings"]);
-      const current = queryClient.getQueryData<Omit<SettingsRow, "id" | "updated_at">>(["settings"]) ?? DEFAULTS;
-      queryClient.setQueryData(["settings"], { ...current, ...patch });
+      await queryClient.cancelQueries({ queryKey: settingsKey });
+      const previous = queryClient.getQueryData(settingsKey);
+      const current = queryClient.getQueryData<Omit<SettingsRow, "id" | "updated_at">>(settingsKey) ?? DEFAULTS;
+      queryClient.setQueryData(settingsKey, { ...current, ...patch });
       return { previous };
     },
     onError: (_err, _patch, context: any) => {
-      queryClient.setQueryData(["settings"], context?.previous);
+      queryClient.setQueryData(settingsKey, context?.previous);
     },
     onSuccess: (merged) => {
-      queryClient.setQueryData(["settings"], merged);
+      queryClient.setQueryData(settingsKey, merged);
     },
   });
 

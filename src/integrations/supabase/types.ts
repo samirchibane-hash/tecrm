@@ -96,22 +96,28 @@ export type Database = {
           account_name: string
           created_at: string
           fb_ad_account_id: string | null
+          gdrive_folder_url: string | null
           ghl_location_id: string | null
           id: string
+          report_token: string
         }
         Insert: {
           account_name: string
           created_at?: string
           fb_ad_account_id?: string | null
+          gdrive_folder_url?: string | null
           ghl_location_id?: string | null
           id?: string
+          report_token?: string
         }
         Update: {
           account_name?: string
           created_at?: string
           fb_ad_account_id?: string | null
+          gdrive_folder_url?: string | null
           ghl_location_id?: string | null
           id?: string
+          report_token?: string
         }
         Relationships: []
       }
@@ -948,7 +954,9 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_admin: { Args: never; Returns: boolean }
+      report_account_id: { Args: never; Returns: string }
+      report_account_name: { Args: never; Returns: string }
     }
     Enums: {
       update_category:

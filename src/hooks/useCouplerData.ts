@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
+import { useSupabase, useSupabaseScope } from "@/integrations/supabase/SupabaseContext";
 
 export interface AdRow {
   "Account: Account name": string;
@@ -37,7 +39,9 @@ export interface AdRow {
   "Conversions: All On-Facebook Leads - Unique Cost": number | null;
 }
 
-async function fetchCouplerData(): Promise<AdRow[]> {
+// Signed in, the proxy returns every account; on a report page the scoped
+// client's x-report-token limits it to that one account.
+async function fetchCouplerData(supabase: SupabaseClient<Database>): Promise<AdRow[]> {
   const { data, error } = await supabase.functions.invoke("coupler-proxy");
   if (error) {
     // On a non-2xx, supabase-js gives a generic message and stashes the real
@@ -54,9 +58,11 @@ async function fetchCouplerData(): Promise<AdRow[]> {
 }
 
 export function useCouplerData() {
+  const supabase = useSupabase();
+  const scope = useSupabaseScope();
   return useQuery({
-    queryKey: ["coupler-fb-ads"],
-    queryFn: fetchCouplerData,
+    queryKey: ["coupler-fb-ads", scope],
+    queryFn: () => fetchCouplerData(supabase),
     staleTime: 5 * 60 * 1000,
     refetchInterval: 10 * 60 * 1000,
     refetchOnWindowFocus: true,

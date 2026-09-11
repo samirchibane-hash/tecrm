@@ -180,14 +180,14 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
     queryFn: async () => {
       const { data: existing } = await supabase
         .from("accounts")
-        .select("id, account_name")
+        .select("id, account_name, gdrive_folder_url, report_token")
         .eq("account_name", accountName)
         .maybeSingle();
       if (existing) return existing;
       const { data: inserted, error } = await supabase
         .from("accounts")
         .insert({ account_name: accountName })
-        .select("id, account_name")
+        .select("id, account_name, gdrive_folder_url, report_token")
         .single();
       if (error) throw error;
       return inserted;
@@ -361,24 +361,30 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2 min-w-0">
             <h2 className="text-lg font-semibold text-foreground truncate">{accountName}</h2>
-            <RouterLink
-              to={`/report/${encodeURIComponent(accountName)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-primary transition-colors shrink-0"
-              title="Open client report"
-            >
-              <SquareArrowOutUpRight className="h-3.5 w-3.5" />
-            </RouterLink>
-            <RouterLink
-              to={`/cc-report/${encodeURIComponent(accountName)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-sky-600 transition-colors shrink-0"
-              title="Open call center report"
-            >
-              <Phone className="h-3.5 w-3.5" />
-            </RouterLink>
+            {account?.report_token && (
+              <>
+                <RouterLink
+                  to={`/report/${account.report_token}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-primary transition-colors shrink-0"
+                  title="Open client report"
+                  aria-label={`Open client report for ${accountName}`}
+                >
+                  <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+                </RouterLink>
+                <RouterLink
+                  to={`/cc-report/${account.report_token}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-sky-600 transition-colors shrink-0"
+                  title="Open call center report"
+                  aria-label={`Open call center report for ${accountName}`}
+                >
+                  <Phone className="h-3.5 w-3.5" />
+                </RouterLink>
+              </>
+            )}
           </div>
           <RouterLink
             to={`/account/${encodeURIComponent(accountName)}`}

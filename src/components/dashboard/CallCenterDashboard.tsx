@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useSupabase } from "@/integrations/supabase/SupabaseContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -67,6 +67,7 @@ function monthLabel(ym: string) {
 // ────────────────────────────────────────────────────────────
 export function CallCenterDashboard({ accountId, accountName, isAdmin = false }: Props) {
   const queryClient = useQueryClient();
+  const supabase = useSupabase();
 
   // ── UI state ───────────────────────────────────────────────
   const [showIncentiveForm, setShowIncentiveForm] = useState(false);

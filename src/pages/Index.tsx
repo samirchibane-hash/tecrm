@@ -21,6 +21,7 @@ import {
   Film,
   ClipboardList,
   ListTodo,
+  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
@@ -330,6 +331,15 @@ const Index = () => {
             </Button>
             <Button variant="ghost" size="sm" asChild>
               <Link to="/settings" aria-label="Settings" title="Settings"><Settings className="h-4 w-4" /></Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label="Sign out"
+              title="Sign out"
+              onClick={() => supabase.auth.signOut()}
+            >
+              <LogOut className="h-4 w-4" />
             </Button>
           </div>
         </div>

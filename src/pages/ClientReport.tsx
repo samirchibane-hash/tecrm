@@ -2,7 +2,8 @@ import { useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCouplerData } from "@/hooks/useCouplerData";
-import { supabase } from "@/integrations/supabase/client";
+import { ReportClientProvider, useSupabase } from "@/integrations/supabase/SupabaseContext";
+import { ReportAccountGate } from "@/components/report/ReportAccountGate";
 import { ALL_KPIS, dependsOnMeta, getPalette, type KpiKey } from "@/components/dashboard/AccountCard";
 import { KpiStatCard } from "@/components/dashboard/KpiStatCard";
 import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
@@ -304,8 +305,18 @@ function KpiAreaChart({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ClientReport() {
-  const { accountName } = useParams<{ accountName: string }>();
-  const decodedName = decodeURIComponent(accountName ?? "");
+  const { token = "" } = useParams<{ token: string }>();
+  return (
+    <ReportClientProvider token={token}>
+      <ReportAccountGate>
+        {(account) => <ClientReportView accountId={account.id} decodedName={account.account_name} />}
+      </ReportAccountGate>
+    </ReportClientProvider>
+  );
+}
+
+function ClientReportView({ accountId, decodedName }: { accountId: string; decodedName: string }) {
+  const supabase = useSupabase();
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: max([startOfMonth(new Date()), MIN_DATE]),
@@ -346,23 +357,7 @@ export default function ClientReport() {
     });
   }, [allData, decodedName, dateRange]);
 
-  // ── Account UUID (for GHL) ────────────────────────────────────────────────
-  const { data: account } = useQuery({
-    queryKey: ["account", decodedName],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("accounts")
-        .select("id, account_name")
-        .eq("account_name", decodedName)
-        .maybeSingle();
-      return data;
-    },
-    staleTime: Infinity,
-  });
-
   // ── GHL conversions ───────────────────────────────────────────────────────
-  const accountId = account?.id ?? "";
-
   const { data: ghlRaw = [] } = useQuery({
     queryKey: ["ghl-conversions", accountId],
     queryFn: async () => {

@@ -1,10 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isAdminRequest, unauthorizedResponse } from "../_shared/admin-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-report-token",
 };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const FIELDS = "account_name,campaign_id,campaign_name,spend,clicks,impressions,reach,cpc,cpm,ctr,frequency,date_start,date_stop";
 
@@ -146,10 +149,20 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { data: accounts, error } = await supabase
+    let accountsQuery = supabase
       .from("accounts")
       .select("fb_ad_account_id")
       .not("fb_ad_account_id", "is", null);
+
+    // Signed-in admins get every account. A client report page instead sends its
+    // report token, which unlocks exactly one account's ad data.
+    if (!(await isAdminRequest(req))) {
+      const reportToken = req.headers.get("x-report-token") ?? "";
+      if (!UUID_RE.test(reportToken)) return unauthorizedResponse(corsHeaders);
+      accountsQuery = accountsQuery.eq("report_token", reportToken);
+    }
+
+    const { data: accounts, error } = await accountsQuery;
 
     if (error) throw new Error(`Failed to load accounts: ${error.message}`);
 

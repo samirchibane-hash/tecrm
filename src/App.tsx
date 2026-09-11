@@ -12,7 +12,7 @@ import ClientReport from "./pages/ClientReport";
 import CallCenterReport from "./pages/CallCenterReport";
 import ClientOnboarding from "./pages/ClientOnboarding";
 import NotFound from "./pages/NotFound";
-import { PasscodeGate } from "./components/PasscodeGate";
+import { AuthGate } from "./components/AuthGate";
 
 const queryClient = new QueryClient();
 
@@ -23,17 +23,19 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          {/* Public — client-facing report links */}
-          <Route path="/report/:accountName" element={<ClientReport />} />
-          <Route path="/cc-report/:accountName" element={<CallCenterReport />} />
+          {/* Public — client-facing report links, scoped by an unguessable per-account token */}
+          <Route path="/report/:token" element={<ClientReport />} />
+          <Route path="/cc-report/:token" element={<CallCenterReport />} />
 
-          {/* Admin — passcode protected */}
-          <Route path="/" element={<PasscodeGate><Index /></PasscodeGate>} />
-          <Route path="/account/:accountName" element={<PasscodeGate><AccountDetail /></PasscodeGate>} />
-          <Route path="/tasks" element={<PasscodeGate><AllTasks /></PasscodeGate>} />
-          <Route path="/creatives" element={<PasscodeGate><Creatives /></PasscodeGate>} />
-          <Route path="/settings" element={<PasscodeGate><Settings /></PasscodeGate>} />
-          <Route path="/onboarding/:clientId" element={<PasscodeGate><ClientOnboarding /></PasscodeGate>} />
+          {/* Admin — Supabase Auth session on the admin allowlist */}
+          <Route element={<AuthGate />}>
+            <Route path="/" element={<Index />} />
+            <Route path="/account/:accountName" element={<AccountDetail />} />
+            <Route path="/tasks" element={<AllTasks />} />
+            <Route path="/creatives" element={<Creatives />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/onboarding/:clientId" element={<ClientOnboarding />} />
+          </Route>
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
