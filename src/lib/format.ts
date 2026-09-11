@@ -25,3 +25,8 @@ export function formatUsdCompact(amount: number, opts: { cents?: boolean } = {})
 export function formatCount(n: number): string {
   return count.format(n);
 }
+
+/** A value already in percent units (Meta's CTR of 1.15 means 1.15%): "1.15%". */
+export function formatPercent(n: number, decimals = 2): string {
+  return `${n.toFixed(decimals)}%`;
+}

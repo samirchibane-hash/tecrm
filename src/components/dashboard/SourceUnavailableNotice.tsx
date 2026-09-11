@@ -17,7 +17,8 @@ export function SourceUnavailableNotice({
   className,
 }: {
   source: string;
-  stillLive: string;
+  /** What's still trustworthy. Omit when the notice covers a whole self-contained panel. */
+  stillLive?: string;
   message?: string;
   onRetry?: () => void;
   retrying?: boolean;
@@ -29,8 +30,8 @@ export function SourceUnavailableNotice({
       <AlertTitle className="text-sm">{source} data unavailable</AlertTitle>
       <AlertDescription className="text-xs text-muted-foreground">
         <span>
-          {source}-sourced metrics below read “—” until the connection is restored. {stillLive} is
-          unaffected and still live.
+          {source}-sourced metrics below read “—” until the connection is restored.
+          {stillLive && <> {stillLive} is unaffected and still live.</>}
         </span>
         {message && (
           <span className="mt-1 block break-words font-mono text-[11px] text-muted-foreground/80">

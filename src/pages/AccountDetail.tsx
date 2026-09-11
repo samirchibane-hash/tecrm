@@ -8,6 +8,7 @@ import { ALL_KPIS, dependsOnMeta, type KpiKey } from "@/components/dashboard/Acc
 import { KpiStatCard } from "@/components/dashboard/KpiStatCard";
 import { AccountWorkLog } from "@/components/claude-log/AccountWorkLog";
 import { FunnelPagesCard } from "@/components/funnel-pages/FunnelPagesCard";
+import { CreativePerformanceCard } from "@/components/creative-performance/CreativePerformanceCard";
 import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
 import { resolveChartKpi } from "@/lib/kpis";
 import { Button } from "@/components/ui/button";
@@ -1076,7 +1077,10 @@ const AccountDetail = () => {
           </TabsContent>
 
           {/* ── Creatives Tab ───────────────────────────────────────────────── */}
-          <TabsContent value="creatives">
+          <TabsContent value="creatives" className="space-y-6">
+            <CreativePerformanceCard accountId={accountId} />
+
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Creative templates</h2>
             {creativeBatches.length === 0 ? (
               <div className="flex flex-col items-center gap-3 py-14 text-center">
                 <Layers className="h-10 w-10 text-muted-foreground/30" />
