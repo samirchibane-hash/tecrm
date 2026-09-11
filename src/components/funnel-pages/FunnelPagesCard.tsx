@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAccountLinks } from "./useAccountLinks";
 
 type AccountLink = Tables<"account_links">;
 
@@ -32,18 +33,7 @@ export function FunnelPagesCard({ accountId, accountName }: { accountId: string;
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
 
-  const { data: links = [], isLoading, isError } = useQuery({
-    queryKey: ["account-links", accountName],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("account_links")
-        .select("*")
-        .eq("account_name", accountName)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return data;
-    },
-  });
+  const { data: links = [], isLoading, isError } = useAccountLinks(accountName);
 
   const { data: sites } = useQuery({
     queryKey: ["funnel-sites", accountId],

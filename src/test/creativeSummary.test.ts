@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sortCreatives, summarizeCreatives } from "@/components/creative-performance/summarize";
-import type { CreativeResult, LiveAd } from "@/components/creative-performance/useCreativePerformance";
+import { makeAd } from "./fixtures";
+import type { CreativeAd, CreativeResult } from "@/components/creative-performance/useCreativePerformance";
 
 const result = (type: string, count: number, costPer: number | null): CreativeResult => ({
   type,
@@ -10,23 +11,9 @@ const result = (type: string, count: number, costPer: number | null): CreativeRe
   source: "meta",
 });
 
-const ad = (name: string, spend: number, r: CreativeResult | null, delivered = true, linkCtr: number | null = 1): LiveAd => ({
-  id: name,
-  name,
-  createdTime: "2026-09-01T00:00:00Z",
-  campaign: null,
-  adset: null,
-  optimizationGoal: null,
-  format: "image",
-  thumbnailUrl: null,
-  adsManagerUrl: "",
-  delivered,
-  spend,
-  impressions: 0,
-  linkCtr,
+const ad = (name: string, spend: number, r: CreativeResult | null, delivered = true, linkCtr: number | null = 1): CreativeAd => ({
+  ...makeAd({ id: name, name, spend, delivered, linkCtr }),
   result: r,
-  appointments: null,
-  costPerAppointment: null,
 });
 
 describe("summarizeCreatives", () => {
@@ -57,7 +44,7 @@ describe("summarizeCreatives", () => {
 
 describe("summarizeCreatives appointments", () => {
   it("totals appointments and divides live spend by them when the account tracks them", () => {
-    const withAppts = (name: string, spend: number, appts: number): LiveAd => ({ ...ad(name, spend, null), appointments: appts, costPerAppointment: appts ? spend / appts : null });
+    const withAppts = (name: string, spend: number, appts: number): CreativeAd => ({ ...ad(name, spend, null), appointments: appts, costPerAppointment: appts ? spend / appts : null });
     const s = summarizeCreatives([withAppts("a", 745.11, 6), withAppts("b", 641.6, 4), withAppts("c", 100, 0)], true);
     expect(s.appointments).toBe(10);
     expect(s.costPerAppointment).toBeCloseTo((745.11 + 641.6 + 100) / 10);

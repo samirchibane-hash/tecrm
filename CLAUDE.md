@@ -76,8 +76,9 @@ This dashboard reports client performance. A wrong number costs the agency a cli
 
 Per-client targets (cost per lead, cost per appointment, etc.) belong in account settings
 and must be readable per account. Do not add module-level target constants — clients have
-different economics. `AccountCard.tsx`'s `CPL_TARGET`/`APPT_TARGET` are existing debt to
-migrate, not a pattern to copy.
+different economics. Targets live in `accounts.target_cpl` / `target_cpa` (edited from the
+account page's Performance tab); the Performance dashboard and creative verdicts read them.
+`AccountCard.tsx`'s `CPL_TARGET`/`APPT_TARGET` are remaining debt to migrate, not a pattern to copy.
 
 ### 7. Charts
 
@@ -108,6 +109,33 @@ The anon key ships in the bundle, so RLS is the only boundary. Keep it that way:
   `verify_jwt` alone accepts the public anon key. Deploy with the `_shared` file included.
 - Service role (edge functions, website sync) and the `postgres` role (n8n's GHL sync)
   bypass RLS.
+
+## Creative intelligence (since 2026-09-11)
+
+The account page's **Performance** tab (KPIs, then scale / cut / fatigue board, breakdowns by
+offer · angle · headline · primary text · format · ad set · landing page, and the full
+leaderboard) and **Funnel** tab (step conversion + landing page split test), plus the
+Performance dashboard's cross-client scorecard, all read `meta-creative-performance` live.
+Pure logic lives in `components/creative-performance/` and `components/funnel/` and is tested
+in `src/test/creativeIntelligence.test.ts`. Keep it that way:
+
+- **Verdicts are statistical claims** (`verdicts.ts`): one-sided Poisson test at 90% against the
+  benchmark, plus a material gap, plus a spend floor for winners. Never label an ad or group a
+  winner / money waster from a raw ratio, and never lower the bar to make a board look fuller.
+- **Benchmark** = `accounts.target_cpl` / `target_cpa` (edited from the account page), else the
+  account's own average, and the UI says which. **Instant-form ads are always judged against the
+  account's form-lead average**, never the website CPL target (`targetFor`): form leads are
+  cheap by nature and would otherwise crown every form ad.
+- **Website and form leads are never summed** into one cost per lead. One lead source at a time.
+- **Zero results on every ad after real spend = tracking gap**: verdicts are withheld and the UI
+  asks for a tracking check instead of listing every ad as a money waster.
+- **Offer / angle** are detected from copy (`labels.ts`, one taxonomy for all dealers) and
+  corrected per ad name in `creative_labels`. Add an offer or angle by extending that taxonomy.
+- **CRM leads per ad** match `ghl_conversions."Ad Name"` (utm_content). The column only shows
+  when some ad actually matches; otherwise the page says the funnel isn't passing the ad name.
+- Landing pages compare on website leads ÷ landing page views with Wilson intervals and a
+  two-proportion test vs the leader. Idle synced funnel pages show as "No ad traffic".
+- The function returns paused ads that spent in the period only to callers that send `v: 2`.
 
 ## Synced mirrors
 

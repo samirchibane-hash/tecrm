@@ -1,4 +1,4 @@
-import type { LiveAd } from "./useCreativePerformance";
+import type { CreativeAd } from "./useCreativePerformance";
 
 export interface ResultTotal {
   type: string;
@@ -20,7 +20,7 @@ export interface CreativeSummary {
 }
 
 /** `appointmentsTracked` comes from the account (a Schedule event in the last 90 days), not the ads. */
-export function summarizeCreatives(ads: LiveAd[], appointmentsTracked = false): CreativeSummary {
+export function summarizeCreatives(ads: CreativeAd[], appointmentsTracked = false): CreativeSummary {
   const byType = new Map<string, ResultTotal>();
   for (const ad of ads) {
     if (!ad.result) continue;
@@ -37,7 +37,7 @@ export function summarizeCreatives(ads: LiveAd[], appointmentsTracked = false): 
   const appointments = appointmentsTracked ? ads.reduce((sum, a) => sum + (a.appointments ?? 0), 0) : null;
 
   return {
-    live: ads.length,
+    live: ads.filter((a) => a.live).length,
     delivered: ads.filter((a) => a.delivered).length,
     spend,
     results,
@@ -48,7 +48,7 @@ export function summarizeCreatives(ads: LiveAd[], appointmentsTracked = false): 
 
 export type CreativeSortKey = "spend" | "results" | "costPer" | "appointments" | "costPerAppt" | "linkCtr";
 
-const sortValue: Record<CreativeSortKey, (ad: LiveAd) => number | null> = {
+const sortValue: Record<CreativeSortKey, (ad: CreativeAd) => number | null> = {
   spend: (ad) => (ad.delivered ? ad.spend : null),
   results: (ad) => ad.result?.count ?? null,
   costPer: (ad) => ad.result?.costPer ?? null,
@@ -58,7 +58,7 @@ const sortValue: Record<CreativeSortKey, (ad: LiveAd) => number | null> = {
 };
 
 /** Sorts by the chosen metric; ads with no value for it always sink to the bottom. */
-export function sortCreatives(ads: LiveAd[], key: CreativeSortKey, dir: "asc" | "desc"): LiveAd[] {
+export function sortCreatives(ads: CreativeAd[], key: CreativeSortKey, dir: "asc" | "desc"): CreativeAd[] {
   const get = sortValue[key];
   return [...ads].sort((a, b) => {
     const va = get(a);

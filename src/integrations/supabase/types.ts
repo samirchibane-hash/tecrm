@@ -118,6 +118,8 @@ export type Database = {
           ghl_location_id: string | null
           id: string
           report_token: string
+          target_cpa: number | null
+          target_cpl: number | null
         }
         Insert: {
           account_name: string
@@ -127,6 +129,8 @@ export type Database = {
           ghl_location_id?: string | null
           id?: string
           report_token?: string
+          target_cpa?: number | null
+          target_cpl?: number | null
         }
         Update: {
           account_name?: string
@@ -136,6 +140,8 @@ export type Database = {
           ghl_location_id?: string | null
           id?: string
           report_token?: string
+          target_cpa?: number | null
+          target_cpl?: number | null
         }
         Relationships: []
       }
@@ -549,6 +555,38 @@ export type Database = {
             columns: ["request_id"]
             isOneToOne: false
             referencedRelation: "creative_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      creative_labels: {
+        Row: {
+          account_id: string
+          ad_name: string
+          angle: string | null
+          offer: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          ad_name: string
+          angle?: string | null
+          offer?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          ad_name?: string
+          angle?: string | null
+          offer?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creative_labels_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]

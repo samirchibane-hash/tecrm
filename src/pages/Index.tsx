@@ -10,9 +10,12 @@ import { TaskList } from "@/components/dashboard/TaskList";
 import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { DashboardPeriodPicker } from "@/components/dashboard/DashboardPeriodPicker";
+import { PortfolioCreativeBoard } from "@/components/creative-performance/PortfolioCreativeBoard";
+import type { CreativeRange } from "@/components/creative-performance/useCreativePerformance";
+import { formatUsd } from "@/lib/format";
 import {
   RefreshCw,
-  CalendarDays,
   Image as ImageIcon,
   Sparkles,
   ArrowRight,
@@ -23,30 +26,31 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { format, startOfDay, subDays, startOfMonth, endOfMonth, subMonths } from "date-fns";
+import { format, startOfDay, subDays, startOfMonth } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/hooks/useSettings";
 import type { AdRow } from "@/hooks/useCouplerData";
 import type { DateRange } from "react-day-picker";
 
 // ─── KPI helpers ─────────────────────────────────────────────────────────────
-const CPL_TARGET = 40;
-const APPT_TARGET = 200;
-
-function getCostStatus(value: number, target: number): "green" | "orange" | "red" | null {
-  if (value <= 0) return null;
-  if (value <= target) return "green";
-  if (value <= target * 1.25) return "orange";
-  return "red";
+// Cost coloring reads each account's own targets (accounts.target_cpl /
+// target_cpa, set on the account page); no target, no coloring.
+function getCostStatus(value: number, target: number | null): "success" | "warning" | "danger" | null {
+  if (value <= 0 || !target) return null;
+  if (value <= target) return "success";
+  if (value <= target * 1.25) return "warning";
+  return "danger";
 }
 
 const STATUS_TEXT: Record<string, string> = {
-  green: "text-green-700 dark:text-green-400",
-  orange: "text-orange-700 dark:text-orange-400",
-  red: "text-red-700 dark:text-red-400",
+  success: "text-success",
+  warning: "text-warning",
+  danger: "text-danger",
 };
+
+// Deltas: more leads / appts is good, a higher cost per result is bad.
+const deltaTone = (d: { up: boolean; flat: boolean }, upIsGood: boolean) =>
+  d.flat ? "text-muted-foreground" : d.up === upIsGood ? "text-success" : "text-danger";
 
 function pctDelta(curr: number, prev: number): { pct: string; up: boolean; flat: boolean } | null {
   if (prev <= 0 || curr < 0) return null;
@@ -97,7 +101,7 @@ const Index = () => {
   const { data: dbAccounts = [] } = useQuery({
     queryKey: ["all-accounts"],
     queryFn: async () => {
-      const { data } = await supabase.from("accounts").select("id, account_name");
+      const { data } = await supabase.from("accounts").select("id, account_name, target_cpl, target_cpa");
       return data ?? [];
     },
   });
@@ -105,6 +109,11 @@ const Index = () => {
   const accountIdMap = useMemo(() => {
     const map: Record<string, string> = {};
     dbAccounts.forEach((a) => { map[a.account_name] = a.id; });
+    return map;
+  }, [dbAccounts]);
+  const targetsByName = useMemo(() => {
+    const map: Record<string, { cpl: number | null; cpa: number | null }> = {};
+    dbAccounts.forEach((a) => { map[a.account_name] = { cpl: a.target_cpl, cpa: a.target_cpa }; });
     return map;
   }, [dbAccounts]);
 
@@ -156,7 +165,6 @@ const Index = () => {
     to: startOfDay(new Date()),
   });
   const [presetLabel, setPresetLabel] = useState<string>("Month to Date");
-  const [showCustomCalendar, setShowCustomCalendar] = useState(false);
 
   // GHL conversions — fetch a window covering current + previous period so deltas work.
   // Date range is in the query key so this refetches when the picker changes.
@@ -296,9 +304,11 @@ const Index = () => {
         ghlCostPerAppt, prevGhlCostPerAppt,
         lastTask: lastTaskMap[name] ?? null,
         lastCreative: lastCreativeMap[name] ?? null,
+        targetCpl: targetsByName[name]?.cpl ?? null,
+        targetCpa: targetsByName[name]?.cpa ?? null,
       };
     });
-  }, [accountGroups, accountIdMap, allGhlConversions, dateRange, prevDateRange, prevGroupMap, lastTaskMap, lastCreativeMap]);
+  }, [accountGroups, accountIdMap, targetsByName, allGhlConversions, dateRange, prevDateRange, prevGroupMap, lastTaskMap, lastCreativeMap]);
 
   const gapNames = tableRows.filter((r) => metaGaps.has(r.name)).map((r) => r.name);
 
@@ -311,12 +321,33 @@ const Index = () => {
     ? `${presetLabel} (${dateRangeStr})`
     : dateRangeStr ?? "All time";
 
+  // The creative scorecard reads Meta for exactly the days the table shows.
+  const creativeRange = useMemo((): CreativeRange => {
+    if (!dateRange?.from) return { preset: "maximum" };
+    return { since: format(dateRange.from, "yyyy-MM-dd"), until: format(dateRange.to ?? dateRange.from, "yyyy-MM-dd") };
+  }, [dateRange]);
+
   return (
     <div className="bg-background">
       <div className="mx-auto max-w-5xl px-4 py-6 sm:py-10 sm:px-6 lg:px-8">
 
         {/* ── Header ───────────────────────────────────────────────────────── */}
-        <PageHeader title="Performance" description="Campaign performance overview" />
+        <PageHeader
+          title="Performance"
+          description="Every client's results, and the creatives driving or draining them"
+          actions={
+            <>
+              <DashboardPeriodPicker
+                dateRange={dateRange}
+                label={dateLabel}
+                onChange={(range, label) => { setDateRange(range); setPresetLabel(label); }}
+              />
+              <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} aria-label="Refresh Meta data" title="Refresh Meta data">
+                <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+              </Button>
+            </>
+          }
+        />
 
 
         {/* ── New Clients ──────────────────────────────────────────────────── */}
@@ -405,75 +436,6 @@ const Index = () => {
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-2 max-w-[180px]">
-                      <CalendarDays className="h-3.5 w-3.5 shrink-0" />
-                      <span className="text-xs truncate">{dateLabel}</span>
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className={cn("p-1.5", showCustomCalendar ? "w-auto" : "w-48")} align="end">
-                    <div className="flex flex-col gap-0.5">
-                      {[
-                        { label: "Today", range: { from: startOfDay(new Date()), to: startOfDay(new Date()) } },
-                        { label: "Yesterday", range: { from: startOfDay(subDays(new Date(), 1)), to: startOfDay(subDays(new Date(), 1)) } },
-                        { label: "Month to Date", range: { from: startOfMonth(new Date()), to: startOfDay(new Date()) } },
-                        { label: "Last 7 days", range: { from: startOfDay(subDays(new Date(), 7)), to: startOfDay(subDays(new Date(), 1)) } },
-                        { label: "Last 14 days", range: { from: startOfDay(subDays(new Date(), 14)), to: startOfDay(subDays(new Date(), 1)) } },
-                        { label: "Last 28 days", range: { from: startOfDay(subDays(new Date(), 28)), to: startOfDay(subDays(new Date(), 1)) } },
-                        { label: "Last month", range: { from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) } },
-                      ].map((preset) => (
-                        <Button
-                          key={preset.label}
-                          variant="ghost"
-                          size="sm"
-                          className="justify-start text-xs h-10 rounded-sm"
-                          onClick={() => {
-                            setDateRange(preset.range);
-                            setPresetLabel(preset.label);
-                            setShowCustomCalendar(false);
-                          }}
-                        >
-                          {preset.label}
-                        </Button>
-                      ))}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="justify-start text-xs h-10 rounded-sm"
-                        onClick={() => { setPresetLabel(""); setShowCustomCalendar((v) => !v); }}
-                      >
-                        Custom…
-                      </Button>
-                      {dateRange?.from && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="justify-start text-xs h-10 rounded-sm text-muted-foreground"
-                          onClick={() => { setDateRange(undefined); setPresetLabel(""); setShowCustomCalendar(false); }}
-                        >
-                          Clear
-                        </Button>
-                      )}
-                      {showCustomCalendar && (
-                        <div className="border-t border-border pt-2 mt-1">
-                          <Calendar
-                            mode="range"
-                            selected={dateRange}
-                            onSelect={setDateRange}
-                            numberOfMonths={1}
-                            className={cn("p-0 pointer-events-auto")}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-                <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-                  <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
-                </Button>
-              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[680px]">
@@ -508,8 +470,8 @@ const Index = () => {
                 </thead>
                 <tbody>
                   {tableRows.map((row, i) => {
-                    const cplStatus = getCostStatus(row.ghlCostPerLead, CPL_TARGET);
-                    const cpaStatus = getCostStatus(row.ghlCostPerAppt, APPT_TARGET);
+                    const cplStatus = getCostStatus(row.ghlCostPerLead, row.targetCpl);
+                    const cpaStatus = getCostStatus(row.ghlCostPerAppt, row.targetCpa);
                     const spendDelta = pctDelta(row.totalSpend, row.prevSpend);
                     const leadsDelta = pctDelta(row.ghlLeads, row.prevGhlLeads);
                     const apptsDelta = pctDelta(row.ghlAppointments, row.prevGhlAppointments);
@@ -535,7 +497,7 @@ const Index = () => {
                             <span className="text-muted-foreground" title="Meta can't read this ad account">—</span>
                           ) : (
                             <span className="font-semibold text-foreground">
-                              ${row.totalSpend.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                              {formatUsd(row.totalSpend)}
                             </span>
                           )}
                           {!metaGaps.has(row.name) && spendDelta && (
@@ -551,7 +513,7 @@ const Index = () => {
                             <>
                               <span className="font-medium text-foreground">{row.ghlLeads}</span>
                               {leadsDelta && (
-                                <span className={`ml-1.5 text-[11px] ${leadsDelta.flat ? "text-muted-foreground" : leadsDelta.up ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
+                                <span className={`ml-1.5 text-[11px] ${deltaTone(leadsDelta, true)}`}>
                                   {leadsDelta.flat ? "→" : leadsDelta.up ? "↑" : "↓"}{leadsDelta.pct}
                                 </span>
                               )}
@@ -569,7 +531,7 @@ const Index = () => {
                                 ${row.ghlCostPerLead.toFixed(0)}
                               </span>
                               {cplDelta && (
-                                <span className={`ml-1.5 text-[11px] ${cplDelta.flat ? "text-muted-foreground" : cplDelta.up ? "text-red-500 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
+                                <span className={`ml-1.5 text-[11px] ${deltaTone(cplDelta, false)}`}>
                                   {cplDelta.flat ? "→" : cplDelta.up ? "↑" : "↓"}{cplDelta.pct}
                                 </span>
                               )}
@@ -585,7 +547,7 @@ const Index = () => {
                             <>
                               <span className="font-medium text-foreground">{row.ghlAppointments}</span>
                               {apptsDelta && (
-                                <span className={`ml-1.5 text-[11px] ${apptsDelta.flat ? "text-muted-foreground" : apptsDelta.up ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
+                                <span className={`ml-1.5 text-[11px] ${deltaTone(apptsDelta, true)}`}>
                                   {apptsDelta.flat ? "→" : apptsDelta.up ? "↑" : "↓"}{apptsDelta.pct}
                                 </span>
                               )}
@@ -603,7 +565,7 @@ const Index = () => {
                                 ${row.ghlCostPerAppt.toFixed(0)}
                               </span>
                               {cpaDelta && (
-                                <span className={`ml-1.5 text-[11px] ${cpaDelta.flat ? "text-muted-foreground" : cpaDelta.up ? "text-red-500 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
+                                <span className={`ml-1.5 text-[11px] ${deltaTone(cpaDelta, false)}`}>
                                   {cpaDelta.flat ? "→" : cpaDelta.up ? "↑" : "↓"}{cpaDelta.pct}
                                 </span>
                               )}
@@ -653,6 +615,14 @@ const Index = () => {
             </div>
           </div>
         )}
+
+        {/* ── Creative scorecard across clients ────────────────────────────── */}
+        <PortfolioCreativeBoard
+          range={creativeRange}
+          periodCaption={dateLabel}
+          accounts={dbAccounts}
+          hiddenAccounts={settings.hidden_accounts ?? []}
+        />
 
         {/* ── Creative Requests ─────────────────────────────────────────────── */}
         <CreativeRequestsSection />
