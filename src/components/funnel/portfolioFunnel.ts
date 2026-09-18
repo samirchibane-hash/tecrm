@@ -640,8 +640,17 @@ export function analyzePortfolioFunnel(
     copyByAccount.set(l.account_name, forAccount);
   }
 
+  // Only arm "a" forms the sequential timeline this file reasons about.
+  //
+  // A split test puts two versions live at once, and the day-splitting below
+  // assumes versions follow one another: given two open versions it would hand
+  // every day to whichever sorts last, crediting all of a page's Meta traffic
+  // to one arm. Meta cannot tell the arms apart in any case — it attributes to
+  // the ad, and both arms share one ad — so arms are measured by the page's own
+  // view and lead events instead, and are reported by the split-test panels.
   const versionsByPage = new Map<string, FunnelPageVersion[]>();
   for (const v of versions) {
+    if ((v.variant ?? "a") !== "a") continue;
     const key = normalizePageUrl(v.url);
     versionsByPage.set(key, [...(versionsByPage.get(key) ?? []), v]);
   }
@@ -687,7 +696,18 @@ export function analyzePortfolioFunnel(
 
     for (const [key, ads] of byPage) {
       const synced = copyByAccount.get(acct.accountName)?.get(key);
-      const copy = detectPageCopy(synced);
+      const pageVersions = versionsByPage.get(key) ?? [];
+      let copy = detectPageCopy(synced);
+      // A page that splits its traffic to sub-paths holds no copy of its own —
+      // it is a signpost, not a page. Its recorded arm-A copy is what a visitor
+      // sent here actually reads, so the row shows that rather than claiming
+      // the page was never synced.
+      if (!copy.copy && pageVersions.length > 0) {
+        const live = pageVersions.filter((v) => v.valid_to === null).sort((a, b) => b.version - a.version)[0];
+        if (live?.page_headline) {
+          copy = detectPageCopy({ ...synced, url: synced?.url ?? "", label: synced?.label ?? "", page_title: null, page_headline: live.page_headline });
+        }
+      }
       if (!copy.copy) unsynced += 1;
       const spend = sum(ads, (a) => a.spend);
       const leads = sum(ads, (a) => a.webLeads);

@@ -453,6 +453,49 @@ describe("portfolio funnel", () => {
         expect(rows[0].version).toBe(1);
       });
 
+      // A split test leaves two versions open at once. The day-splitting here
+      // assumes versions follow one another, so an arm must never enter it:
+      // given two open versions it would hand every day to whichever sorts
+      // last and credit all of the page's Meta traffic to one arm.
+      it("ignores split-test arms when splitting a page's days", () => {
+        const armB = version("https://k.co/lp-1", 3, "Arm B", "2026-09-05T00:00:00Z");
+        armB.variant = "b";
+        const board = analyzePortfolioFunnel(
+          [{
+            accountId: "a1",
+            accountName: "Kinetico",
+            ads: [adTo("x", "https://k.co/lp-1", 1000, 12, 400)],
+            daily: [
+              { adId: "x", date: "2026-09-08", spend: 200, linkClicks: 200, landingPageViews: 200, webLeads: 10 },
+              { adId: "x", date: "2026-09-12", spend: 800, linkClicks: 200, landingPageViews: 200, webLeads: 2 },
+            ],
+            error: null,
+          }],
+          [{ id: "a1", account_name: "Kinetico", target_cpl: 50 }],
+          [link("Kinetico", "https://k.co/lp-1", "LP 1", FREE_TEST)],
+          [],
+          { byAccount: new Map(), since: "2026-09-01", until: "2026-09-17" },
+          [V1, V2, armB],
+        );
+        // Only the two arm-"a" versions are split; arm B never appears here.
+        expect(board.ranked.map((r) => r.version).sort()).toEqual([1, 2]);
+        expect(board.pages[0].version).toBe(2);
+      });
+
+      it("shows a splitter page's live arm-A copy rather than calling it unsynced", () => {
+        const board = analyzePortfolioFunnel(
+          [account("a1", "Kinetico", [adTo("x", "https://k.co/lp-1", 500, 10, 200)])],
+          [{ id: "a1", account_name: "Kinetico", target_cpl: 50 }],
+          // The splitter holds no copy of its own.
+          [link("Kinetico", "https://k.co/lp-1", "LP 1")],
+          [],
+          { byAccount: new Map(), since: "2026-09-01", until: "2026-09-17" },
+          [V2],
+        );
+        expect(board.pages[0].headline).toBe("New promise");
+        expect(board.unsynced).toBe(0);
+      });
+
       it("leaves a page that ran one version as a single row", () => {
         const board = analyzePortfolioFunnel(
           [account("a1", "Kinetico", [adTo("x", "https://k.co/lp-1", 500, 10, 200)])],
