@@ -377,6 +377,59 @@ describe("portfolio funnel", () => {
     expect(board.headlines.find((g) => g.label === FREE_TEST.page_headline)!.status).toBe("best");
   });
 
+  it("ranks every page best to worst against each client's own benchmark", () => {
+    const board = analyzePortfolioFunnel(
+      [
+        // Cheap market, $20 target: 25/lead is over, 10/lead is under.
+        account("a1", "Kinetico", [
+          adTo("cheap-good", "https://k.co/good", 1000, 100, 1200),
+          adTo("cheap-bad", "https://k.co/bad", 1000, 40, 1200),
+        ]),
+        // Dear market, $100 target: 50/lead is under despite costing more than
+        // either Kinetico page, which is the whole point of indexing.
+        account("a2", "Tarheel", [
+          adTo("dear-good", "https://t.co/good", 1000, 20, 1200),
+          adTo("dead", "https://t.co/dead", 1000, 0, 1200),
+        ]),
+      ],
+      [
+        { id: "a1", account_name: "Kinetico", target_cpl: 20 },
+        { id: "a2", account_name: "Tarheel", target_cpl: 100 },
+      ],
+      [],
+      [],
+    );
+    expect(board.pages.map((p) => p.label)).toEqual(["/good", "/good", "/bad", "/dead"]);
+    expect(board.pages.map((p) => p.accountName)).toEqual(["Kinetico", "Tarheel", "Kinetico", "Tarheel"]);
+    // $10 vs a $20 target = half the benchmark; $50 vs $100 likewise.
+    expect(board.pages[0].benchmarkIndex).toBeCloseTo(0.5);
+    expect(board.pages[1].benchmarkIndex).toBeCloseTo(0.5);
+    expect(board.pages[2].benchmarkIndex).toBeCloseTo(1.25);
+    // Spent with nothing to show: no index, and last.
+    expect(board.pages[3].benchmarkIndex).toBeNull();
+  });
+
+  it("ranks an unscorable page last rather than worst", () => {
+    const board = analyzePortfolioFunnel(
+      [
+        account("a1", "Kinetico", [adTo("bad", "https://k.co/bad", 1000, 10, 1200)]),
+        // Every page dry after real spend = tracking gap, not four bad pages.
+        account("a2", "Tarheel", [
+          adTo("t1", "https://t.co/1", 500, 0, 600),
+          adTo("t2", "https://t.co/2", 500, 0, 600),
+        ]),
+      ],
+      [
+        { id: "a1", account_name: "Kinetico", target_cpl: 20 },
+        { id: "a2", account_name: "Tarheel", target_cpl: 50 },
+      ],
+      [],
+      [],
+    );
+    expect(board.pages[0].accountName).toBe("Kinetico");
+    expect(board.pages.slice(1).every((p) => p.verdict === "unscored")).toBe(true);
+  });
+
   it("counts pages whose copy isn't synced and keeps them out of the headline rollup", () => {
     const board = analyzePortfolioFunnel(
       [account("a1", "Kinetico", [adTo("k1", "https://k.co/lp-1", 500, 40, 600), adTo("k2", "https://k.co/lp-9", 500, 30, 600)])],

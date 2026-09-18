@@ -6,6 +6,7 @@ import {
   ArrowRight,
   ExternalLink,
   FlaskConical,
+  ListOrdered,
   MousePointerClick,
   OctagonX,
   RefreshCw,
@@ -15,14 +16,16 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { KpiStatCard } from "@/components/dashboard/KpiStatCard";
 import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
 import { SegmentedControl } from "@/components/SegmentedControl";
 import { StatusPill } from "@/components/StatusPill";
-import { Dash } from "@/components/creative-performance/CreativeBits";
+import { Dash, VerdictPill } from "@/components/creative-performance/CreativeBits";
 import { ANGLE_LABEL, OFFER_LABEL } from "@/components/creative-performance/labels";
 import { usePortfolioCreatives, type CreativeRange } from "@/components/creative-performance/useCreativePerformance";
 import { useFunnelRepoLinks } from "@/components/funnel-pages/useAccountLinks";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { formatCount, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
@@ -33,7 +36,7 @@ import {
   type PortfolioPage,
 } from "./portfolioFunnel";
 
-const SHOWN = 5;
+const SHOWN = 8;
 const GROUPS_SHOWN = 5;
 
 const pct = (r: number) => `${(r * 100).toFixed(1)}%`;
@@ -71,82 +74,179 @@ function OfferTags({ page }: { page: PortfolioPage }) {
   );
 }
 
-function PageRow({ page, kind }: { page: PortfolioPage; kind: "winner" | "waster" }) {
-  const href = `/account/${encodeURIComponent(page.accountName)}?tab=funnel`;
+/** How the page's cost per lead sits against its own client's benchmark. */
+function VsBenchmark({ page }: { page: PortfolioPage }) {
+  if (page.benchmarkIndex === null) {
+    const why = page.verdict === "unscored"
+      ? "Not ranked: no lead recorded on any of this client's pages, so the benchmark can't be trusted"
+      : page.benchmark
+        ? "No leads yet, so there's no cost per lead to compare"
+        : "This client has no CPL target and no leads to average, so there's nothing to compare against";
+    return <Dash title={why} />;
+  }
+  const delta = page.benchmarkIndex - 1;
+  const under = delta < 0;
   return (
-    <li className="px-4 py-3">
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <a
-              href={page.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex max-w-full items-center gap-1 rounded-sm text-sm font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              title={`${page.url} (opens the live page)`}
-            >
-              <span className="truncate">{page.label}</span>
-              <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
-            </a>
-            <Link
-              to={href}
-              className="rounded-sm text-xs font-medium text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {page.accountName}
-            </Link>
-          </div>
-          <Headline page={page} />
-          <OfferTags page={page} />
-          <p className="mt-1 text-xs leading-snug text-foreground/80">{page.reason}</p>
-        </div>
-        <div className="shrink-0 text-right">
-          <p className="text-sm font-semibold tabular-nums text-foreground">
-            {formatUsd(kind === "waster" ? page.excessSpend : page.savings)}
-          </p>
-          <p className="text-[11px] text-muted-foreground">{kind === "waster" ? "excess" : "under benchmark"}</p>
-          <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
-            {page.cvr !== null ? `${pct(page.cvr)} convert` : "rate unknown"}
-          </p>
-        </div>
-      </div>
-    </li>
+    <span
+      className={cn("font-medium tabular-nums", Math.abs(delta) < 0.05 ? "text-muted-foreground" : under ? "text-success" : "text-danger")}
+      title={`${formatUsd(page.costPer!)} per lead vs a ${benchmarkNote(page)}`}
+    >
+      {under ? "−" : "+"}{Math.round(Math.abs(delta) * 100)}%
+    </span>
   );
 }
 
-function PageList({ title, icon: Icon, tone, pages, kind, empty }: {
-  title: string;
-  icon: React.ElementType;
-  tone: string;
-  pages: PortfolioPage[];
-  kind: "winner" | "waster";
-  empty: string;
-}) {
+const benchmarkNote = (page: PortfolioPage) =>
+  page.benchmark
+    ? `${formatUsd(page.benchmark.costPer)} ${page.benchmark.source === "target" ? "CPL target" : "account average"}`
+    : "benchmark";
+
+function PageIdentity({ page }: { page: PortfolioPage }) {
+  return (
+    <div className="min-w-0">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        <a
+          href={page.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex max-w-full items-center gap-1 rounded-sm text-sm font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          title={`${page.url} (opens the live page)`}
+        >
+          <span className="truncate">{page.label}</span>
+          <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+        </a>
+        <Link
+          to={`/account/${encodeURIComponent(page.accountName)}?tab=funnel`}
+          className="rounded-sm text-xs font-medium text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {page.accountName}
+        </Link>
+      </div>
+      <Headline page={page} />
+      <OfferTags page={page} />
+    </div>
+  );
+}
+
+/**
+ * Every landing page in one ranking, best to worst. Ordering is cost per lead
+ * against each page's own client's benchmark, which is what lets pages from
+ * different markets sit in one list; the verdict pill still carries whether the
+ * gap is big enough to act on, so a page can rank first and still read
+ * "Too early".
+ */
+function RankedPages({ pages }: { pages: PortfolioPage[] }) {
+  const isMobile = useIsMobile();
   const [all, setAll] = useState(false);
   const shown = all ? pages : pages.slice(0, SHOWN);
+  const scaleMax = Math.max(0.05, ...pages.map((p) => p.interval?.high ?? 0));
+
   return (
-    <section className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border/60 bg-card" aria-label={title}>
+    <section className="overflow-hidden rounded-xl border border-border/60 bg-card" aria-labelledby="funnel-pages-heading">
       <header className="flex items-center gap-2 border-b border-border/60 bg-muted/40 px-4 py-3">
-        <Icon className={cn("h-4 w-4", tone)} aria-hidden />
-        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <ListOrdered className="h-4 w-4 text-muted-foreground" aria-hidden />
+        <h3 id="funnel-pages-heading" className="text-sm font-semibold text-foreground">
+          Every landing page, best to worst
+        </h3>
         <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{pages.length}</span>
       </header>
-      {pages.length === 0 ? (
-        <p className="px-4 py-6 text-sm text-muted-foreground">{empty}</p>
-      ) : (
+
+      {isMobile ? (
         <ul className="divide-y divide-border/50">
-          {shown.map((p) => <PageRow key={`${p.accountId}-${p.key}`} page={p} kind={kind} />)}
+          {shown.map((p, i) => (
+            <li key={`${p.accountId}-${p.key}`} className="space-y-2 p-3">
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 w-5 shrink-0 text-xs font-semibold tabular-nums text-muted-foreground">{i + 1}</span>
+                <PageIdentity page={p} />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <VerdictPill verdict={p.verdict} reason={p.reason} />
+                <span className="text-[11px] text-muted-foreground">
+                  vs benchmark <VsBenchmark page={p} />
+                </span>
+              </div>
+              <dl className="grid grid-cols-3 gap-2 text-xs">
+                <div><dt className="text-muted-foreground">Spend</dt><dd className="font-medium tabular-nums text-foreground">{formatUsd(p.spend)}</dd></div>
+                <div><dt className="text-muted-foreground">Leads</dt><dd className="font-medium tabular-nums text-foreground">{formatCount(p.leads)}</dd></div>
+                <div><dt className="text-muted-foreground">Cost / lead</dt><dd className="font-medium tabular-nums text-foreground">{p.costPer !== null ? formatUsd(p.costPer) : "—"}</dd></div>
+                <div className="col-span-3"><dt className="text-muted-foreground">Conversion</dt><dd><RateBar page={p} scaleMax={scaleMax} /></dd></div>
+              </dl>
+            </li>
+          ))}
         </ul>
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-8 text-right">#</TableHead>
+                <TableHead>Page</TableHead>
+                <TableHead>Verdict</TableHead>
+                <TableHead className="text-right">Spend</TableHead>
+                <TableHead className="text-right">Page views</TableHead>
+                <TableHead className="text-right">Leads</TableHead>
+                <TableHead className="w-[150px] text-right" title="Website leads ÷ page views, with its 95% range">Conversion</TableHead>
+                <TableHead className="text-right">Cost / lead</TableHead>
+                <TableHead className="text-right" title="Cost per lead against this client's own CPL target, or their average when no target is set">
+                  vs benchmark
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {shown.map((p, i) => (
+                <TableRow key={`${p.accountId}-${p.key}`}>
+                  <TableCell className="py-2 text-right text-xs tabular-nums text-muted-foreground">{i + 1}</TableCell>
+                  <TableCell className="min-w-[240px] max-w-[340px] py-2"><PageIdentity page={p} /></TableCell>
+                  <TableCell className="py-2"><VerdictPill verdict={p.verdict} reason={p.reason} /></TableCell>
+                  <TableCell className="py-2 text-right tabular-nums">{formatUsd(p.spend)}</TableCell>
+                  <TableCell className="py-2 text-right tabular-nums">{formatCount(p.lpv)}</TableCell>
+                  <TableCell className="py-2 text-right tabular-nums">{formatCount(p.leads)}</TableCell>
+                  <TableCell className="py-2"><RateBar page={p} scaleMax={scaleMax} /></TableCell>
+                  <TableCell className="py-2 text-right tabular-nums">
+                    {p.costPer !== null ? formatUsd(p.costPer, { decimals: true }) : <Dash title="No leads in this period" />}
+                  </TableCell>
+                  <TableCell className="py-2 text-right"><VsBenchmark page={p} /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       )}
+
       {pages.length > SHOWN && (
         <button
           onClick={() => setAll((v) => !v)}
-          className="mt-auto flex w-full items-center justify-center gap-1 border-t border-border/50 px-4 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+          className="flex w-full items-center justify-center gap-1 border-t border-border/50 px-4 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
         >
           {all ? "Show fewer" : `Show all ${pages.length}`}
           <ArrowRight className={cn("h-3 w-3 transition-transform", all && "-rotate-90")} aria-hidden />
         </button>
       )}
     </section>
+  );
+}
+
+/** A conversion rate with its 95% range, on a scale shared by every row. */
+function RateBar({ page, scaleMax }: { page: PortfolioPage; scaleMax: number }) {
+  if (page.cvr === null || !page.interval) {
+    return <p className="text-right"><Dash title="More leads than page views here: Meta is undercounting views, so no rate is shown" /></p>;
+  }
+  const x = (v: number) => `${Math.min(100, (v / scaleMax) * 100)}%`;
+  const label = `${pct(page.cvr)}, 95% range ${pct(page.interval.low)}–${pct(page.interval.high)}`;
+  return (
+    <div className="min-w-[110px]" title={label}>
+      <p className="text-right text-sm tabular-nums text-foreground">{pct(page.cvr)}</p>
+      <div className="relative mt-1 h-2 w-full rounded-full bg-muted" role="img" aria-label={label}>
+        <div
+          className="absolute top-0 h-full rounded-full opacity-35"
+          style={{ left: x(page.interval.low), width: `calc(${x(page.interval.high)} - ${x(page.interval.low)})`, background: "hsl(var(--chart-1))" }}
+        />
+        <div
+          className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-card"
+          style={{ left: x(page.cvr), background: "hsl(var(--chart-1))" }}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -368,34 +468,20 @@ export function PortfolioFunnelBoard({
             />
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-2">
-            <PageList
-              title="Top performing pages"
-              icon={TrendingUp}
-              tone="text-success"
-              kind="winner"
-              pages={board.winners}
-              empty="No landing page beats its client's cost-per-lead benchmark with enough leads to be sure yet."
-            />
-            <PageList
-              title="Pages losing money"
-              icon={OctagonX}
-              tone="text-danger"
-              kind="waster"
-              pages={board.wasters}
-              empty="No page is significantly above its client's cost-per-lead benchmark."
-            />
-          </div>
+          <RankedPages pages={board.pages} />
 
           <CopyBoard headlines={board.headlines} offers={board.offers} unsynced={board.unsynced} />
 
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            A page's verdict is about money: its website leads and spend against that client's CPL target (or that
-            client's own average when no target is set), with the same 90% Poisson test the creative scorecard uses.
-            Conversion is website leads ÷ landing page views, both from Meta — it isolates the page from the price of
-            its traffic, so a page can convert well and still cost too much per lead. Headlines and offers pool every
-            page that uses them across clients and compare conversion at 95% confidence; that pooling mixes markets and
-            audiences, so read it as the next test to run, not a settled answer.
+            Pages are ranked on cost per website lead against their own client's CPL target — or that client's own
+            average when no target is set — because a $40 lead is cheap in one market and dear in another. Pages that
+            spent without a lead rank below every priced page; pages with a tracking gap or no benchmark aren't ranked
+            at all and sit last, since unknown isn't the same as bad. The verdict says whether the gap is big enough to
+            act on, at 90% confidence with the same Poisson test the creative scorecard uses, so a page can rank first
+            and still read “Too early”. Conversion is website leads ÷ landing page views, both from Meta — it isolates
+            the page from the price of its traffic. Headlines and offers pool every page that uses them across clients
+            and compare conversion at 95% confidence; that pooling mixes markets and audiences, so read it as the next
+            test to run, not a settled answer.
           </p>
         </>
       )}

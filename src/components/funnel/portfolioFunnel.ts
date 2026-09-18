@@ -5,11 +5,12 @@
 // Two different questions, two different tests, because conflating them is how
 // a good page with expensive traffic gets killed:
 //
-//   Money   — cost per website lead, tested against that client's own CPL
-//             benchmark (accounts.target_cpl, else their own average) with the
-//             same Poisson verdict the creative scorecard uses. This is what
-//             "top performer" and "money waster" mean here, and it's the only
-//             number that carries dollars.
+//   Money   — cost per website lead, indexed to that client's own CPL benchmark
+//             (accounts.target_cpl, else their own average). The index is what
+//             orders the single ranked list: a $40 lead is cheap in one market
+//             and dear in another, so raw cost can't rank across clients. The
+//             same Poisson verdict the creative scorecard uses then says whether
+//             the gap is big enough to act on — ranking is order, not proof.
 //   Page    — conversion rate (website leads ÷ landing page views) with a 95%
 //             Wilson interval. This isolates the page from its traffic: a page
 //             can convert brilliantly on clicks that cost too much.
@@ -65,6 +66,13 @@ export interface PortfolioPage extends Judgement {
   cvr: number | null;
   interval: { low: number; high: number } | null;
   benchmark: Benchmark | null;
+  /**
+   * Cost per lead ÷ this client's benchmark: 0.6 is 40% cheaper than the client
+   * needs, 1.8 is 80% dearer. Dividing by each client's own benchmark is what
+   * makes one ranked list across clients honest — a $40 lead is good in one
+   * market and bad in another. Null when the page has no leads or no benchmark.
+   */
+  benchmarkIndex: number | null;
 }
 
 /** A headline or an offer, pooled across every page that uses it. */
@@ -173,7 +181,9 @@ function groupPages(
       key,
       label: labelOf(rows[0]),
       pages: rows.length,
-      clients: [...new Set(rows.map((r) => r.accountName))],
+      // Sorted, not in page order: this is a tooltip list, and it shouldn't
+      // reshuffle when the ranking changes.
+      clients: [...new Set(rows.map((r) => r.accountName))].sort(),
       spend,
       lpv,
       leads,
@@ -184,6 +194,30 @@ function groupPages(
     };
   });
   return rankGroups(groups);
+}
+
+/**
+ * Best to worst, in three tiers, so a page is never ranked against a number that
+ * doesn't apply to it:
+ *
+ *   0. Priced pages — ordered by cost per lead against their own client's
+ *      benchmark, cheapest first.
+ *   1. Pages that spent and produced no lead at all — worse than any priced
+ *      page, and the more they spent the worse.
+ *   2. Pages that can't be ranked — a tracking gap, or a client with no
+ *      benchmark to measure against. Last, because unknown is not bad.
+ */
+function rankTier(p: PortfolioPage): number {
+  if (p.verdict === "unscored") return 2;
+  if (p.benchmarkIndex !== null) return 0;
+  return p.benchmark && p.spend > 0 ? 1 : 2;
+}
+
+function compareRank(a: PortfolioPage, b: PortfolioPage): number {
+  const tier = rankTier(a) - rankTier(b);
+  if (tier !== 0) return tier;
+  if (rankTier(a) === 0) return a.benchmarkIndex! - b.benchmarkIndex!;
+  return b.spend - a.spend;
 }
 
 /**
@@ -241,6 +275,7 @@ export function analyzePortfolioFunnel(
       const spend = sum(ads, (a) => a.spend);
       const leads = sum(ads, (a) => a.webLeads);
       const lpv = sum(ads, (a) => a.landingPageViews);
+      const verdict = judge({ spend, results: leads }, benchmark, "leads", { trackingGap });
       pages.push({
         key,
         accountId: acct.accountId,
@@ -255,16 +290,19 @@ export function analyzePortfolioFunnel(
         lpv,
         leads,
         benchmark,
+        benchmarkIndex:
+          benchmark && verdict.costPer !== null && verdict.verdict !== "unscored"
+            ? verdict.costPer / benchmark.costPer
+            : null,
         ...rate(leads, lpv),
-        ...judge({ spend, results: leads }, benchmark, "leads", { trackingGap }),
+        ...verdict,
       });
     }
   }
 
-  // Live first on both lists: a paused page isn't a thing, but a page whose ads
-  // all stopped can't be scaled today either, so order by size of the prize.
   const winners = pages.filter((p) => p.verdict === "winner").sort((a, b) => b.savings - a.savings);
   const wasters = pages.filter((p) => p.verdict === "waster").sort((a, b) => b.excessSpend - a.excessSpend);
+  pages.sort(compareRank);
 
   // Only pages with synced copy can be grouped by what they say.
   const withCopy = pages.filter((p) => p.copy !== null);
@@ -272,7 +310,7 @@ export function analyzePortfolioFunnel(
   const leads = sum(pages, (p) => p.leads);
 
   return {
-    pages: pages.sort((a, b) => b.spend - a.spend),
+    pages,
     winners,
     wasters,
     headlines: groupPages(

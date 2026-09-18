@@ -143,6 +143,12 @@ one shared query so the page makes a single Meta call. Pure logic lives in
   *verdict* is cost per website lead against that client's own CPL benchmark (the same Poisson
   test ads get — it's the only number carrying dollars), while its *conversion rate* isolates
   the page from the price of its traffic. A page can convert well and still cost too much.
+- **One ranked list, not a winners/losers split.** Pages are ordered by `benchmarkIndex`
+  (cost per lead ÷ that client's benchmark), which is the only way a page from a cheap
+  market and one from a dear market belong in the same ranking. Pages that spent with no
+  lead rank below every priced page; unscorable ones (tracking gap, no benchmark) sit last
+  and are explicitly *not* ranked, because unknown isn't bad. The verdict pill stays on
+  each row, so a page can rank first and still read "Too early".
 - **Headline and offer are the landing page's identity.** github-sync lifts the `<h1>`,
   `.hero-subhead` and the form card line off each page into `account_links.page_headline /
   page_subhead / page_cta`; offer and angle are then detected from that copy with the same
