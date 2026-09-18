@@ -8,7 +8,7 @@ import {
 } from "@/components/funnels/funnelRows";
 import { analyzePortfolioFunnel, type FunnelPageCopy, type FunnelPageVersion } from "@/components/funnel/portfolioFunnel";
 import type { PortfolioAccount } from "@/components/creative-performance/useCreativePerformance";
-import type { SplitTestRecord, VariantDayRecord } from "@/components/funnels/useFunnelsData";
+import type { SplitTestRecord, VariantBookingRecord, VariantDayRecord } from "@/components/funnels/useFunnelsData";
 import { makeAd } from "./fixtures";
 
 const link = (account: string, url: string, label: string, headline: string | null = null): FunnelPageCopy => ({
@@ -40,6 +40,8 @@ const arm = (variant: string, views: number, leads: number): SplitArm => ({
   leads,
   cvr: views > 0 ? leads / views : null,
   interval: null,
+  booked: null,
+  bookedRate: null,
   status: "needs_traffic",
   pValue: null,
 });
@@ -50,6 +52,7 @@ function board(opts: {
   versions?: FunnelPageVersion[];
   tests?: SplitTestRecord[];
   variantDays?: VariantDayRecord[];
+  variantBookings?: VariantBookingRecord[];
   hidden?: string[];
 }) {
   const portfolio = opts.portfolio ?? [];
@@ -62,6 +65,7 @@ function board(opts: {
     versions: opts.versions ?? [],
     tests: opts.tests ?? [],
     variantDays: opts.variantDays ?? [],
+    variantBookings: opts.variantBookings ?? [],
     hidden: opts.hidden ?? [],
   });
 }
@@ -150,6 +154,53 @@ describe("funnels board", () => {
     const arms = b.rows[0].runningTest!.arms;
     expect(arms.find((a) => a.variant === "a")!.views).toBe(200);
     expect(arms.find((a) => a.variant === "b")!.leads).toBe(30);
+  });
+});
+
+describe("booked appointments per arm", () => {
+  const tests: SplitTestRecord[] = [
+    { id: "t1", url: "https://k.co/lp-1", name: null, status: "running", weights: { a: 50, b: 50 }, started_at: "2026-09-15T00:00:00Z", stopped_at: null, winner_variant: null },
+  ];
+  const links = [link("Kinetico", "https://k.co/lp-1", "LP 1")];
+
+  it("reports an arm with no GHL attribution as unknown, not zero", () => {
+    const b = board({ links, tests });
+    // A zero here would read as "this arm books nobody", which is a different
+    // claim from "we never learned which arm these leads came from".
+    expect(b.rows[0].runningTest!.arms.every((a) => a.booked === null)).toBe(true);
+  });
+
+  it("keeps a real zero distinct from missing attribution", () => {
+    const variantBookings: VariantBookingRecord[] = [
+      { url: "https://k.co/lp-1", variant: "a", day: "2026-09-16", leads: 8, booked: 0 },
+    ];
+    const b = board({ links, tests, variantBookings });
+    const arms = b.rows[0].runningTest!.arms;
+    expect(arms.find((a) => a.variant === "a")!.booked).toBe(0);
+    expect(arms.find((a) => a.variant === "a")!.bookedRate).toBe(0);
+    expect(arms.find((a) => a.variant === "b")!.booked).toBeNull();
+  });
+
+  it("sums bookings per arm and rates them against GHL's own leads", () => {
+    const variantBookings: VariantBookingRecord[] = [
+      { url: "https://k.co/lp-1", variant: "a", day: "2026-09-16", leads: 6, booked: 3 },
+      { url: "https://k.co/lp-1", variant: "a", day: "2026-09-17", leads: 4, booked: 1 },
+      { url: "https://k.co/lp-1", variant: "b", day: "2026-09-16", leads: 5, booked: 4 },
+    ];
+    const b = board({ links, tests, variantBookings });
+    const arms = b.rows[0].runningTest!.arms;
+    expect(arms.find((a) => a.variant === "a")!.booked).toBe(4);
+    expect(arms.find((a) => a.variant === "a")!.bookedRate).toBeCloseTo(0.4);
+    expect(arms.find((a) => a.variant === "b")!.bookedRate).toBeCloseTo(0.8);
+  });
+
+  it("ignores bookings from outside the test's window", () => {
+    const variantBookings: VariantBookingRecord[] = [
+      { url: "https://k.co/lp-1", variant: "a", day: "2026-09-14", leads: 99, booked: 99 },
+      { url: "https://k.co/lp-1", variant: "a", day: "2026-09-16", leads: 2, booked: 1 },
+    ];
+    const b = board({ links, tests, variantBookings });
+    expect(b.rows[0].runningTest!.arms.find((a) => a.variant === "a")!.booked).toBe(1);
   });
 });
 

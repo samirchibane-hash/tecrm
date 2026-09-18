@@ -14,7 +14,7 @@ import { analyzePortfolioFunnel, type FunnelAccountInfo, type PortfolioGhl } fro
 import { formatCount, formatUsd } from "@/lib/format";
 import { buildFunnelsBoard } from "./funnelRows";
 import { FunnelPageCard } from "./FunnelPageCard";
-import { useFunnelSplitTests, useVariantDaily } from "./useFunnelsData";
+import { useFunnelSplitTests, useVariantBookings, useVariantDaily } from "./useFunnelsData";
 
 type Filter = "all" | "traffic" | "tests" | "idle";
 
@@ -53,6 +53,7 @@ export function FunnelsBoard({
 
   const period = data?.accounts.find((a) => a.period)?.period ?? null;
   const { data: variantDays = [] } = useVariantDaily(period?.since);
+  const { data: variantBookings = [] } = useVariantBookings(period?.since);
   const { data: ghlRows = [] } = useAllGhlConversions(period?.since ?? "");
 
   const ghl = useMemo((): PortfolioGhl => {
@@ -73,9 +74,10 @@ export function FunnelsBoard({
       versions,
       tests,
       variantDays,
+      variantBookings,
       hidden: hiddenAccounts,
     });
-  }, [data, accounts, links, hiddenAccounts, ghl, versions, tests, variantDays]);
+  }, [data, accounts, links, hiddenAccounts, ghl, versions, tests, variantDays, variantBookings]);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();

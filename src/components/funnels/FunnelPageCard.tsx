@@ -63,6 +63,25 @@ function SplitTestPanel({ test }: { test: SplitTest }) {
                 </p>
                 <p className="text-[11px] tabular-nums text-muted-foreground">
                   {formatCount(arm.views)} views · {formatCount(arm.leads)} {arm.leads === 1 ? "lead" : "leads"}
+                  {/* Never render an unattributed arm as "0 booked": no lp_variant on
+                      the lead means unknown, and a zero here would read as a page
+                      that books nobody. */}
+                  {arm.booked === null ? (
+                    <span title="No booking data for this arm — its leads carry no lp_variant yet">
+                      {" "}· booked not tracked
+                    </span>
+                  ) : (
+                    <span
+                      title={
+                        arm.bookedRate === null
+                          ? "Booked appointments from GoHighLevel"
+                          : `${pct(arm.bookedRate)} of this arm's GHL leads booked`
+                      }
+                    >
+                      {" "}· {formatCount(arm.booked)} booked
+                      {arm.bookedRate !== null && <> ({pct(arm.bookedRate)})</>}
+                    </span>
+                  )}
                   {arm.weight !== null && <> · {arm.weight}% of traffic</>}
                 </p>
               </div>
@@ -87,7 +106,7 @@ function SplitTestPanel({ test }: { test: SplitTest }) {
       <p className="mt-2 text-[11px] text-muted-foreground">
         {test.decided
           ? "An arm is ahead at 95% confidence — safe to call and roll out."
-          : "No arm has separated yet. Conversion rates here are counted by the page itself, not by Meta."}
+          : "No arm has separated yet. Views and leads are counted by the page itself, not by Meta; booked comes from GoHighLevel."}
       </p>
     </section>
   );

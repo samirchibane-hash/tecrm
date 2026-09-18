@@ -19,7 +19,7 @@ import type {
   PortfolioPage,
 } from "@/components/funnel/portfolioFunnel";
 import type { AngleKey, OfferKey } from "@/components/creative-performance/labels";
-import type { SplitTestRecord, VariantDayRecord } from "./useFunnelsData";
+import type { SplitTestRecord, VariantBookingRecord, VariantDayRecord } from "./useFunnelsData";
 
 /** Below this many views on an arm, a split test's rate is too noisy to read. */
 export const MIN_ARM_VIEWS = 100;
@@ -51,6 +51,14 @@ export interface SplitArm {
   leads: number;
   cvr: number | null;
   interval: { low: number; high: number } | null;
+  /**
+   * Appointments booked off this arm, from GHL. Null when the arm has no
+   * attribution at all — an arm whose leads predate lp_variant, or whose client
+   * hasn't mapped the field yet, has an *unknown* booked count, not zero.
+   */
+  booked: number | null;
+  /** Booked per lead, both counted by GHL so the ratio is from one source. */
+  bookedRate: number | null;
   /** "leader" once an arm is ahead with enough traffic; "behind" when beaten at 95%. */
   status: "leader" | "behind" | "even" | "needs_traffic";
   pValue: number | null;
@@ -146,6 +154,7 @@ function buildTest(
   record: SplitTestRecord,
   versions: FunnelPageVersion[],
   days: VariantDayRecord[],
+  bookings: VariantBookingRecord[],
 ): SplitTest {
   const byVariant = new Map<string, { views: number; leads: number }>();
   for (const d of days) {
@@ -153,6 +162,17 @@ function buildTest(
     b.views += d.views;
     b.leads += d.leads;
     byVariant.set(d.variant, b);
+  }
+
+  // Booked is kept in its own map, on purpose. An arm missing from it has no
+  // GHL attribution and must read as unknown; an arm present with 0 booked is
+  // a real zero. Defaulting to 0 would erase that difference.
+  const bookedBy = new Map<string, { leads: number; booked: number }>();
+  for (const b of bookings) {
+    const e = bookedBy.get(b.variant) ?? { leads: 0, booked: 0 };
+    e.leads += b.leads;
+    e.booked += b.booked;
+    bookedBy.set(b.variant, e);
   }
   // Every arm the test declares weights for, plus any that reported events.
   const keys = [...new Set([...Object.keys(record.weights ?? {}), ...byVariant.keys()])].sort();
@@ -162,6 +182,7 @@ function buildTest(
 
   const arms = keys.map((variant): SplitArm => {
     const b = byVariant.get(variant) ?? { views: 0, leads: 0 };
+    const crm = bookedBy.get(variant) ?? null;
     return {
       variant,
       headline: headlineFor(variant),
@@ -170,6 +191,8 @@ function buildTest(
       leads: b.leads,
       status: "needs_traffic",
       pValue: null,
+      booked: crm?.booked ?? null,
+      bookedRate: crm && crm.leads > 0 ? crm.booked / crm.leads : null,
       ...rate(b.leads, b.views),
     };
   });
@@ -199,6 +222,7 @@ export function buildFunnelsBoard({
   versions,
   tests,
   variantDays,
+  variantBookings = [],
   hidden = [],
   entryOnly = true,
 }: {
@@ -208,6 +232,7 @@ export function buildFunnelsBoard({
   versions: FunnelPageVersion[];
   tests: SplitTestRecord[];
   variantDays: VariantDayRecord[];
+  variantBookings?: VariantBookingRecord[];
   hidden?: string[];
   entryOnly?: boolean;
 }): FunnelsBoard {
@@ -256,6 +281,12 @@ export function buildFunnelsBoard({
     daysByKey.set(key, [...(daysByKey.get(key) ?? []), d]);
   }
 
+  const bookingsByKey = new Map<string, VariantBookingRecord[]>();
+  for (const b of variantBookings) {
+    const key = normalizePageUrl(b.url);
+    bookingsByKey.set(key, [...(bookingsByKey.get(key) ?? []), b]);
+  }
+
   const rows: FunnelRow[] = [];
   for (const link of links) {
     if (hidden.includes(link.account_name)) continue;
@@ -265,9 +296,16 @@ export function buildFunnelsBoard({
     const copy = detectPageCopy(link);
     const pageVersions = versionsByKey.get(key) ?? [];
     const pageDays = daysByKey.get(key) ?? [];
+    const pageBookings = bookingsByKey.get(key) ?? [];
+    const within = (t: SplitTestRecord) => (day: string) =>
+      day >= t.started_at.slice(0, 10) && (t.stopped_at === null || day <= t.stopped_at.slice(0, 10));
     const allTests = (testsByKey.get(key) ?? []).map((t) =>
-      buildTest(t, pageVersions, pageDays.filter((d) => d.day >= t.started_at.slice(0, 10) &&
-        (t.stopped_at === null || d.day <= t.stopped_at.slice(0, 10)))));
+      buildTest(
+        t,
+        pageVersions,
+        pageDays.filter((d) => within(t)(d.day)),
+        pageBookings.filter((b) => within(t)(b.day)),
+      ));
 
     rows.push({
       key,

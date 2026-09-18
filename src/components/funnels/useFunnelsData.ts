@@ -79,3 +79,43 @@ export function useVariantDaily(since: string | undefined) {
     },
   });
 }
+
+/** One arm's booked appointments for one day, as GoHighLevel recorded them. */
+export interface VariantBookingRecord {
+  url: string;
+  variant: string;
+  day: string;
+  leads: number;
+  booked: number;
+}
+
+/**
+ * Per-arm booked appointments by day, from GHL conversions.
+ *
+ * The page can report a view and an opt-in because both happen on the page.
+ * The booking does not — it happens on the GHL calendar, minutes or days later
+ * — so an arm's booked count can only come from GHL, which learns the arm from
+ * the contact's lp_variant field. Views and leads still come from
+ * `useVariantDaily`; these two sources measure different steps and are never
+ * added together.
+ */
+export function useVariantBookings(since: string | undefined) {
+  return useQuery({
+    queryKey: ["ghl-variant-bookings", since ?? "all"],
+    queryFn: async (): Promise<VariantBookingRecord[]> => {
+      let q = supabase
+        .from("ghl_conversion_variant_daily")
+        .select("url, variant, day, leads, booked");
+      if (since) q = q.gte("day", since);
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data ?? []).map((r) => ({
+        url: (r.url as string) ?? "",
+        variant: r.variant as string,
+        day: r.day as string,
+        leads: Number(r.leads ?? 0),
+        booked: Number(r.booked ?? 0),
+      }));
+    },
+  });
+}

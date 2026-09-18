@@ -997,6 +997,8 @@ export type Database = {
           deal_value: number | null
           ghl_contact_id: string
           location_id: string | null
+          lp_page: string | null
+          lp_variant: string | null
           tecrm_id: string | null
           type: string | null
         }
@@ -1012,6 +1014,8 @@ export type Database = {
           deal_value?: number | null
           ghl_contact_id: string
           location_id?: string | null
+          lp_page?: string | null
+          lp_variant?: string | null
           tecrm_id?: string | null
           type?: string | null
         }
@@ -1027,6 +1031,8 @@ export type Database = {
           deal_value?: number | null
           ghl_contact_id?: string
           location_id?: string | null
+          lp_page?: string | null
+          lp_variant?: string | null
           tecrm_id?: string | null
           type?: string | null
         }
@@ -1652,6 +1658,16 @@ export type Database = {
       }
     }
     Views: {
+      ghl_conversion_variant_daily: {
+        Row: {
+          booked: number | null
+          day: string | null
+          leads: number | null
+          url: string | null
+          variant: string | null
+        }
+        Relationships: []
+      }
       funnel_variant_daily: {
         Row: {
           account_link_id: string | null
