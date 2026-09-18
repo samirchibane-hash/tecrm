@@ -37,3 +37,31 @@ export function useFunnelRepoLinks() {
     },
   });
 }
+
+/**
+ * Every copy version each funnel page has shown, so the scorecard can say which
+ * version earned a number instead of crediting whatever copy is live today.
+ * Joined back to the page's URL, which is how the board keys pages.
+ */
+export function useFunnelPageVersions() {
+  return useQuery({
+    queryKey: ["funnel-page-versions"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("funnel_page_copy_versions")
+        .select("version, page_headline, valid_from, valid_to, account_links!inner(url)")
+        .order("valid_from", { ascending: true });
+      if (error) throw error;
+      return (data ?? []).map((row) => {
+        const link = row.account_links as unknown as { url: string } | { url: string }[];
+        return {
+          url: Array.isArray(link) ? link[0]?.url ?? "" : link.url,
+          version: row.version,
+          page_headline: row.page_headline,
+          valid_from: row.valid_from,
+          valid_to: row.valid_to,
+        };
+      });
+    },
+  });
+}

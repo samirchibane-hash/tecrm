@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -100,7 +100,6 @@ export type Database = {
       account_poc: {
         Row: {
           account_id: string
-          copy_synced_at: string | null
           created_at: string
           email: string
           id: string
@@ -108,7 +107,6 @@ export type Database = {
         }
         Insert: {
           account_id: string
-          copy_synced_at?: string | null
           created_at?: string
           email: string
           id?: string
@@ -116,7 +114,6 @@ export type Database = {
         }
         Update: {
           account_id?: string
-          copy_synced_at?: string | null
           created_at?: string
           email?: string
           id?: string
@@ -157,6 +154,21 @@ export type Database = {
           report_token?: string
           target_cpa?: number | null
           target_cpl?: number | null
+        }
+        Relationships: []
+      }
+      admin_users: {
+        Row: {
+          created_at: string
+          email: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
         }
         Relationships: []
       }
@@ -521,24 +533,98 @@ export type Database = {
           },
         ]
       }
+      creative_batches: {
+        Row: {
+          account_name: string
+          ad_angle: string
+          ad_type: string
+          created_at: string
+          file_count: number
+          gdrive_folder_id: string | null
+          gdrive_folder_url: string | null
+          id: string
+          notes: string | null
+          offer_type: string
+          template_name: string
+        }
+        Insert: {
+          account_name: string
+          ad_angle: string
+          ad_type: string
+          created_at?: string
+          file_count?: number
+          gdrive_folder_id?: string | null
+          gdrive_folder_url?: string | null
+          id?: string
+          notes?: string | null
+          offer_type: string
+          template_name: string
+        }
+        Update: {
+          account_name?: string
+          ad_angle?: string
+          ad_type?: string
+          created_at?: string
+          file_count?: number
+          gdrive_folder_id?: string | null
+          gdrive_folder_url?: string | null
+          id?: string
+          notes?: string | null
+          offer_type?: string
+          template_name?: string
+        }
+        Relationships: []
+      }
+      creative_labels: {
+        Row: {
+          account_id: string
+          ad_name: string
+          angle: string | null
+          offer: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          ad_name: string
+          angle?: string | null
+          offer?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          ad_name?: string
+          angle?: string | null
+          offer?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creative_labels_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       creative_options: {
         Row: {
+          created_at: string
           id: string
           type: string
           value: string
-          created_at: string
         }
         Insert: {
+          created_at?: string
           id?: string
           type: string
           value: string
-          created_at?: string
         }
         Update: {
+          created_at?: string
           id?: string
           type?: string
           value?: string
-          created_at?: string
         }
         Relationships: []
       }
@@ -570,38 +656,6 @@ export type Database = {
             columns: ["request_id"]
             isOneToOne: false
             referencedRelation: "creative_requests"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      creative_labels: {
-        Row: {
-          account_id: string
-          ad_name: string
-          angle: string | null
-          offer: string | null
-          updated_at: string
-        }
-        Insert: {
-          account_id: string
-          ad_name: string
-          angle?: string | null
-          offer?: string | null
-          updated_at?: string
-        }
-        Update: {
-          account_id?: string
-          ad_name?: string
-          angle?: string | null
-          offer?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "creative_labels_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -654,48 +708,6 @@ export type Database = {
           status?: string
           template_name?: string
           updated_at?: string
-        }
-        Relationships: []
-      }
-      creative_batches: {
-        Row: {
-          account_name: string
-          ad_angle: string
-          ad_type: string
-          created_at: string
-          file_count: number
-          gdrive_folder_id: string | null
-          gdrive_folder_url: string | null
-          id: string
-          notes: string | null
-          offer_type: string
-          template_name: string
-        }
-        Insert: {
-          account_name: string
-          ad_angle: string
-          ad_type: string
-          created_at?: string
-          file_count?: number
-          gdrive_folder_id?: string | null
-          gdrive_folder_url?: string | null
-          id?: string
-          notes?: string | null
-          offer_type: string
-          template_name: string
-        }
-        Update: {
-          account_name?: string
-          ad_angle?: string
-          ad_type?: string
-          created_at?: string
-          file_count?: number
-          gdrive_folder_id?: string | null
-          gdrive_folder_url?: string | null
-          id?: string
-          notes?: string | null
-          offer_type?: string
-          template_name?: string
         }
         Relationships: []
       }
@@ -801,6 +813,53 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funnel_page_copy_versions: {
+        Row: {
+          account_link_id: string
+          blob_sha: string | null
+          created_at: string
+          id: string
+          page_cta: string | null
+          page_headline: string | null
+          page_subhead: string | null
+          valid_from: string
+          valid_to: string | null
+          version: number
+        }
+        Insert: {
+          account_link_id: string
+          blob_sha?: string | null
+          created_at?: string
+          id?: string
+          page_cta?: string | null
+          page_headline?: string | null
+          page_subhead?: string | null
+          valid_from?: string
+          valid_to?: string | null
+          version: number
+        }
+        Update: {
+          account_link_id?: string
+          blob_sha?: string | null
+          created_at?: string
+          id?: string
+          page_cta?: string | null
+          page_headline?: string | null
+          page_subhead?: string | null
+          valid_from?: string
+          valid_to?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funnel_page_copy_versions_account_link_id_fkey"
+            columns: ["account_link_id"]
+            isOneToOne: false
+            referencedRelation: "account_links"
             referencedColumns: ["id"]
           },
         ]
@@ -1511,11 +1570,31 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_github_token: { Args: never; Returns: string }
       github_token_status: { Args: never; Returns: Json }
       is_admin: { Args: never; Returns: boolean }
+      link_github_commits: { Args: never; Returns: number }
+      link_stripe_customers: { Args: never; Returns: number }
+      normalize_link_url: { Args: { u: string }; Returns: string }
+      record_funnel_page_copy: {
+        Args: {
+          p_account_link_id: string
+          p_blob_sha: string
+          p_cta: string
+          p_headline: string
+          p_observed_at?: string
+          p_subhead: string
+        }
+        Returns: number
+      }
       report_account_id: { Args: never; Returns: string }
       report_account_name: { Args: never; Returns: string }
       set_github_token: { Args: { token: string }; Returns: undefined }
+      sync_funnel_pages: {
+        Args: { p_pages: Json; p_site_id: string }
+        Returns: Json
+      }
+      verify_cron_secret: { Args: { secret: string }; Returns: boolean }
     }
     Enums: {
       update_category:
@@ -1540,12 +1619,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1569,11 +1648,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1594,11 +1673,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1619,11 +1698,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1636,11 +1715,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

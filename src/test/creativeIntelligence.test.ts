@@ -6,7 +6,13 @@ import { computeBenchmark, judge, scoreAds, targetFor } from "@/components/creat
 import { breakdown } from "@/components/creative-performance/breakdowns";
 import { matchGhlByAdName } from "@/components/creative-performance/ghl";
 import { analyzeLandingPages, funnelSteps } from "@/components/funnel/funnelMath";
-import { analyzePortfolioFunnel, headlineKey, type FunnelPageCopy } from "@/components/funnel/portfolioFunnel";
+import {
+  analyzePortfolioFunnel,
+  headlineKey,
+  resolveCopyVersion,
+  type FunnelPageCopy,
+  type FunnelPageVersion,
+} from "@/components/funnel/portfolioFunnel";
 import type { PortfolioAccount } from "@/components/creative-performance/useCreativePerformance";
 import { makeAd } from "./fixtures";
 
@@ -309,6 +315,90 @@ describe("portfolio funnel", () => {
     accountName: name,
     ads,
     error: null,
+  });
+
+  const version = (
+    url: string,
+    n: number,
+    headline: string,
+    valid_from: string,
+    valid_to: string | null = null,
+  ): FunnelPageVersion => ({ url, version: n, page_headline: headline, valid_from, valid_to });
+
+  describe("copy versions", () => {
+    const V1 = version("https://k.co/lp-1", 1, "Old promise", "2026-08-01T00:00:00Z", "2026-09-10T00:00:00Z");
+    const V2 = version("https://k.co/lp-1", 2, "New promise", "2026-09-10T00:00:00Z");
+
+    it("reports one version when the whole period ran on it", () => {
+      const r = resolveCopyVersion([V1, V2], "2026-09-11", "2026-09-17");
+      expect(r).toMatchObject({ version: 2, spanned: 1, previousHeadline: null });
+    });
+
+    it("flags a period that straddles a rewrite, and names what it used to say", () => {
+      const r = resolveCopyVersion([V1, V2], "2026-09-01", "2026-09-17");
+      expect(r).toMatchObject({ version: 2, spanned: 2, previousHeadline: "Old promise" });
+    });
+
+    it("reports the old version for a period that ended before the rewrite", () => {
+      const r = resolveCopyVersion([V1, V2], "2026-08-05", "2026-08-20");
+      expect(r).toMatchObject({ version: 1, spanned: 1 });
+    });
+
+    it("counts a version opened on the final day of the period as spanned", () => {
+      const r = resolveCopyVersion([V1, V2], "2026-09-01", "2026-09-10");
+      expect(r.spanned).toBe(2);
+    });
+
+    it("claims nothing for a page with no history rather than inventing v1", () => {
+      expect(resolveCopyVersion([], "2026-09-01", "2026-09-17"))
+        .toMatchObject({ version: null, spanned: 0 });
+    });
+
+    // The seeded v1 carries the day the sync first *read* the page, which is long
+    // after it went live. Taking that literally would leave the period with no
+    // overlapping version and credit the whole 30 days to the copy that replaced
+    // it — the misattribution the whole feature exists to prevent.
+    it("credits the period to v1 when the only history starts after the period ended", () => {
+      const seededV1 = version("https://k.co/lp-1", 1, "Old promise", "2026-09-18T02:11:00Z", "2026-09-18T03:28:00Z");
+      const newV2 = version("https://k.co/lp-1", 2, "New promise", "2026-09-18T03:28:00Z");
+      const r = resolveCopyVersion([seededV1, newV2], "2026-08-19", "2026-09-17");
+      expect(r.version).toBe(1);
+      expect(r.spanned).toBe(1);
+      expect(r.sinceIsFirstSeen).toBe(true);
+    });
+
+    it("marks a first-seen date as first-seen, and a genuine go-live as not", () => {
+      expect(resolveCopyVersion([V1, V2], "2026-08-05", "2026-08-20").sinceIsFirstSeen).toBe(true);
+      expect(resolveCopyVersion([V1, V2], "2026-09-11", "2026-09-17").sinceIsFirstSeen).toBe(false);
+    });
+
+    it("marks the page and its pooled headline when the period mixes versions", () => {
+      const board = analyzePortfolioFunnel(
+        [account("a1", "Kinetico", [adTo("x", "https://k.co/lp-1", 1000, 40, 1000)])],
+        [{ id: "a1", account_name: "Kinetico", target_cpl: 50 }],
+        [link("Kinetico", "https://k.co/lp-1", "LP 1", FREE_TEST)],
+        [],
+        { byAccount: new Map(), since: "2026-09-01", until: "2026-09-17" },
+        [V1, V2],
+      );
+      expect(board.mixedCopyPages).toBe(1);
+      expect(board.pages[0]).toMatchObject({ version: 2, spanned: 2 });
+      expect(board.headlines[0].mixedPages).toBe(1);
+    });
+
+    it("leaves the board clean when no page changed inside the period", () => {
+      const board = analyzePortfolioFunnel(
+        [account("a1", "Kinetico", [adTo("x", "https://k.co/lp-1", 1000, 40, 1000)])],
+        [{ id: "a1", account_name: "Kinetico", target_cpl: 50 }],
+        [link("Kinetico", "https://k.co/lp-1", "LP 1", FREE_TEST)],
+        [],
+        { byAccount: new Map(), since: "2026-09-11", until: "2026-09-17" },
+        [V1, V2],
+      );
+      expect(board.mixedCopyPages).toBe(0);
+      expect(board.headlines[0].mixedPages).toBe(0);
+      expect(board.pages[0].version).toBe(2);
+    });
   });
 
   it("normalizes a headline so the same promise in two markets is one row", () => {

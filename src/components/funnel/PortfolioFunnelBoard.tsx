@@ -24,7 +24,7 @@ import { StatusPill } from "@/components/StatusPill";
 import { Dash, VerdictPill } from "@/components/creative-performance/CreativeBits";
 import { ANGLE_LABEL, OFFER_LABEL } from "@/components/creative-performance/labels";
 import { usePortfolioCreatives, type CreativeRange } from "@/components/creative-performance/useCreativePerformance";
-import { useFunnelRepoLinks } from "@/components/funnel-pages/useAccountLinks";
+import { useFunnelPageVersions, useFunnelRepoLinks } from "@/components/funnel-pages/useAccountLinks";
 import { useAllGhlConversions } from "@/hooks/useAccountGhlConversions";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { formatCount, formatUsd } from "@/lib/format";
@@ -49,6 +49,47 @@ const GROUP_STATUS: Record<CopyGroup["status"], { status: "success" | "danger" |
   even: { status: "neutral", label: "Too close to call", help: "Not significantly different from the best one yet" },
   needs_traffic: { status: "neutral", label: "Needs traffic", help: `Fewer than ${MIN_GROUP_VIEWS} pooled page views: too few to rank` },
 };
+
+const versionDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+/**
+ * Which copy version earned this row, and whether it's only one. A page
+ * rewritten mid-period has its views split between two headlines, so the
+ * version badge turns into a warning rather than a neutral label.
+ */
+function CopyVersion({ page }: { page: PortfolioPage }) {
+  if (page.version === null) return null;
+
+  if (page.spanned > 1) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning"
+        title={
+          `Rewritten mid-period: v${page.version} went live ${versionDate(page.since!)}, so these figures mix ` +
+          `${page.spanned} versions of the page` +
+          (page.previousHeadline ? `. Before that it read “${page.previousHeadline}”` : "")
+        }
+      >
+        <AlertTriangle className="h-2.5 w-2.5" aria-hidden />
+        v{page.version} · mixed
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+      title={
+        page.sinceIsFirstSeen
+          ? `Copy version ${page.version}, the earliest this dashboard has on record (first read ${versionDate(page.since!)}). ` +
+            `Every figure in this row was earned by it, though it may have been live for longer than the history shows.`
+          : `Copy version ${page.version}, live since ${versionDate(page.since!)}. Every figure in this row was earned by it.`
+      }
+    >
+      v{page.version}
+    </span>
+  );
+}
 
 /** A page's own hero headline — the thing the scorecard exists to compare. */
 function Headline({ page }: { page: PortfolioPage }) {
@@ -146,6 +187,7 @@ function PageIdentity({ page }: { page: PortfolioPage }) {
         >
           {page.accountName}
         </Link>
+        <CopyVersion page={page} />
       </div>
       <Headline page={page} />
       <OfferTags page={page} />
@@ -298,6 +340,19 @@ function GroupRow({ group, scaleMax }: { group: CopyGroup; scaleMax: number }) {
             {group.clients.length === 1 ? "client" : "clients"} · {formatCount(group.lpv)} views
             {group.costPerLead !== null && <> · {formatUsd(group.costPerLead)}/lead</>}
           </span>
+          {group.mixedPages > 0 && (
+            <span
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-warning"
+              title={
+                `${group.mixedPages} of these ${group.pages} pages were rewritten inside this period, so some of ` +
+                `the pooled views were earned by a different headline than the one named here. Treat the rate as ` +
+                `indicative until a full period runs on the current copy.`
+              }
+            >
+              <AlertTriangle className="h-2.5 w-2.5" aria-hidden />
+              {group.mixedPages} rewritten mid-period
+            </span>
+          )}
         </div>
       </div>
       <div className="w-[120px] shrink-0">
@@ -402,6 +457,7 @@ export function PortfolioFunnelBoard({
 }) {
   const { data, isLoading, isError, error, refetch, isFetching } = usePortfolioCreatives(range);
   const { data: links = [], isLoading: linksLoading } = useFunnelRepoLinks();
+  const { data: versions = [] } = useFunnelPageVersions();
   const period = data?.accounts.find((a) => a.period)?.period ?? null;
   const { data: ghlRows = [] } = useAllGhlConversions(period?.since ?? "");
 
@@ -415,8 +471,8 @@ export function PortfolioFunnelBoard({
   }, [ghlRows, period]);
 
   const board = useMemo(
-    () => analyzePortfolioFunnel(data?.accounts ?? [], accounts, links, hiddenAccounts, ghl),
-    [data, accounts, links, hiddenAccounts, ghl],
+    () => analyzePortfolioFunnel(data?.accounts ?? [], accounts, links, hiddenAccounts, ghl, versions),
+    [data, accounts, links, hiddenAccounts, ghl, versions],
   );
 
   return (
@@ -470,6 +526,21 @@ export function PortfolioFunnelBoard({
               stillLive="Every other client's funnel"
               message={`${board.unreadable.join(", ")}: the Meta token can't read ${board.unreadable.length === 1 ? "this ad account" : "these ad accounts"}. Assign them to the system user in Meta Business Settings.`}
             />
+          )}
+          {board.mixedCopyPages > 0 && (
+            <Alert className="border-warning/40 bg-warning/10">
+              <AlertTriangle className="h-4 w-4 text-warning" />
+              <AlertTitle className="text-sm">
+                New page version{board.mixedCopyPages === 1 ? "" : "s"} inside this period
+              </AlertTitle>
+              <AlertDescription className="text-xs text-muted-foreground">
+                {board.mixedCopyPages} {board.mixedCopyPages === 1 ? "page was" : "pages were"} rewritten while this
+                period was running, so {board.mixedCopyPages === 1 ? "its" : "their"} views and leads were earned by
+                more than one version of the copy. Those rows are marked <span className="font-medium">mixed</span>,
+                and any pooled headline they feed is indicative only — the numbers are not yet a read on the current
+                version. A full period on the new copy settles it.
+              </AlertDescription>
+            </Alert>
           )}
           {board.gaps.length > 0 && (
             <Alert className="border-warning/40 bg-warning/10">

@@ -148,7 +148,7 @@ async function syncFunnelPages(db: ReturnType<typeof createClient>, token: strin
     .eq("source", "funnel_repo");
   const seen = new Map((known ?? []).map((k) => [`${k.repo}:${k.repo_path}`, k]));
 
-  const totals = { sites: sites?.length ?? 0, pages: 0, added: 0, adopted: 0, removed: 0 };
+  const totals = { sites: sites?.length ?? 0, pages: 0, added: 0, adopted: 0, removed: 0, versioned: 0 };
   const trees = new Map<string, GitHubObject[]>();
 
   for (const site of sites ?? []) {
@@ -165,7 +165,7 @@ async function syncFunnelPages(db: ReturnType<typeof createClient>, token: strin
     const entries = trees.get(site.repo)!.filter((e) =>
       e.type === "blob" && e.path.startsWith(prefix) && /^[^/]+\/index\.html$/.test(e.path.slice(prefix.length)));
 
-    const pages = await mapLimit(entries, 5, async (e) => {
+    const parsed = await mapLimit(entries, 5, async (e) => {
       const slug = e.path.slice(prefix.length).split("/")[0];
       const prev = seen.get(`${site.repo}:${e.path}`);
       // Unchanged pages keep the copy the run that read them extracted, along
@@ -178,6 +178,7 @@ async function syncFunnelPages(db: ReturnType<typeof createClient>, token: strin
         page_cta: prev?.page_cta ?? null,
         copy_synced_at: prev?.copy_synced_at ?? null,
       };
+      let reread = false;
       if (!prev || prev.blob_sha !== e.sha || !prev.copy_synced_at) {
         const { body } = await gh(`/repos/${site.repo}/git/blobs/${e.sha}`, token);
         const bytes = Uint8Array.from(atob(String(body.content ?? "").replace(/\n/g, "")), (c) => c.charCodeAt(0));
@@ -190,24 +191,73 @@ async function syncFunnelPages(db: ReturnType<typeof createClient>, token: strin
           page_cta: hero.cta,
           copy_synced_at: new Date().toISOString(),
         };
+        reread = true;
       }
       return {
-        repo_path: e.path,
-        url: `https://${site.domain}/${slug}`,
-        label: pageLabel(slug),
-        blob_sha: e.sha,
-        ...read,
+        reread,
+        page: {
+          repo_path: e.path,
+          url: `https://${site.domain}/${slug}`,
+          label: pageLabel(slug),
+          blob_sha: e.sha,
+          ...read,
+        },
       };
     });
 
+    const pages = parsed.map((p) => p.page);
     const { data: result, error: syncError } = await db.rpc("sync_funnel_pages", { p_site_id: site.id, p_pages: pages });
     if (syncError) throw new Error(`sync_funnel_pages ${site.root_dir}: ${syncError.message}`);
     totals.pages += pages.length;
     totals.added += result?.added ?? 0;
     totals.adopted += result?.adopted ?? 0;
     totals.removed += result?.removed ?? 0;
+    totals.versioned += await recordCopyVersions(db, site.repo, parsed);
   }
   return totals;
+}
+
+/**
+ * Keep the copy-version history in step with what this run read.
+ *
+ * Only pages whose blob was actually re-read can have new copy, so unchanged
+ * pages are skipped entirely. `record_funnel_page_copy` is itself idempotent —
+ * it opens a new version only when the headline, subhead or offer line really
+ * differs, so a blob that changed for an unrelated reason (a pixel id, a
+ * script tag) does not invent a version the page never showed.
+ */
+async function recordCopyVersions(
+  db: ReturnType<typeof createClient>,
+  repo: string,
+  parsed: { reread: boolean; page: Record<string, unknown> }[],
+) {
+  const changed = parsed.filter((p) => p.reread && p.page.page_headline);
+  if (changed.length === 0) return 0;
+
+  const { data: links, error } = await db.from("account_links")
+    .select("id, repo_path")
+    .eq("source", "funnel_repo")
+    .eq("repo", repo)
+    .in("repo_path", changed.map((p) => String(p.page.repo_path)));
+  if (error) throw new Error(`copy versions lookup: ${error.message}`);
+
+  const idByPath = new Map((links ?? []).map((l) => [l.repo_path, l.id]));
+  let versioned = 0;
+  for (const { page } of changed) {
+    const id = idByPath.get(String(page.repo_path));
+    if (!id) continue; // page didn't land in account_links (site not registered)
+    const { error: rpcError } = await db.rpc("record_funnel_page_copy", {
+      p_account_link_id: id,
+      p_headline: page.page_headline ?? null,
+      p_subhead: page.page_subhead ?? null,
+      p_cta: page.page_cta ?? null,
+      p_blob_sha: page.blob_sha ?? null,
+      p_observed_at: page.copy_synced_at ?? new Date().toISOString(),
+    });
+    if (rpcError) throw new Error(`record_funnel_page_copy ${page.repo_path}: ${rpcError.message}`);
+    versioned += 1;
+  }
+  return versioned;
 }
 
 serve(async (req) => {

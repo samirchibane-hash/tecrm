@@ -163,6 +163,17 @@ one shared query so the page makes a single Meta call. Pure logic lives in
 - The cross-client board pools pages by headline and by offer to rank what converts. That
   pooling mixes markets and audiences, so it is presented as the next test to run, never a
   verdict, and a pooled row under `MIN_GROUP_VIEWS` reads "Needs traffic" instead of ranking.
+- **A page's numbers belong to the copy version that earned them** (`funnel_page_copy_versions`,
+  since 2026-09-17). `account_links` holds only what a page says *today*, so without history a
+  period spanning a rewrite would credit the whole conversion rate to the new headline.
+  Each distinct hero copy gets a row with the window it was live for (`valid_to` NULL = live
+  now); `resolveCopyVersion` counts the versions overlapping the reporting period, and a page
+  with more than one is badged **mixed**, feeds `mixedPages` on every pooled row it belongs to,
+  and raises a board-level notice. Only `github-sync` writes versions, through the
+  `record_funnel_page_copy` RPC (service_role only — it is security definer), which opens a new
+  version *only when the headline, subhead or offer line actually differs*: a blob whose sha
+  moved for a pixel id or a script is not a new version. Never backfill a `valid_from` to make
+  a period look clean — an unknown version is `null`, not v1.
 - The function returns paused ads that spent in the period only to callers that send `v: 2`.
 - The Performance dashboard is performance only: creative requests live on `/creatives` and
   tasks on `/tasks`, and neither is duplicated back onto the dashboard.
@@ -186,6 +197,9 @@ Each run is logged to a `*_sync_runs` table; screens show freshness via `SyncSta
   `funnel_sites` folder into `account_links` and parses its HTML for the title and hero
   copy. A page's blob is only re-read when its sha changed or `copy_synced_at` is NULL,
   so unchanged pages cost no API calls and pages predating the copy columns backfill once.
+  Every re-read page is then passed to `record_funnel_page_copy`, which appends to
+  `funnel_page_copy_versions` when the copy really changed; the run's `counts.funnel_pages`
+  reports it as `versioned`.
 
 ## Working agreement
 

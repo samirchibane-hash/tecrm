@@ -46,7 +46,41 @@ export interface FunnelPageCopy {
   copy_synced_at: string | null;
 }
 
-export interface PortfolioPage extends Judgement {
+/**
+ * One copy version of a page: what it said, and the window it said it for.
+ * `validTo` null means this is the version serving now.
+ */
+export interface FunnelPageVersion {
+  url: string;
+  version: number;
+  page_headline: string | null;
+  valid_from: string;
+  valid_to: string | null;
+}
+
+/**
+ * Which copy version earned this page's numbers — and whether it's only one.
+ * A period that straddles a rewrite reports two different pages as one, so the
+ * scorecard has to say so rather than pin the whole rate on today's headline.
+ */
+export interface PageCopyVersion {
+  /** Version live at the end of the period. Null when the page has no history yet. */
+  version: number | null;
+  /** When that version went live, or was first observed — see `sinceIsFirstSeen`. */
+  since: string | null;
+  /**
+   * True when `since` is only the first time the sync read this copy, not the day
+   * it went live. Always true for a page's earliest version, because history
+   * starts when the sync starts. The UI must say "first seen", never "live since".
+   */
+  sinceIsFirstSeen: boolean;
+  /** Versions with any life inside the period — more than one means mixed numbers. */
+  spanned: number;
+  /** The headline the *previous* version showed, when the period straddles the change. */
+  previousHeadline: string | null;
+}
+
+export interface PortfolioPage extends Judgement, PageCopyVersion {
   key: string;             // normalized URL
   accountId: string;
   accountName: string;
@@ -105,6 +139,12 @@ export interface CopyGroup {
   /** Compared with the best-converting group that has enough views. */
   status: "best" | "behind" | "even" | "needs_traffic";
   pValue: number | null;
+  /**
+   * Pages in this group whose copy changed mid-period, so part of these views
+   * were earned by a headline that is not the one named here. Any number above
+   * zero makes the row indicative only.
+   */
+  mixedPages: number;
 }
 
 export interface PortfolioFunnel {
@@ -119,6 +159,11 @@ export interface PortfolioFunnel {
   unreadable: string[];
   /** Pages with ad traffic whose copy hasn't been synced, so they carry no headline. */
   unsynced: number;
+  /**
+   * Pages whose copy changed inside the period, so their figures were earned by
+   * more than one version. The board says so rather than crediting today's copy.
+   */
+  mixedCopyPages: number;
   /** CRM leads no page could be attributed to: no ad name, and the client runs several pages. */
   crmUnallocated: number;
   clients: number;
@@ -153,6 +198,56 @@ export function headlineKey(headline: string): string {
     .replace(/[^a-z0-9$. ]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * Which copy version was live when this page earned its numbers.
+ *
+ * A version counts as "spanned" when its own life overlaps the reporting
+ * window at all, so two or more means the period mixes headlines. With no
+ * period bounds (nothing to straddle) or no history for the page, the answer
+ * is a single unknown version rather than a false "one version" claim.
+ */
+export function resolveCopyVersion(
+  versions: FunnelPageVersion[],
+  since: string | undefined,
+  until: string | undefined,
+): PageCopyVersion {
+  const none = { version: null, since: null, sinceIsFirstSeen: false, spanned: 0, previousHeadline: null };
+  if (versions.length === 0) return none;
+
+  const ordered = [...versions].sort((a, b) => a.valid_from.localeCompare(b.valid_from));
+  const live = ordered[ordered.length - 1];
+  const firstSeen = (v: FunnelPageVersion) => v === ordered[0];
+
+  if (!since || !until) {
+    return {
+      version: live.version,
+      since: live.valid_from,
+      sinceIsFirstSeen: firstSeen(live),
+      spanned: 1,
+      previousHeadline: null,
+    };
+  }
+
+  // Meta's `until` is a date; a version opened that day still overlaps it.
+  const end = `${until}T23:59:59.999Z`;
+  // The earliest version we hold reaches back indefinitely: history begins when
+  // the sync began, not when the page did, so its recorded `valid_from` is a
+  // first sighting. Treating it as a start date would hand its traffic to the
+  // version that replaced it — the exact misattribution this exists to stop.
+  const startOf = (v: FunnelPageVersion) => (firstSeen(v) ? "" : v.valid_from);
+  const overlapping = ordered.filter((v) => startOf(v) <= end && (v.valid_to === null || v.valid_to >= since));
+  const current = overlapping[overlapping.length - 1] ?? ordered[0];
+  const prior = overlapping.length > 1 ? overlapping[overlapping.length - 2] : null;
+
+  return {
+    version: current.version,
+    since: current.valid_from,
+    sinceIsFirstSeen: firstSeen(current),
+    spanned: overlapping.length,
+    previousHeadline: prior?.page_headline ?? null,
+  };
 }
 
 function rate(leads: number, lpv: number) {
@@ -197,6 +292,7 @@ function groupPages(
     return {
       key,
       label: labelOf(rows[0]),
+      mixedPages: rows.filter((r) => r.spanned > 1).length,
       pages: rows.length,
       // Sorted, not in page order: this is a tooltip list, and it shouldn't
       // reshuffle when the ranking changes.
@@ -308,12 +404,19 @@ export function analyzePortfolioFunnel(
   links: FunnelPageCopy[],
   hidden: string[],
   ghl: PortfolioGhl = { byAccount: new Map(), since: undefined, until: undefined },
+  versions: FunnelPageVersion[] = [],
 ): PortfolioFunnel {
   const copyByAccount = new Map<string, Map<string, FunnelPageCopy>>();
   for (const l of links) {
     const forAccount = copyByAccount.get(l.account_name) ?? new Map<string, FunnelPageCopy>();
     forAccount.set(normalizePageUrl(l.url), l);
     copyByAccount.set(l.account_name, forAccount);
+  }
+
+  const versionsByPage = new Map<string, FunnelPageVersion[]>();
+  for (const v of versions) {
+    const key = normalizePageUrl(v.url);
+    versionsByPage.set(key, [...(versionsByPage.get(key) ?? []), v]);
   }
 
   const pages: PortfolioPage[] = [];
@@ -375,6 +478,7 @@ export function analyzePortfolioFunnel(
             : null,
         crmLeads: 0,
         crmInferred: false,
+        ...resolveCopyVersion(versionsByPage.get(key) ?? [], ghl.since, ghl.until),
         ...rate(leads, lpv),
         ...verdict,
       });
@@ -409,6 +513,7 @@ export function analyzePortfolioFunnel(
     gaps,
     unreadable,
     unsynced,
+    mixedCopyPages: pages.filter((p) => p.spanned > 1).length,
     crmUnallocated,
     clients: clients.size,
     spend: sum(pages, (p) => p.spend),
