@@ -828,6 +828,7 @@ export type Database = {
           page_subhead: string | null
           valid_from: string
           valid_to: string | null
+          variant: string
           version: number
         }
         Insert: {
@@ -840,6 +841,7 @@ export type Database = {
           page_subhead?: string | null
           valid_from?: string
           valid_to?: string | null
+          variant?: string
           version: number
         }
         Update: {
@@ -852,6 +854,7 @@ export type Database = {
           page_subhead?: string | null
           valid_from?: string
           valid_to?: string | null
+          variant?: string
           version?: number
         }
         Relationships: [
@@ -895,6 +898,88 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funnel_split_tests: {
+        Row: {
+          account_link_id: string
+          created_at: string
+          id: string
+          name: string | null
+          started_at: string
+          status: string
+          stopped_at: string | null
+          weights: Json
+          winner_variant: string | null
+        }
+        Insert: {
+          account_link_id: string
+          created_at?: string
+          id?: string
+          name?: string | null
+          started_at?: string
+          status?: string
+          stopped_at?: string | null
+          weights?: Json
+          winner_variant?: string | null
+        }
+        Update: {
+          account_link_id?: string
+          created_at?: string
+          id?: string
+          name?: string | null
+          started_at?: string
+          status?: string
+          stopped_at?: string | null
+          weights?: Json
+          winner_variant?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funnel_split_tests_account_link_id_fkey"
+            columns: ["account_link_id"]
+            isOneToOne: false
+            referencedRelation: "account_links"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funnel_variant_events: {
+        Row: {
+          account_link_id: string
+          ad_name: string | null
+          event: string
+          id: number
+          occurred_at: string
+          session_id: string
+          variant: string
+        }
+        Insert: {
+          account_link_id: string
+          ad_name?: string | null
+          event: string
+          id?: never
+          occurred_at?: string
+          session_id: string
+          variant: string
+        }
+        Update: {
+          account_link_id?: string
+          ad_name?: string | null
+          event?: string
+          id?: never
+          occurred_at?: string
+          session_id?: string
+          variant?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funnel_variant_events_account_link_id_fkey"
+            columns: ["account_link_id"]
+            isOneToOne: false
+            referencedRelation: "account_links"
             referencedColumns: ["id"]
           },
         ]
@@ -1567,7 +1652,24 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      funnel_variant_daily: {
+        Row: {
+          account_link_id: string | null
+          day: string | null
+          leads: number | null
+          variant: string | null
+          views: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funnel_variant_events_account_link_id_fkey"
+            columns: ["account_link_id"]
+            isOneToOne: false
+            referencedRelation: "account_links"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       get_github_token: { Args: never; Returns: string }
@@ -1584,6 +1686,7 @@ export type Database = {
           p_headline: string
           p_observed_at?: string
           p_subhead: string
+          p_variant?: string
         }
         Returns: number
       }
