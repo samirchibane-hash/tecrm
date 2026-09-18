@@ -94,6 +94,11 @@ select account_link_id,
 from public.funnel_variant_events
 group by account_link_id, variant, occurred_at::date;
 
+-- A view runs with its owner's rights unless told otherwise, which would let it
+-- hand out the very rows the table's RLS withholds. It must read as the caller.
+alter view public.funnel_variant_daily set (security_invoker = on);
+revoke all on public.funnel_variant_daily from anon;
+
 -- ── RLS ─────────────────────────────────────────────────────────────────────
 alter table public.funnel_split_tests enable row level security;
 alter table public.funnel_variant_events enable row level security;
