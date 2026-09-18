@@ -25,7 +25,7 @@ import { landingPageKey } from "@/components/creative-performance/breakdowns";
 import { adNameKey, type GhlConversionLite } from "@/components/creative-performance/ghl";
 import { OFFER_LABEL, type AngleKey, type OfferKey } from "@/components/creative-performance/labels";
 import type { CreativeAd, PortfolioAccount } from "@/components/creative-performance/useCreativePerformance";
-import { computeBenchmark, isTrackingGap, judge, type Benchmark, type Judgement } from "@/components/creative-performance/verdicts";
+import { computeBenchmark, isTrackingGap, judge, type Benchmark, type Judgement, type Verdict } from "@/components/creative-performance/verdicts";
 import { twoProportionPValue, wilsonInterval } from "@/lib/stats";
 import { normalizePageUrl, pagePath } from "@/lib/urls";
 import { detectPageCopy } from "./funnelMath";
@@ -184,6 +184,11 @@ export interface CopyGroup {
 
 export interface PortfolioFunnel {
   pages: PortfolioPage[];
+  /**
+   * The rows the ranked list renders: one per page, or one per copy version
+   * where a page was rewritten inside the period.
+   */
+  ranked: RankedEntry[];
   winners: PortfolioPage[];
   wasters: PortfolioPage[];
   headlines: CopyGroup[];
@@ -438,17 +443,121 @@ function groupPages(
  *   2. Pages that can't be ranked — a tracking gap, or a client with no
  *      benchmark to measure against. Last, because unknown is not bad.
  */
-function rankTier(p: PortfolioPage): number {
+function rankTier(p: { verdict: Verdict; benchmarkIndex: number | null; benchmark: Benchmark | null; spend: number }): number {
   if (p.verdict === "unscored") return 2;
   if (p.benchmarkIndex !== null) return 0;
   return p.benchmark && p.spend > 0 ? 1 : 2;
 }
 
-function compareRank(a: PortfolioPage, b: PortfolioPage): number {
+function compareRank(
+  a: { verdict: Verdict; benchmarkIndex: number | null; benchmark: Benchmark | null; spend: number },
+  b: { verdict: Verdict; benchmarkIndex: number | null; benchmark: Benchmark | null; spend: number },
+): number {
   const tier = rankTier(a) - rankTier(b);
   if (tier !== 0) return tier;
   if (rankTier(a) === 0) return a.benchmarkIndex! - b.benchmarkIndex!;
   return b.spend - a.spend;
+}
+
+/**
+ * One line in the ranked list. A page that ran a single copy version in the
+ * period is one row; a page that was rewritten mid-period becomes one row per
+ * version, each judged only on what it earned while it was live.
+ *
+ * Splitting them is the point: a version that launched today, put next to a
+ * month of its predecessor's spend, reads as that predecessor's verdict under
+ * the new headline — which is precisely backwards.
+ */
+export interface RankedEntry extends Judgement {
+  /** Unique per rendered row: the page key, plus the version when split. */
+  key: string;
+  page: PortfolioPage;
+  /** Null when this row is the page as a whole (only one version ran). */
+  version: number | null;
+  variant: string | null;
+  /** "live" = serving now, "off" = replaced. Null on a whole-page row. */
+  versionStatus: "live" | "off" | null;
+  headline: string | null;
+  /** Days this version was live inside the period. Null on a whole-page row. */
+  days: number | null;
+  spend: number;
+  lpv: number;
+  leads: number;
+  cvr: number | null;
+  interval: { low: number; high: number } | null;
+  benchmark: Benchmark | null;
+  benchmarkIndex: number | null;
+  /** This version owns the changeover day, so its totals are ±1 day of exact. */
+  hasSplitDay: boolean;
+}
+
+/**
+ * Expand pages into the rows the ranked list shows, then order them together.
+ * Versions of one page compete in the same ranking as every other page, which
+ * is the only way "best to worst" stays a single honest ordering.
+ */
+export function rankEntries(pages: PortfolioPage[]): RankedEntry[] {
+  const entries: RankedEntry[] = [];
+
+  for (const page of pages) {
+    if (page.versionRows.length < 2) {
+      entries.push({
+        key: page.key,
+        page,
+        version: page.version,
+        variant: null,
+        versionStatus: null,
+        headline: page.headline,
+        days: null,
+        spend: page.spend,
+        lpv: page.lpv,
+        leads: page.leads,
+        cvr: page.cvr,
+        interval: page.interval,
+        benchmark: page.benchmark,
+        benchmarkIndex: page.benchmarkIndex,
+        hasSplitDay: false,
+        verdict: page.verdict,
+        costPer: page.costPer,
+        expected: page.expected,
+        excessSpend: page.excessSpend,
+        savings: page.savings,
+        reason: page.reason,
+      });
+      continue;
+    }
+
+    for (const v of page.versionRows) {
+      // Judged against the same client benchmark the page uses, on this
+      // version's own spend and leads — never the page's blended totals.
+      const verdict = judge({ spend: v.spend, results: v.leads }, page.benchmark, "leads", {
+        trackingGap: page.verdict === "unscored",
+      });
+      entries.push({
+        key: `${page.key}#v${v.version}`,
+        page,
+        version: v.version,
+        variant: null,
+        versionStatus: v.status,
+        headline: v.headline,
+        days: v.days,
+        spend: v.spend,
+        lpv: v.lpv,
+        leads: v.leads,
+        cvr: v.cvr,
+        interval: v.interval,
+        benchmark: page.benchmark,
+        benchmarkIndex:
+          page.benchmark && verdict.costPer !== null && verdict.verdict !== "unscored"
+            ? verdict.costPer / page.benchmark.costPer
+            : null,
+        hasSplitDay: v.hasSplitDay,
+        ...verdict,
+      });
+    }
+  }
+
+  return entries.sort(compareRank);
 }
 
 /** The CRM's own leads for the period, per account id. */
@@ -629,6 +738,7 @@ export function analyzePortfolioFunnel(
 
   return {
     pages,
+    ranked: rankEntries(pages),
     winners,
     wasters,
     headlines: groupPages(

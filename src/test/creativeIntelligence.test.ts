@@ -412,6 +412,60 @@ describe("portfolio funnel", () => {
       });
     });
 
+    describe("ranked rows", () => {
+      const withDays = (days: { date: string; spend: number; lpv: number; leads: number }[]) =>
+        analyzePortfolioFunnel(
+          [{
+            accountId: "a1",
+            accountName: "Kinetico",
+            ads: [adTo("x", "https://k.co/lp-1", days.reduce((s, d) => s + d.spend, 0), days.reduce((s, d) => s + d.leads, 0), days.reduce((s, d) => s + d.lpv, 0))],
+            daily: days.map((d) => ({ adId: "x", date: d.date, spend: d.spend, linkClicks: d.lpv, landingPageViews: d.lpv, webLeads: d.leads })),
+            error: null,
+          }],
+          [{ id: "a1", account_name: "Kinetico", target_cpl: 50 }],
+          [link("Kinetico", "https://k.co/lp-1", "LP 1", FREE_TEST)],
+          [],
+          { byAccount: new Map(), since: "2026-09-01", until: "2026-09-17" },
+          [V1, V2],
+        );
+
+      it("gives a rewritten page one row per version, each judged on its own spend", () => {
+        // V1 runs to Sep 10; V2 from Sep 10. Cheap leads before, dear after.
+        const board = withDays([
+          { date: "2026-09-08", spend: 200, lpv: 200, leads: 10 },
+          { date: "2026-09-12", spend: 800, lpv: 200, leads: 2 },
+        ]);
+        const rows = board.ranked;
+        expect(rows).toHaveLength(2);
+
+        const v1 = rows.find((r) => r.version === 1)!;
+        const v2 = rows.find((r) => r.version === 2)!;
+        expect(v1.versionStatus).toBe("off");
+        expect(v2.versionStatus).toBe("live");
+        expect(v1.spend).toBe(200);
+        expect(v2.spend).toBe(800);
+        expect(v1.costPer).toBeCloseTo(20);
+        expect(v2.costPer).toBeCloseTo(400);
+        // Each row carries the headline that version actually showed.
+        expect(v1.headline).toBe("Old promise");
+        expect(v2.headline).toBe("New promise");
+        // The cheap version outranks the dear one.
+        expect(rows[0].version).toBe(1);
+      });
+
+      it("leaves a page that ran one version as a single row", () => {
+        const board = analyzePortfolioFunnel(
+          [account("a1", "Kinetico", [adTo("x", "https://k.co/lp-1", 500, 10, 200)])],
+          [{ id: "a1", account_name: "Kinetico", target_cpl: 50 }],
+          [link("Kinetico", "https://k.co/lp-1", "LP 1", FREE_TEST)],
+          [],
+        );
+        expect(board.ranked).toHaveLength(1);
+        expect(board.ranked[0].versionStatus).toBeNull();
+        expect(board.ranked[0].spend).toBe(500);
+      });
+    });
+
     it("marks the page and its pooled headline when the period mixes versions", () => {
       const board = analyzePortfolioFunnel(
         [account("a1", "Kinetico", [adTo("x", "https://k.co/lp-1", 1000, 40, 1000)])],

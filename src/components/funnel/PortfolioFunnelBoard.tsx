@@ -22,6 +22,7 @@ import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailabl
 import { SegmentedControl } from "@/components/SegmentedControl";
 import { StatusPill } from "@/components/StatusPill";
 import { Dash, VerdictPill } from "@/components/creative-performance/CreativeBits";
+import type { Benchmark } from "@/components/creative-performance/verdicts";
 import { ANGLE_LABEL, OFFER_LABEL } from "@/components/creative-performance/labels";
 import { usePortfolioCreatives, type CreativeRange } from "@/components/creative-performance/useCreativePerformance";
 import { useFunnelPageVersions, useFunnelRepoLinks } from "@/components/funnel-pages/useAccountLinks";
@@ -36,6 +37,7 @@ import {
   type FunnelAccountInfo,
   type PortfolioGhl,
   type PortfolioPage,
+  type RankedEntry,
 } from "./portfolioFunnel";
 
 const SHOWN = 8;
@@ -53,98 +55,54 @@ const GROUP_STATUS: Record<CopyGroup["status"], { status: "success" | "danger" |
 const versionDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
 /**
- * Which copy version earned this row, and whether it's only one. A page
- * rewritten mid-period has its views split between two headlines, so the
- * version badge turns into a warning rather than a neutral label.
+ * Which version this row is, and whether it is still serving.
+ *
+ * A retired version is not a lesser page — it is a finished one. Its figures
+ * are final, so the badge says "Off" and the row is muted rather than hidden:
+ * what the copy we just replaced actually earned is the whole comparison.
  */
-function CopyVersion({ page }: { page: PortfolioPage }) {
-  if (page.version === null) return null;
+function VersionBadge({ entry }: { entry: RankedEntry }) {
+  if (entry.version === null) return null;
 
-  if (page.spanned > 1) {
+  if (entry.versionStatus === null) {
+    // One version ran for the whole period; nothing to distinguish.
     return (
       <span
-        className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning"
-        title={
-          `Rewritten mid-period: v${page.version} went live ${versionDate(page.since!)}, so these figures mix ` +
-          `${page.spanned} versions of the page` +
-          (page.previousHeadline ? `. Before that it read “${page.previousHeadline}”` : "")
-        }
+        className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+        title={`Copy version ${entry.version}. Every figure in this row was earned by it.`}
       >
-        <AlertTriangle className="h-2.5 w-2.5" aria-hidden />
-        v{page.version} · mixed
+        v{entry.version}
       </span>
     );
   }
 
+  const live = entry.versionStatus === "live";
   return (
-    <span
-      className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
-      title={
-        page.sinceIsFirstSeen
-          ? `Copy version ${page.version}, the earliest this dashboard has on record (first read ${versionDate(page.since!)}). ` +
-            `Every figure in this row was earned by it, though it may have been live for longer than the history shows.`
-          : `Copy version ${page.version}, live since ${versionDate(page.since!)}. Every figure in this row was earned by it.`
-      }
-    >
-      v{page.version}
+    <span className="inline-flex items-center gap-1">
+      <StatusPill status={live ? "success" : "neutral"}>
+        v{entry.version} · {live ? "Live" : "Off"}
+      </StatusPill>
+      {entry.days !== null && (
+        <span className="text-[10px] text-muted-foreground" title={`This version was live for ${entry.days} of the days in this period`}>
+          {entry.days}d
+        </span>
+      )}
+      {entry.hasSplitDay && (
+        <span
+          className="inline-flex items-center gap-0.5 text-[10px] font-medium text-warning"
+          title="The changeover day is shared with the other version. Meta reports no finer than a day, so that day sits with whichever version held most of it."
+        >
+          <AlertTriangle className="h-2.5 w-2.5" aria-hidden />
+          ±1d
+        </span>
+      )}
     </span>
   );
 }
 
-/**
- * A page's versions, each with what it earned while it was up. This is the row
- * a copy test is actually about: the live version and the ones it replaced,
- * never blended. Only rendered when day-level rows made a real split possible.
- */
-function VersionHistory({ page }: { page: PortfolioPage }) {
-  if (page.versionRows.length < 2) return null;
-
-  return (
-    <div className="mt-2 space-y-1 border-l-2 border-border/60 pl-2.5">
-      {page.versionRows.map((v) => (
-        <div key={v.version} className="flex items-start gap-2 text-[11px]">
-          <span className="shrink-0 pt-px">
-            <StatusPill status={v.status === "live" ? "success" : "neutral"}>
-              v{v.version} · {v.status === "live" ? "Live" : "Off"}
-            </StatusPill>
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-muted-foreground" title={v.headline ?? undefined}>
-              {v.headline ? `“${v.headline}”` : "Copy not recorded"}
-            </p>
-            <p className="tabular-nums text-muted-foreground">
-              {v.days} {v.days === 1 ? "day" : "days"} · {formatUsd(v.spend)} · {formatCount(v.lpv)} views ·{" "}
-              {formatCount(v.leads)} {v.leads === 1 ? "lead" : "leads"}
-              {v.costPerLead !== null && <> · {formatUsd(v.costPerLead)}/lead</>}
-              {v.hasSplitDay && (
-                <span
-                  className="ml-1 text-warning"
-                  title="The day this version changed is shared with the other version. Meta reports no finer than a day, so that day sits with whichever version held most of it."
-                >
-                  ±1 day
-                </span>
-              )}
-            </p>
-          </div>
-          <span
-            className="shrink-0 pt-px text-right font-semibold tabular-nums text-foreground"
-            title={
-              v.cvr === null || !v.interval
-                ? "Too few page views for a conversion rate"
-                : `${pct(v.cvr)}, 95% range ${pct(v.interval.low)}–${pct(v.interval.high)}`
-            }
-          >
-            {v.cvr === null ? <Dash title="No conversion rate yet" /> : pct(v.cvr)}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** A page's own hero headline — the thing the scorecard exists to compare. */
-function Headline({ page }: { page: PortfolioPage }) {
-  if (!page.headline) {
+/** The headline this row's version actually showed — not whatever is live now. */
+function Headline({ entry }: { entry: RankedEntry }) {
+  if (!entry.headline) {
     return (
       <p className="mt-1 text-xs italic text-muted-foreground">
         Headline not synced — register this site under Funnel Pages to read its copy
@@ -152,8 +110,8 @@ function Headline({ page }: { page: PortfolioPage }) {
     );
   }
   return (
-    <p className="mt-1 line-clamp-2 text-xs leading-snug text-foreground/90" title={page.copy ?? page.headline}>
-      “{page.headline}”
+    <p className="mt-1 line-clamp-2 text-xs leading-snug text-foreground/90" title={entry.page.copy ?? entry.headline}>
+      “{entry.headline}”
     </p>
   );
 }
@@ -172,7 +130,14 @@ function OfferTags({ page }: { page: PortfolioPage }) {
  * Leads the CRM holds for this page. Never merged with the Meta number beside
  * it: an inferred count has to look different from a matched one.
  */
-function CrmLeads({ page }: { page: PortfolioPage }) {
+function CrmLeads({ entry }: { entry: RankedEntry }) {
+  const page = entry.page;
+  // GoHighLevel leads carry an ad name, not a page version, so they cannot be
+  // divided between two versions of the same page. Showing the page's total on
+  // each version row would count it twice; a dash says so instead.
+  if (entry.versionStatus !== null) {
+    return <Dash title="CRM leads aren't split by copy version — GoHighLevel records the ad, not which version the visitor saw" />;
+  }
   if (page.crmLeads === 0) return <Dash title="No CRM lead is attributed to this page in this period" />;
   if (!page.crmInferred) {
     return (
@@ -191,8 +156,9 @@ function CrmLeads({ page }: { page: PortfolioPage }) {
   );
 }
 
-/** How the page's cost per lead sits against its own client's benchmark. */
-function VsBenchmark({ page }: { page: PortfolioPage }) {
+/** How this row's cost per lead sits against its own client's benchmark. */
+function VsBenchmark({ entry }: { entry: RankedEntry }) {
+  const page = entry;
   if (page.benchmarkIndex === null) {
     const why = page.verdict === "unscored"
       ? "Not ranked: no lead recorded on any of this client's pages, so the benchmark can't be trusted"
@@ -213,12 +179,14 @@ function VsBenchmark({ page }: { page: PortfolioPage }) {
   );
 }
 
-const benchmarkNote = (page: PortfolioPage) =>
+const benchmarkNote = (page: { benchmark: Benchmark | null }) =>
   page.benchmark
     ? `${formatUsd(page.benchmark.costPer)} ${page.benchmark.source === "target" ? "CPL target" : "account average"}`
     : "benchmark";
 
-function PageIdentity({ page }: { page: PortfolioPage }) {
+function EntryIdentity({ entry }: { entry: RankedEntry }) {
+  const page = entry.page;
+  const retired = entry.versionStatus === "off";
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -226,7 +194,10 @@ function PageIdentity({ page }: { page: PortfolioPage }) {
           href={page.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex max-w-full items-center gap-1 rounded-sm text-sm font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={cn(
+            "inline-flex max-w-full items-center gap-1 rounded-sm text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            retired ? "text-muted-foreground" : "text-foreground",
+          )}
           title={`${page.url} (opens the live page)`}
         >
           <span className="truncate">{page.label}</span>
@@ -238,11 +209,10 @@ function PageIdentity({ page }: { page: PortfolioPage }) {
         >
           {page.accountName}
         </Link>
-        <CopyVersion page={page} />
+        <VersionBadge entry={entry} />
       </div>
-      <Headline page={page} />
+      <Headline entry={entry} />
       <OfferTags page={page} />
-      <VersionHistory page={page} />
     </div>
   );
 }
@@ -254,11 +224,11 @@ function PageIdentity({ page }: { page: PortfolioPage }) {
  * gap is big enough to act on, so a page can rank first and still read
  * "Too early".
  */
-function RankedPages({ pages }: { pages: PortfolioPage[] }) {
+function RankedPages({ entries }: { entries: RankedEntry[] }) {
   const isMobile = useIsMobile();
   const [all, setAll] = useState(false);
-  const shown = all ? pages : pages.slice(0, SHOWN);
-  const scaleMax = Math.max(0.05, ...pages.map((p) => p.interval?.high ?? 0));
+  const shown = all ? entries : entries.slice(0, SHOWN);
+  const scaleMax = Math.max(0.05, ...entries.map((p) => p.interval?.high ?? 0));
 
   return (
     <section className="overflow-hidden rounded-xl border border-border/60 bg-card" aria-labelledby="funnel-pages-heading">
@@ -267,27 +237,27 @@ function RankedPages({ pages }: { pages: PortfolioPage[] }) {
         <h3 id="funnel-pages-heading" className="text-sm font-semibold text-foreground">
           Every landing page, best to worst
         </h3>
-        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{pages.length}</span>
+        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{entries.length}</span>
       </header>
 
       {isMobile ? (
         <ul className="divide-y divide-border/50">
           {shown.map((p, i) => (
-            <li key={`${p.accountId}-${p.key}`} className="space-y-2 p-3">
+            <li key={p.key} className={cn("space-y-2 p-3", p.versionStatus === "off" && "bg-muted/30")}>
               <div className="flex items-start gap-2">
                 <span className="mt-0.5 w-5 shrink-0 text-xs font-semibold tabular-nums text-muted-foreground">{i + 1}</span>
-                <PageIdentity page={p} />
+                <EntryIdentity entry={p} />
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <VerdictPill verdict={p.verdict} reason={p.reason} />
                 <span className="text-[11px] text-muted-foreground">
-                  vs benchmark <VsBenchmark page={p} />
+                  vs benchmark <VsBenchmark entry={p} />
                 </span>
               </div>
               <dl className="grid grid-cols-3 gap-2 text-xs">
                 <div><dt className="text-muted-foreground">Spend</dt><dd className="font-medium tabular-nums text-foreground">{formatUsd(p.spend)}</dd></div>
                 <div><dt className="text-muted-foreground">Leads</dt><dd className="font-medium tabular-nums text-foreground">{formatCount(p.leads)}</dd></div>
-                <div><dt className="text-muted-foreground">CRM leads</dt><dd className="font-medium"><CrmLeads page={p} /></dd></div>
+                <div><dt className="text-muted-foreground">CRM leads</dt><dd className="font-medium"><CrmLeads entry={p} /></dd></div>
                 <div><dt className="text-muted-foreground">Cost / lead</dt><dd className="font-medium tabular-nums text-foreground">{p.costPer !== null ? formatUsd(p.costPer) : "—"}</dd></div>
                 <div className="col-span-3"><dt className="text-muted-foreground">Conversion</dt><dd><RateBar page={p} scaleMax={scaleMax} /></dd></div>
               </dl>
@@ -317,19 +287,24 @@ function RankedPages({ pages }: { pages: PortfolioPage[] }) {
             </TableHeader>
             <TableBody>
               {shown.map((p, i) => (
-                <TableRow key={`${p.accountId}-${p.key}`}>
+                <TableRow
+                  key={p.key}
+                  // A version no longer taking traffic is dimmed, not dropped:
+                  // its numbers are the thing the live version is judged against.
+                  className={cn(p.versionStatus === "off" && "bg-muted/30 text-muted-foreground")}
+                >
                   <TableCell className="py-2 text-right text-xs tabular-nums text-muted-foreground">{i + 1}</TableCell>
-                  <TableCell className="min-w-[240px] max-w-[340px] py-2"><PageIdentity page={p} /></TableCell>
+                  <TableCell className="min-w-[240px] max-w-[340px] py-2"><EntryIdentity entry={p} /></TableCell>
                   <TableCell className="py-2"><VerdictPill verdict={p.verdict} reason={p.reason} /></TableCell>
                   <TableCell className="py-2 text-right tabular-nums">{formatUsd(p.spend)}</TableCell>
                   <TableCell className="py-2 text-right tabular-nums">{formatCount(p.lpv)}</TableCell>
                   <TableCell className="py-2 text-right tabular-nums">{formatCount(p.leads)}</TableCell>
-                  <TableCell className="py-2 text-right"><CrmLeads page={p} /></TableCell>
+                  <TableCell className="py-2 text-right"><CrmLeads entry={p} /></TableCell>
                   <TableCell className="py-2"><RateBar page={p} scaleMax={scaleMax} /></TableCell>
                   <TableCell className="py-2 text-right tabular-nums">
                     {p.costPer !== null ? formatUsd(p.costPer, { decimals: true }) : <Dash title="No leads in this period" />}
                   </TableCell>
-                  <TableCell className="py-2 text-right"><VsBenchmark page={p} /></TableCell>
+                  <TableCell className="py-2 text-right"><VsBenchmark entry={p} /></TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -337,12 +312,12 @@ function RankedPages({ pages }: { pages: PortfolioPage[] }) {
         </div>
       )}
 
-      {pages.length > SHOWN && (
+      {entries.length > SHOWN && (
         <button
           onClick={() => setAll((v) => !v)}
           className="flex w-full items-center justify-center gap-1 border-t border-border/50 px-4 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
         >
-          {all ? "Show fewer" : `Show all ${pages.length}`}
+          {all ? "Show fewer" : `Show all ${entries.length}`}
           <ArrowRight className={cn("h-3 w-3 transition-transform", all && "-rotate-90")} aria-hidden />
         </button>
       )}
@@ -351,7 +326,7 @@ function RankedPages({ pages }: { pages: PortfolioPage[] }) {
 }
 
 /** A conversion rate with its 95% range, on a scale shared by every row. */
-function RateBar({ page, scaleMax }: { page: PortfolioPage; scaleMax: number }) {
+function RateBar({ page, scaleMax }: { page: { cvr: number | null; interval: { low: number; high: number } | null }; scaleMax: number }) {
   if (page.cvr === null || !page.interval) {
     return <p className="text-right"><Dash title="More leads than page views here: Meta is undercounting views, so no rate is shown" /></p>;
   }
@@ -632,7 +607,7 @@ export function PortfolioFunnelBoard({
             />
           </div>
 
-          <RankedPages pages={board.pages} />
+          <RankedPages entries={board.ranked} />
 
           <CopyBoard headlines={board.headlines} offers={board.offers} unsynced={board.unsynced} />
 
