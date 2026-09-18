@@ -11,6 +11,7 @@
 import { normalizePageUrl, pagePath } from "@/lib/urls";
 import { twoProportionPValue, wilsonInterval } from "@/lib/stats";
 import { landingPageKey } from "@/components/creative-performance/breakdowns";
+import { detectAngle, detectOffer, type AngleKey, type OfferKey } from "@/components/creative-performance/labels";
 import type { CreativeAd } from "@/components/creative-performance/useCreativePerformance";
 
 /** Below this many page views a conversion rate is too noisy to test. */
@@ -50,6 +51,12 @@ export interface PageTest {
   url: string;            // as the ads (or the funnel repo) have it
   label: string;
   title: string | null;
+  /** The page's hero headline and the offer it promises — what the test is really testing. */
+  headline: string | null;
+  offer: OfferKey | null;
+  angle: AngleKey | null;
+  /** Headline + subhead + form card line, for the tooltip. Null when the page isn't synced. */
+  copy: string | null;
   adCount: number;
   adsets: string[];
   spend: number;
@@ -72,6 +79,26 @@ export interface FunnelPage {
   url: string;
   label: string;
   page_title: string | null;
+  page_headline?: string | null;
+  page_subhead?: string | null;
+  page_cta?: string | null;
+}
+
+/**
+ * What a synced page promises, and the offer/angle detected from it with the
+ * same taxonomy the ad creative uses. Shared with the cross-client board so
+ * there is one definition of "this page's offer".
+ */
+export function detectPageCopy(page: FunnelPage | undefined) {
+  const copy = page
+    ? [page.page_headline, page.page_subhead, page.page_cta].filter(Boolean).join("\n") || null
+    : null;
+  return {
+    headline: page?.page_headline ?? null,
+    copy,
+    offer: copy ? detectOffer(copy) : null,
+    angle: copy ? detectAngle(copy) : null,
+  };
 }
 
 // Booking and thank-you pages are funnel steps, not pages an ad should land on.
@@ -118,6 +145,7 @@ export function analyzeLandingPages(
       url: page?.url ?? ads[0].copy.destinationUrls[0],
       label: page?.label ?? pagePath(key),
       title: page?.page_title ?? null,
+      ...detectPageCopy(page),
       adCount: ads.length,
       adsets: [...new Set(ads.map((a) => a.adset).filter((s): s is string => !!s))],
       spend,
@@ -164,6 +192,7 @@ export function analyzeLandingPages(
       url: page.url,
       label: page.label,
       title: page.page_title,
+      ...detectPageCopy(page),
       adCount: 0,
       adsets: [],
       spend: 0,

@@ -3,31 +3,19 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { metaUnavailableReason, useCouplerData, useMetaGapAccounts } from "@/hooks/useCouplerData";
-import { NewBriefDialog } from "@/components/creatives/NewBriefDialog";
-import { RequestDetailSheet } from "@/components/creatives/RequestDetailSheet";
-import { type CreativeRequest } from "@/components/creatives/types";
-import { TaskList } from "@/components/dashboard/TaskList";
 import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
+import { StatusPill } from "@/components/StatusPill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DashboardPeriodPicker } from "@/components/dashboard/DashboardPeriodPicker";
 import { PortfolioCreativeBoard } from "@/components/creative-performance/PortfolioCreativeBoard";
+import { PortfolioFunnelBoard } from "@/components/funnel/PortfolioFunnelBoard";
 import type { CreativeRange } from "@/components/creative-performance/useCreativePerformance";
 import { formatUsd } from "@/lib/format";
-import {
-  RefreshCw,
-  Image as ImageIcon,
-  Sparkles,
-  ArrowRight,
-  ChevronRight,
-  Clock,
-  Film,
-  ClipboardList,
-} from "lucide-react";
+import { RefreshCw, Sparkles, ArrowRight, ChevronRight, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
 import { format, startOfDay, subDays, startOfMonth } from "date-fns";
-import { cn } from "@/lib/utils";
 import { useSettings } from "@/hooks/useSettings";
 import type { AdRow } from "@/hooks/useCouplerData";
 import type { DateRange } from "react-day-picker";
@@ -334,7 +322,7 @@ const Index = () => {
         {/* ── Header ───────────────────────────────────────────────────────── */}
         <PageHeader
           title="Performance"
-          description="Every client's results, and the creatives driving or draining them"
+          description="Every client's results, and the creatives and landing pages driving or draining them"
           actions={
             <>
               <DashboardPeriodPicker
@@ -371,10 +359,10 @@ const Index = () => {
                         {client.business_name ?? client.full_name}
                       </p>
                       {!client.business_name && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400 shrink-0">
-                          <Clock className="h-2.5 w-2.5" />
+                        <StatusPill status="warning" className="shrink-0 gap-1">
+                          <Clock className="h-2.5 w-2.5" aria-hidden />
                           Awaiting onboarding
-                        </span>
+                        </StatusPill>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5 capitalize">
@@ -624,162 +612,16 @@ const Index = () => {
           hiddenAccounts={settings.hidden_accounts ?? []}
         />
 
-        {/* ── Creative Requests ─────────────────────────────────────────────── */}
-        <CreativeRequestsSection />
-
-        {/* ── Task List ─────────────────────────────────────────────────────── */}
-        <div className="mt-8">
-          <TaskList accounts={dbAccounts} changeLogOptions={settings.change_log_options} />
-        </div>
+        {/* ── Funnel scorecard across clients ──────────────────────────────── */}
+        <PortfolioFunnelBoard
+          range={creativeRange}
+          periodCaption={dateLabel}
+          accounts={dbAccounts}
+          hiddenAccounts={settings.hidden_accounts ?? []}
+        />
       </div>
     </div>
   );
 };
-
-// ── Creative Requests dashboard section ──────────────────────────────────────
-
-const REQ_STATUS_BADGE: Record<string, string> = {
-  assigned: "bg-blue-100 text-blue-800",
-  reviewing: "bg-amber-100 text-amber-800",
-  approved: "bg-orange-100 text-orange-800",
-};
-const REQ_STATUS_LABEL: Record<string, string> = {
-  assigned: "Assigned",
-  reviewing: "Reviewing",
-  approved: "Approved",
-};
-
-function CreativeRequestsSection() {
-  const [briefOpen, setBriefOpen] = useState(false);
-  const [selectedRequest, setSelectedRequest] = useState<CreativeRequest | null>(null);
-
-  const { data: openRequests = [], isLoading } = useQuery({
-    queryKey: ["dashboard-creative-requests"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("creative_requests")
-        .select("*")
-        .neq("status", "launched")
-        .order("created_at", { ascending: false })
-        .limit(5);
-      if (error) throw error;
-      return data as CreativeRequest[];
-    },
-  });
-
-  return (
-    <div className="mt-8">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <ClipboardList className="h-4 w-4 text-primary" />
-          <h2 className="text-sm font-semibold text-foreground">Creative Requests</h2>
-          {!isLoading && openRequests.length > 0 && (
-            <span className="text-xs font-semibold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full">
-              {openRequests.length} open
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            to="/creatives?tab=requests"
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-          >
-            View all <ArrowRight className="h-3 w-3" />
-          </Link>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 gap-1.5 text-xs"
-            onClick={() => setBriefOpen(true)}
-          >
-            + New Brief
-          </Button>
-        </div>
-      </div>
-
-      {isLoading && (
-        <div className="space-y-2">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-12 rounded-xl bg-muted animate-pulse" />
-          ))}
-        </div>
-      )}
-
-      {!isLoading && openRequests.length === 0 && (
-        <div className="rounded-xl border border-dashed border-border bg-card px-4 py-8 text-center">
-          <ClipboardList className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground">No open creative requests</p>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="mt-2 gap-1.5 text-xs"
-            onClick={() => setBriefOpen(true)}
-          >
-            + Create a brief
-          </Button>
-        </div>
-      )}
-
-      {!isLoading && openRequests.length > 0 && (
-        <div className="rounded-xl border border-border/60 overflow-hidden">
-          {openRequests.map((req, i) => {
-            const isVideo = req.ad_type === "video_ads";
-            const isLast = i === openRequests.length - 1;
-            return (
-              <div
-                key={req.id}
-                className={cn(
-                  "flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors group cursor-pointer",
-                  !isLast && "border-b border-border/40"
-                )}
-                onClick={() => setSelectedRequest(req)}
-              >
-                <div className={cn("shrink-0 rounded-lg p-1.5", isVideo ? "bg-violet-50" : "bg-sky-50")}>
-                  {isVideo
-                    ? <Film className="h-3.5 w-3.5 text-violet-600" />
-                    : <ImageIcon className="h-3.5 w-3.5 text-sky-600" />
-                  }
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground">{req.is_template ? req.template_name : req.account_name}</span>
-                    {req.is_template && (
-                      <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold shrink-0 bg-indigo-100 text-indigo-800">
-                        Template
-                      </span>
-                    )}
-                    <span className={cn(
-                      "rounded-full px-1.5 py-0.5 text-[10px] font-semibold shrink-0",
-                      REQ_STATUS_BADGE[req.status] ?? "bg-muted text-muted-foreground"
-                    )}>
-                      {REQ_STATUS_LABEL[req.status] ?? req.status}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground truncate mt-0.5">
-                    {req.is_template
-                      ? [req.ad_angle, req.offer_type].filter(Boolean).join(" · ") || "Master template production"
-                      : `${req.template_name} · ${req.ad_angle} · ${req.offer_type}`}
-                    {req.assigned_to && <span className="text-muted-foreground/60"> — {req.assigned_to}</span>}
-                  </p>
-                </div>
-                <div className="shrink-0 text-right hidden sm:block">
-                  <p className="text-xs text-muted-foreground">{format(new Date(req.created_at), "MMM d")}</p>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <RequestDetailSheet
-        request={selectedRequest}
-        onClose={() => setSelectedRequest(null)}
-        onRequestChange={(updated) => setSelectedRequest(updated)}
-      />
-      <NewBriefDialog open={briefOpen} onOpenChange={setBriefOpen} />
-    </div>
-  );
-}
 
 export default Index;

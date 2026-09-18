@@ -2,6 +2,7 @@ import { ExternalLink, FlaskConical } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusPill, type Status } from "@/components/StatusPill";
 import { Dash } from "@/components/creative-performance/CreativeBits";
+import { ANGLE_LABEL, OFFER_LABEL } from "@/components/creative-performance/labels";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { formatCount, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -72,6 +73,8 @@ export function LandingPageTest({ pages, appointmentsTracked }: { pages: PageTes
   const isMobile = useIsMobile();
   const scaleMax = Math.max(0.05, ...pages.map((p) => p.interval?.high ?? 0));
 
+  // The headline and the offer, not the browser title: those are what one page
+  // is testing against another, so they sit right under the page's name.
   const pageCell = (p: PageTest) => (
     <div className="min-w-0">
       <a
@@ -83,8 +86,20 @@ export function LandingPageTest({ pages, appointmentsTracked }: { pages: PageTes
         <span className="truncate">{p.label}</span>
         <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
       </a>
-      {p.title && <p className="truncate text-xs text-muted-foreground" title={p.title}>{p.title}</p>}
-      <p className="truncate text-[11px] text-muted-foreground" title={p.adsets.join(", ")}>
+      {p.headline ? (
+        <p className="line-clamp-2 text-xs leading-snug text-foreground/90" title={p.copy ?? p.headline}>
+          “{p.headline}”
+        </p>
+      ) : p.title ? (
+        <p className="truncate text-xs text-muted-foreground" title={p.title}>{p.title}</p>
+      ) : null}
+      {p.offer && (
+        <div className="mt-1 flex flex-wrap items-center gap-1">
+          <StatusPill status="info">{OFFER_LABEL[p.offer]}</StatusPill>
+          {p.angle && p.angle !== "none" && <StatusPill status="neutral">{ANGLE_LABEL[p.angle]}</StatusPill>}
+        </div>
+      )}
+      <p className="mt-1 truncate text-[11px] text-muted-foreground" title={p.adsets.join(", ")}>
         {p.adCount > 0 ? `${p.adCount} ${p.adCount === 1 ? "ad" : "ads"} · ${p.adsets.length} ad ${p.adsets.length === 1 ? "set" : "sets"}` : "No ads"}
       </p>
     </div>

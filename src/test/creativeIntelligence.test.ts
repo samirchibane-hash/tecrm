@@ -6,6 +6,8 @@ import { computeBenchmark, judge, scoreAds, targetFor } from "@/components/creat
 import { breakdown } from "@/components/creative-performance/breakdowns";
 import { matchGhlByAdName } from "@/components/creative-performance/ghl";
 import { analyzeLandingPages, funnelSteps } from "@/components/funnel/funnelMath";
+import { analyzePortfolioFunnel, headlineKey, type FunnelPageCopy } from "@/components/funnel/portfolioFunnel";
+import type { PortfolioAccount } from "@/components/creative-performance/useCreativePerformance";
 import { makeAd } from "./fixtures";
 
 describe("stats", () => {
@@ -62,6 +64,16 @@ describe("offer detection", () => {
     expect(detectOffer("$1,000 off any system")).toBe("discount");
     expect(detectOffer("Only $49/mo")).toBe("financing");
     expect(detectOffer("100% satisfaction")).toBe("none");
+  });
+
+  it("reads deferred payments as financing, not as the free test the page also offers", () => {
+    // Real landing page copy: HQWA OKC, True Water Broadway, Kinetico UT LP1.
+    expect(detectOffer("pay nothing for 3 months: 0 payments, 0 interest\nEnter your zip for a FREE water test"))
+      .toBe("financing");
+    expect(detectOffer("We fix it at every tap — no payments and no interest for 6 months. Get a FREE in-home water test"))
+      .toBe("financing");
+    // A free test with no payment terms is still a free test.
+    expect(detectOffer("Enter your zip code for a FREE water test — takes 60 seconds")).toBe("free_test");
   });
 
   it("falls back to the free water test, then to none", () => {
@@ -262,5 +274,158 @@ describe("funnel", () => {
 
   it("marks a lone page as the only page, not a winner", () => {
     expect(analyzeLandingPages([page("a", "https://x.co/1", 500, 40)], [], false)[0].status).toBe("only_page");
+  });
+});
+
+describe("portfolio funnel", () => {
+  const FREE_TEST = {
+    page_headline: "Tired of Itchy Skin & Hard Water? Upgrade Your Home Today.",
+    page_subhead: "Boise runs hard water year-round.",
+    page_cta: "Enter your zip code for a FREE water test — takes 60 seconds",
+  };
+  const PRICE = {
+    page_headline: "Get a Whole-Home Water Softener for Just $3,495.",
+    page_subhead: "Soft water at every tap, installed in 1 day.",
+    page_cta: "Claim your spot at $3,495 pricing",
+  };
+
+  const link = (account: string, url: string, label: string, copy: Partial<FunnelPageCopy> = {}): FunnelPageCopy => ({
+    account_name: account,
+    url,
+    label,
+    page_title: null,
+    page_headline: null,
+    page_subhead: null,
+    page_cta: null,
+    copy_synced_at: "2026-09-17T00:00:00Z",
+    ...copy,
+  });
+
+  const adTo = (id: string, url: string, spend: number, leads: number, lpv: number) =>
+    makeAd({ id, spend, webLeads: leads, landingPageViews: lpv, linkClicks: lpv + 20, copy: { destinationUrls: [url] } });
+
+  const account = (id: string, name: string, ads: ReturnType<typeof adTo>[]): PortfolioAccount => ({
+    accountId: id,
+    accountName: name,
+    ads,
+    error: null,
+  });
+
+  it("normalizes a headline so the same promise in two markets is one row", () => {
+    expect(headlineKey("Tired of Itchy Skin, Hard Water Stains & Well Water Problems?"))
+      .toBe(headlineKey("Tired of itchy skin, hard water stains and well water problems"));
+    // The price is the promise, so it must not normalize away.
+    expect(headlineKey("Softener for Just $3,495.")).not.toBe(headlineKey("Softener for Just $2,995."));
+  });
+
+  it("judges each page on its own client's CPL target and carries the page's headline", () => {
+    const board = analyzePortfolioFunnel(
+      [account("a1", "Kinetico", [
+        adTo("win", "https://k.co/lp-1", 1000, 40, 1000),
+        adTo("lose", "https://k.co/lp-2", 1000, 5, 1000),
+      ])],
+      [{ id: "a1", account_name: "Kinetico", target_cpl: 50 }],
+      [link("Kinetico", "https://k.co/lp-1", "LP 1", FREE_TEST), link("Kinetico", "https://k.co/lp-2", "LP 2", PRICE)],
+      [],
+    );
+    expect(board.winners.map((p) => p.label)).toEqual(["LP 1"]);
+    expect(board.wasters.map((p) => p.label)).toEqual(["LP 2"]);
+    expect(board.winners[0].headline).toBe(FREE_TEST.page_headline);
+    expect(board.winners[0].offer).toBe("free_test");
+    expect(board.wasters[0].offer).toBe("retail_price");
+    expect(board.winners[0].cvr).toBeCloseTo(0.04);
+    expect(board.savings).toBeGreaterThan(0);
+    expect(board.excess).toBeGreaterThan(0);
+  });
+
+  it("pools a headline across clients and only calls one best when the gap is significant", () => {
+    const board = analyzePortfolioFunnel(
+      [
+        account("a1", "Kinetico", [adTo("k1", "https://k.co/lp-1", 500, 60, 600), adTo("k2", "https://k.co/lp-2", 500, 12, 600)]),
+        account("a2", "Tarheel", [adTo("t1", "https://t.co/lp-1", 500, 55, 600), adTo("t2", "https://t.co/lp-2", 500, 10, 600)]),
+      ],
+      [
+        { id: "a1", account_name: "Kinetico", target_cpl: null },
+        { id: "a2", account_name: "Tarheel", target_cpl: null },
+      ],
+      [
+        link("Kinetico", "https://k.co/lp-1", "K 1", FREE_TEST),
+        link("Kinetico", "https://k.co/lp-2", "K 2", PRICE),
+        link("Tarheel", "https://t.co/lp-1", "T 1", FREE_TEST),
+        link("Tarheel", "https://t.co/lp-2", "T 2", PRICE),
+      ],
+      [],
+    );
+    const [best, behind] = board.headlines;
+    expect(best.label).toBe(FREE_TEST.page_headline);
+    expect(best.status).toBe("best");
+    expect(best.pages).toBe(2);
+    expect(best.clients).toEqual(["Kinetico", "Tarheel"]);
+    expect(best.lpv).toBe(1200);
+    expect(behind.status).toBe("behind");
+    expect(board.offers.map((o) => o.label)).toEqual(["Free water test", "Retail price"]);
+  });
+
+  it("leaves a thin headline unranked rather than crowning it", () => {
+    const board = analyzePortfolioFunnel(
+      [account("a1", "Kinetico", [adTo("k1", "https://k.co/lp-1", 500, 40, 600), adTo("k2", "https://k.co/lp-2", 50, 9, 20)])],
+      [{ id: "a1", account_name: "Kinetico", target_cpl: null }],
+      [link("Kinetico", "https://k.co/lp-1", "K 1", FREE_TEST), link("Kinetico", "https://k.co/lp-2", "K 2", PRICE)],
+      [],
+    );
+    expect(board.headlines.find((g) => g.label === PRICE.page_headline)!.status).toBe("needs_traffic");
+    expect(board.headlines.find((g) => g.label === FREE_TEST.page_headline)!.status).toBe("best");
+  });
+
+  it("counts pages whose copy isn't synced and keeps them out of the headline rollup", () => {
+    const board = analyzePortfolioFunnel(
+      [account("a1", "Kinetico", [adTo("k1", "https://k.co/lp-1", 500, 40, 600), adTo("k2", "https://k.co/lp-9", 500, 30, 600)])],
+      [{ id: "a1", account_name: "Kinetico", target_cpl: null }],
+      [link("Kinetico", "https://k.co/lp-1", "K 1", FREE_TEST)],
+      [],
+    );
+    expect(board.unsynced).toBe(1);
+    expect(board.pages).toHaveLength(2);
+    expect(board.pages.find((p) => p.key === "k.co/lp-9")!.headline).toBeNull();
+    expect(board.headlines).toHaveLength(1);
+  });
+
+  it("withholds verdicts and reports a tracking gap when no page recorded a lead", () => {
+    const board = analyzePortfolioFunnel(
+      [account("a1", "Kinetico", [adTo("k1", "https://k.co/lp-1", 500, 0, 600), adTo("k2", "https://k.co/lp-2", 500, 0, 600)])],
+      [{ id: "a1", account_name: "Kinetico", target_cpl: 50 }],
+      [link("Kinetico", "https://k.co/lp-1", "K 1", FREE_TEST)],
+      [],
+    );
+    expect(board.gaps).toEqual([{ accountName: "Kinetico", spend: 1000 }]);
+    expect(board.wasters).toHaveLength(0);
+    expect(board.pages.every((p) => p.verdict === "unscored")).toBe(true);
+  });
+
+  it("skips hidden clients and reports the ones Meta refused", () => {
+    const board = analyzePortfolioFunnel(
+      [
+        account("a1", "Kinetico", [adTo("k1", "https://k.co/lp-1", 500, 40, 600)]),
+        { accountId: "a2", accountName: "Tarheel", error: { code: "META_NO_ACCESS", message: "no" } },
+        account("a3", "Pure Viva", [adTo("p1", "https://p.co/lp-1", 500, 40, 600)]),
+      ],
+      [{ id: "a1", account_name: "Kinetico", target_cpl: null }],
+      [],
+      ["Pure Viva"],
+    );
+    expect(board.unreadable).toEqual(["Tarheel"]);
+    expect(board.clients).toBe(1);
+    expect(board.pages.map((p) => p.accountName)).toEqual(["Kinetico"]);
+  });
+
+  it("never reports a conversion rate above 100%", () => {
+    const board = analyzePortfolioFunnel(
+      [account("a1", "Kinetico", [adTo("k1", "https://k.co/lp-1", 500, 27, 7)])],
+      [{ id: "a1", account_name: "Kinetico", target_cpl: null }],
+      [],
+      [],
+    );
+    expect(board.pages[0].cvr).toBeNull();
+    expect(board.portfolioCvr).toBeNull();
   });
 });

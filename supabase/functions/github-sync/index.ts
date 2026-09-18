@@ -81,15 +81,52 @@ function parseMessage(message: string) {
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", mdash: "—", ndash: "–" };
 
-function pageTitle(html: string): string | null {
-  const raw = html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1];
-  if (!raw) return null;
-  const title = raw.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+function decodeEntities(raw: string): string {
+  return raw.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
     if (e[0] !== "#") return ENTITIES[e.toLowerCase()] ?? m;
     const n = e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
     return Number.isFinite(n) ? String.fromCodePoint(n) : m;
-  }).replace(/\s+/g, " ").trim();
-  return title || null;
+  });
+}
+
+/** Inner HTML → the words a visitor reads: <br> and <em>/<span> disappear, spacing collapses. */
+function plainText(inner: string): string | null {
+  const text = decodeEntities(inner.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]*>/g, ""))
+    .replace(/\s+/g, " ")
+    .trim();
+  return text || null;
+}
+
+function pageTitle(html: string): string | null {
+  const raw = html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1];
+  return raw ? plainText(raw) : null;
+}
+
+/** The text of the first element carrying `cls`, whatever tag it is. */
+function byClass(html: string, cls: string): string | null {
+  const open = new RegExp(`<(\\w+)[^>]*\\bclass="[^"]*\\b${cls}\\b[^"]*"[^>]*>`, "i").exec(html);
+  if (!open) return null;
+  const tag = open[1];
+  const rest = html.slice(open.index + open[0].length);
+  const close = new RegExp(`</${tag}\\s*>`, "i").exec(rest);
+  return plainText(close ? rest.slice(0, close.index) : rest.slice(0, 600));
+}
+
+/**
+ * What the page promises above the fold: the hero headline, the hero subhead,
+ * and the form card's offer line. These are what a landing page test is really
+ * testing, so the Funnel scorecard shows them next to the conversion rate.
+ * Offer and angle aren't derived here — the dashboard detects them from this
+ * copy with the same taxonomy it uses for ad creative.
+ */
+function heroCopy(html: string): { headline: string | null; subhead: string | null; cta: string | null } {
+  const h1 = /<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(html)?.[1];
+  const offer = [byClass(html, "form-card-headline"), byClass(html, "form-card-sub")].filter(Boolean).join(" ");
+  return {
+    headline: h1 ? plainText(h1) : null,
+    subhead: byClass(html, "hero-subhead"),
+    cta: offer || null,
+  };
 }
 
 // "broadway-1" → "Broadway 1", "dfw-schedule" → "DFW Schedule"
@@ -107,8 +144,9 @@ async function syncFunnelPages(db: ReturnType<typeof createClient>, token: strin
   if (error) throw new Error(`funnel_sites: ${error.message}`);
 
   const { data: known } = await db.from("account_links")
-    .select("repo, repo_path, blob_sha, page_title").eq("source", "funnel_repo");
-  const titles = new Map((known ?? []).map((k) => [`${k.repo}:${k.repo_path}`, k]));
+    .select("repo, repo_path, blob_sha, page_title, page_headline, page_subhead, page_cta, copy_synced_at")
+    .eq("source", "funnel_repo");
+  const seen = new Map((known ?? []).map((k) => [`${k.repo}:${k.repo_path}`, k]));
 
   const totals = { sites: sites?.length ?? 0, pages: 0, added: 0, adopted: 0, removed: 0 };
   const trees = new Map<string, GitHubObject[]>();
@@ -129,19 +167,36 @@ async function syncFunnelPages(db: ReturnType<typeof createClient>, token: strin
 
     const pages = await mapLimit(entries, 5, async (e) => {
       const slug = e.path.slice(prefix.length).split("/")[0];
-      const prev = titles.get(`${site.repo}:${e.path}`);
-      let title = prev?.page_title ?? null;
-      if (!prev || prev.blob_sha !== e.sha) {
+      const prev = seen.get(`${site.repo}:${e.path}`);
+      // Unchanged pages keep the copy the run that read them extracted, along
+      // with that run's timestamp. A null copy_synced_at means the page has
+      // never been parsed for its headline, so it's re-read once.
+      let read = {
+        page_title: prev?.page_title ?? null,
+        page_headline: prev?.page_headline ?? null,
+        page_subhead: prev?.page_subhead ?? null,
+        page_cta: prev?.page_cta ?? null,
+        copy_synced_at: prev?.copy_synced_at ?? null,
+      };
+      if (!prev || prev.blob_sha !== e.sha || !prev.copy_synced_at) {
         const { body } = await gh(`/repos/${site.repo}/git/blobs/${e.sha}`, token);
         const bytes = Uint8Array.from(atob(String(body.content ?? "").replace(/\n/g, "")), (c) => c.charCodeAt(0));
-        title = pageTitle(new TextDecoder().decode(bytes));
+        const html = new TextDecoder().decode(bytes);
+        const hero = heroCopy(html);
+        read = {
+          page_title: pageTitle(html),
+          page_headline: hero.headline,
+          page_subhead: hero.subhead,
+          page_cta: hero.cta,
+          copy_synced_at: new Date().toISOString(),
+        };
       }
       return {
         repo_path: e.path,
         url: `https://${site.domain}/${slug}`,
         label: pageLabel(slug),
-        page_title: title,
         blob_sha: e.sha,
+        ...read,
       };
     });
 

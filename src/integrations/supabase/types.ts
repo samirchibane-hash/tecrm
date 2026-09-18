@@ -47,9 +47,13 @@ export type Database = {
         Row: {
           account_name: string
           blob_sha: string | null
+          copy_synced_at: string | null
           created_at: string | null
           id: string
           label: string
+          page_cta: string | null
+          page_headline: string | null
+          page_subhead: string | null
           page_title: string | null
           repo: string | null
           repo_path: string | null
@@ -60,9 +64,13 @@ export type Database = {
         Insert: {
           account_name: string
           blob_sha?: string | null
+          copy_synced_at?: string | null
           created_at?: string | null
           id?: string
           label: string
+          page_cta?: string | null
+          page_headline?: string | null
+          page_subhead?: string | null
           page_title?: string | null
           repo?: string | null
           repo_path?: string | null
@@ -73,9 +81,13 @@ export type Database = {
         Update: {
           account_name?: string
           blob_sha?: string | null
+          copy_synced_at?: string | null
           created_at?: string | null
           id?: string
           label?: string
+          page_cta?: string | null
+          page_headline?: string | null
+          page_subhead?: string | null
           page_title?: string | null
           repo?: string | null
           repo_path?: string | null
@@ -88,6 +100,7 @@ export type Database = {
       account_poc: {
         Row: {
           account_id: string
+          copy_synced_at: string | null
           created_at: string
           email: string
           id: string
@@ -95,6 +108,7 @@ export type Database = {
         }
         Insert: {
           account_id: string
+          copy_synced_at?: string | null
           created_at?: string
           email: string
           id?: string
@@ -102,6 +116,7 @@ export type Database = {
         }
         Update: {
           account_id?: string
+          copy_synced_at?: string | null
           created_at?: string
           email?: string
           id?: string

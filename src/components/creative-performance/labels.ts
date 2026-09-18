@@ -33,7 +33,11 @@ export const OFFERS: { key: OfferKey; label: string; pattern: RegExp | null }[] 
   {
     key: "financing",
     label: "Financing",
-    pattern: /\$\s?\d+(?:\.\d{1,2})?\s?(?:\/|a\s|per\s)\s?(?:day|mo|month|week)\b|\bfinanc|\b0\s?%|\bno\s+money\s+down|\$0\s+down|\blow\s+monthly|\bmonthly\s+payments?/i,
+    // "0 payments, 0 interest" and "no payments for 6 months" are deferred-payment
+    // financing offers written without a rate or a monthly figure. Without them the
+    // ad or page falls through to whatever free test it also mentions, which hides
+    // the offer actually being tested.
+    pattern: /\$\s?\d+(?:\.\d{1,2})?\s?(?:\/|a\s|per\s)\s?(?:day|mo|month|week)\b|\bfinanc|\b0\s?%|\bno\s+money\s+down|\$0\s+down|\blow\s+monthly|\bmonthly\s+payments?|\b(?:no|0)\s+(?:payments?|interest)\b|\bpay\s+nothing\b|\bdeferred\s+payments?\b/i,
   },
   {
     key: "free_test",

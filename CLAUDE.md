@@ -115,9 +115,11 @@ The anon key ships in the bundle, so RLS is the only boundary. Keep it that way:
 The account page's **Performance** tab (KPIs, then scale / cut / fatigue board, breakdowns by
 offer · angle · headline · primary text · format · ad set · landing page, and the full
 leaderboard) and **Funnel** tab (step conversion + landing page split test), plus the
-Performance dashboard's cross-client scorecard, all read `meta-creative-performance` live.
-Pure logic lives in `components/creative-performance/` and `components/funnel/` and is tested
-in `src/test/creativeIntelligence.test.ts`. Keep it that way:
+Performance dashboard's two cross-client scorecards — **creative** (`PortfolioCreativeBoard`)
+and **funnel** (`PortfolioFunnelBoard`) — all read `meta-creative-performance` live, through
+one shared query so the page makes a single Meta call. Pure logic lives in
+`components/creative-performance/` and `components/funnel/` and is tested in
+`src/test/creativeIntelligence.test.ts`. Keep it that way:
 
 - **Verdicts are statistical claims** (`verdicts.ts`): one-sided Poisson test at 90% against the
   benchmark, plus a material gap, plus a spend floor for winners. Never label an ad or group a
@@ -131,11 +133,28 @@ in `src/test/creativeIntelligence.test.ts`. Keep it that way:
   asks for a tracking check instead of listing every ad as a money waster.
 - **Offer / angle** are detected from copy (`labels.ts`, one taxonomy for all dealers) and
   corrected per ad name in `creative_labels`. Add an offer or angle by extending that taxonomy.
+  The taxonomy reads ads *and* landing pages, so a pattern gap mislabels both: "0 payments,
+  0 interest" was falling through to Free water test until 2026-09-17.
 - **CRM leads per ad** match `ghl_conversions."Ad Name"` (utm_content). The column only shows
   when some ad actually matches; otherwise the page says the funnel isn't passing the ad name.
 - Landing pages compare on website leads ÷ landing page views with Wilson intervals and a
   two-proportion test vs the leader. Idle synced funnel pages show as "No ad traffic".
+- **A landing page is judged on two separate things, never one** (`portfolioFunnel.ts`): its
+  *verdict* is cost per website lead against that client's own CPL benchmark (the same Poisson
+  test ads get — it's the only number carrying dollars), while its *conversion rate* isolates
+  the page from the price of its traffic. A page can convert well and still cost too much.
+- **Headline and offer are the landing page's identity.** github-sync lifts the `<h1>`,
+  `.hero-subhead` and the form card line off each page into `account_links.page_headline /
+  page_subhead / page_cta`; offer and angle are then detected from that copy with the same
+  `labels.ts` taxonomy the ads use (`detectPageCopy` in `funnelMath.ts` — one definition,
+  shared by both funnel surfaces). A page whose site isn't registered in `funnel_sites` has
+  no copy, and the UI says "not synced" rather than showing a blank headline.
+- The cross-client board pools pages by headline and by offer to rank what converts. That
+  pooling mixes markets and audiences, so it is presented as the next test to run, never a
+  verdict, and a pooled row under `MIN_GROUP_VIEWS` reads "Needs traffic" instead of ranking.
 - The function returns paused ads that spent in the period only to callers that send `v: 2`.
+- The Performance dashboard is performance only: creative requests live on `/creatives` and
+  tasks on `/tasks`, and neither is duplicated back onto the dashboard.
 
 ## Synced mirrors
 
@@ -152,7 +171,10 @@ Each run is logged to a `*_sync_runs` table; screens show freshness via `SyncSta
   branch → `github_commits`, linked to accounts by `github_client_rules`
   (repo / path prefix / subject keyword). Keyword rules match the **subject only** —
   bodies name other clients as provenance. The token lives in Vault (`set_github_token`,
-  admin-only, write-only from the UI).
+  admin-only, write-only from the UI). The same run lists every funnel page in each
+  `funnel_sites` folder into `account_links` and parses its HTML for the title and hero
+  copy. A page's blob is only re-read when its sha changed or `copy_synced_at` is NULL,
+  so unchanged pages cost no API calls and pages predating the copy columns backfill once.
 
 ## Working agreement
 

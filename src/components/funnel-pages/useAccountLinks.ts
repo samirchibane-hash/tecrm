@@ -17,3 +17,23 @@ export function useAccountLinks(accountName: string) {
     },
   });
 }
+
+/**
+ * Every client's synced funnel pages at once, for the cross-client Funnel
+ * scorecard. Only `funnel_repo` rows: a hand-added link is a link, not a page
+ * the sync has read the headline off.
+ */
+export function useFunnelRepoLinks() {
+  return useQuery({
+    queryKey: ["funnel-repo-links"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("account_links")
+        .select("account_name, url, label, page_title, page_headline, page_subhead, page_cta, copy_synced_at")
+        .eq("source", "funnel_repo")
+        .order("account_name", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
+}
