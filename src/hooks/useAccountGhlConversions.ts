@@ -19,3 +19,23 @@ export function useAccountGhlConversions(accountId: string) {
     enabled: !!accountId,
   });
 }
+
+/**
+ * Every account's GHL conversions since a date, for the cross-client funnel
+ * scorecard. One request for the whole board rather than one per account.
+ */
+export function useAllGhlConversions(since: string) {
+  const supabase = useSupabase();
+  return useQuery({
+    queryKey: ["ghl-conversions", "all", since],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("ghl_conversions")
+        .select("tecrm_id, type, created_on, \"Ad Name\"")
+        .gte("created_on", since);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!since,
+  });
+}

@@ -471,6 +471,64 @@ describe("portfolio funnel", () => {
     expect(board.pages.map((p) => p.accountName)).toEqual(["Kinetico"]);
   });
 
+  it("attributes a CRM lead by ad name, and infers it when the client has one page", () => {
+    const ghl = (rows: { type: string; created_on: string; ad?: string }[]) => ({
+      byAccount: new Map([["a1", rows.map((r) => ({ type: r.type, created_on: r.created_on, "Ad Name": r.ad ?? null }))]]),
+      since: "2026-09-01",
+      until: "2026-09-30",
+    });
+
+    // Two pages: only an ad-named lead can be placed, the loose one cannot.
+    const two = analyzePortfolioFunnel(
+      [account("a1", "Kinetico", [
+        makeAd({ id: "k1", name: "AD-A", spend: 500, webLeads: 5, landingPageViews: 600, copy: { destinationUrls: ["https://k.co/1"] } }),
+        makeAd({ id: "k2", name: "AD-B", spend: 500, webLeads: 5, landingPageViews: 600, copy: { destinationUrls: ["https://k.co/2"] } }),
+      ])],
+      [{ id: "a1", account_name: "Kinetico", target_cpl: 50 }],
+      [],
+      [],
+      ghl([{ type: "lead", created_on: "2026-09-10", ad: "ad-a" }, { type: "lead", created_on: "2026-09-11" }]),
+    );
+    const a = two.pages.find((p) => p.key === "k.co/1")!;
+    expect(a).toMatchObject({ crmLeads: 1, crmInferred: false });
+    expect(two.pages.find((p) => p.key === "k.co/2")).toMatchObject({ crmLeads: 0 });
+    // Never split across pages — it's reported as unallocated instead.
+    expect(two.crmUnallocated).toBe(1);
+
+    // One page: the same loose lead is placed there, flagged as inferred.
+    const one = analyzePortfolioFunnel(
+      [account("a1", "Kinetico", [adTo("k1", "https://k.co/1", 500, 5, 600)])],
+      [{ id: "a1", account_name: "Kinetico", target_cpl: 50 }],
+      [],
+      [],
+      ghl([{ type: "lead", created_on: "2026-09-11" }]),
+    );
+    expect(one.pages[0]).toMatchObject({ crmLeads: 1, crmInferred: true });
+    expect(one.crmUnallocated).toBe(0);
+    // CRM leads never touch the Meta lead count, the rate or the verdict.
+    expect(one.pages[0].leads).toBe(5);
+    expect(one.pages[0].cvr).toBeCloseTo(5 / 600);
+  });
+
+  it("counts a water test as a CRM lead and ignores rows outside the period", () => {
+    const board = analyzePortfolioFunnel(
+      [account("a1", "Kinetico", [adTo("k1", "https://k.co/1", 500, 5, 600)])],
+      [{ id: "a1", account_name: "Kinetico", target_cpl: 50 }],
+      [],
+      [],
+      {
+        byAccount: new Map([["a1", [
+          { type: "water test", created_on: "2026-09-10", "Ad Name": null },
+          { type: "appointment", created_on: "2026-09-10", "Ad Name": null },  // not a lead
+          { type: "lead", created_on: "2026-08-20", "Ad Name": null },          // before the period
+        ]]]),
+        since: "2026-09-01",
+        until: "2026-09-30",
+      },
+    );
+    expect(board.pages[0].crmLeads).toBe(1);
+  });
+
   it("never reports a conversion rate above 100%", () => {
     const board = analyzePortfolioFunnel(
       [account("a1", "Kinetico", [adTo("k1", "https://k.co/lp-1", 500, 27, 7)])],

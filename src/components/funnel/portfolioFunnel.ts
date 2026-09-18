@@ -22,6 +22,7 @@
 // sources, so it's a signal to test, never a verdict — the UI says so.
 
 import { landingPageKey } from "@/components/creative-performance/breakdowns";
+import { adNameKey, type GhlConversionLite } from "@/components/creative-performance/ghl";
 import { OFFER_LABEL, type AngleKey, type OfferKey } from "@/components/creative-performance/labels";
 import type { CreativeAd, PortfolioAccount } from "@/components/creative-performance/useCreativePerformance";
 import { computeBenchmark, isTrackingGap, judge, type Benchmark, type Judgement } from "@/components/creative-performance/verdicts";
@@ -59,6 +60,8 @@ export interface PortfolioPage extends Judgement {
   copy: string | null;
   adCount: number;
   adsets: string[];
+  /** Normalized names of the ads pointing here, for matching CRM leads by utm_content. */
+  adNames: string[];
   spend: number;
   linkClicks: number;
   lpv: number;
@@ -73,6 +76,18 @@ export interface PortfolioPage extends Judgement {
    * market and bad in another. Null when the page has no leads or no benchmark.
    */
   benchmarkIndex: number | null;
+  /**
+   * Leads the CRM holds for this page, from GoHighLevel rather than Meta. Kept
+   * in its own field and never added to `leads`: one is what an ad produced,
+   * the other is what landed in the CRM from any source (design rule #5).
+   */
+  crmLeads: number;
+  /**
+   * True when those CRM leads carry no ad name and were attributed to this page
+   * only because it is the client's single page with ad traffic. A reasonable
+   * inference, not a measurement — the UI has to say so.
+   */
+  crmInferred: boolean;
 }
 
 /** A headline or an offer, pooled across every page that uses it. */
@@ -104,6 +119,8 @@ export interface PortfolioFunnel {
   unreadable: string[];
   /** Pages with ad traffic whose copy hasn't been synced, so they carry no headline. */
   unsynced: number;
+  /** CRM leads no page could be attributed to: no ad name, and the client runs several pages. */
+  crmUnallocated: number;
   clients: number;
   spend: number;
   lpv: number;
@@ -220,16 +237,77 @@ function compareRank(a: PortfolioPage, b: PortfolioPage): number {
   return b.spend - a.spend;
 }
 
+/** The CRM's own leads for the period, per account id. */
+export interface PortfolioGhl {
+  byAccount: Map<string, GhlConversionLite[]>;
+  since?: string;
+  until?: string;
+}
+
+const isLead = (t: string | null | undefined) => {
+  const v = t?.toLowerCase() ?? "";
+  return v === "lead" || v === "water test";
+};
+
+/**
+ * Put the CRM's leads on the page that earned them, in two steps:
+ *
+ *   1. A lead carrying an ad name belongs to whichever page that ad points at.
+ *      This is a measurement — the funnel passed utm_content through.
+ *   2. A lead with no ad name can still be placed when the client runs exactly
+ *      one page with ad traffic, because there is nowhere else it could have
+ *      come from. That is an inference, so the page is flagged `crmInferred`
+ *      and the UI labels it rather than passing it off as tracked.
+ *
+ * Anything left — no ad name, several pages — is returned as unallocated and
+ * shown as such. It is never spread across pages: a made-up split would read
+ * exactly like a measured one.
+ */
+function allocateCrmLeads(pages: PortfolioPage[], ghl: PortfolioGhl): number {
+  const byAccount = new Map<string, PortfolioPage[]>();
+  for (const p of pages) byAccount.set(p.accountId, [...(byAccount.get(p.accountId) ?? []), p]);
+
+  let unallocated = 0;
+  for (const [accountId, accountPages] of byAccount) {
+    const rows = ghl.byAccount.get(accountId) ?? [];
+    // An ad name maps to a page through the ads that page collected.
+    const pageOfAd = new Map<string, PortfolioPage>();
+    for (const p of accountPages) for (const n of p.adNames) pageOfAd.set(n, p);
+
+    let loose = 0;
+    for (const r of rows) {
+      if (ghl.since && r.created_on < ghl.since) continue;
+      if (ghl.until && r.created_on > ghl.until) continue;
+      if (!isLead(r.type)) continue;
+      const name = r["Ad Name"]?.trim();
+      const hit = name ? pageOfAd.get(adNameKey(name)) : undefined;
+      if (hit) hit.crmLeads += 1;
+      else loose += 1;
+    }
+
+    if (loose === 0) continue;
+    const entry = accountPages.filter((p) => p.lpv > 0 || p.spend > 0);
+    if (entry.length === 1) {
+      entry[0].crmLeads += loose;
+      entry[0].crmInferred = true;
+    } else {
+      unallocated += loose;
+    }
+  }
+  return unallocated;
+}
+
 /**
  * Every client's landing pages for one period. `accounts` carries the CPL
- * targets, `links` the synced page copy, `hidden` the clients kept off the
- * dashboard.
+ * targets, `links` the synced page copy, `ghl` the CRM's own leads, `hidden`
+ * the clients kept off the dashboard.
  */
 export function analyzePortfolioFunnel(
   portfolio: PortfolioAccount[],
   accounts: FunnelAccountInfo[],
   links: FunnelPageCopy[],
   hidden: string[],
+  ghl: PortfolioGhl = { byAccount: new Map(), since: undefined, until: undefined },
 ): PortfolioFunnel {
   const copyByAccount = new Map<string, Map<string, FunnelPageCopy>>();
   for (const l of links) {
@@ -285,6 +363,7 @@ export function analyzePortfolioFunnel(
         ...copy,
         adCount: ads.length,
         adsets: [...new Set(ads.map((a) => a.adset).filter((s): s is string => !!s))],
+        adNames: [...new Set(ads.map((a) => adNameKey(a.name)))],
         spend,
         linkClicks: sum(ads, (a) => a.linkClicks),
         lpv,
@@ -294,11 +373,15 @@ export function analyzePortfolioFunnel(
           benchmark && verdict.costPer !== null && verdict.verdict !== "unscored"
             ? verdict.costPer / benchmark.costPer
             : null,
+        crmLeads: 0,
+        crmInferred: false,
         ...rate(leads, lpv),
         ...verdict,
       });
     }
   }
+
+  const crmUnallocated = allocateCrmLeads(pages, ghl);
 
   const winners = pages.filter((p) => p.verdict === "winner").sort((a, b) => b.savings - a.savings);
   const wasters = pages.filter((p) => p.verdict === "waster").sort((a, b) => b.excessSpend - a.excessSpend);
@@ -326,6 +409,7 @@ export function analyzePortfolioFunnel(
     gaps,
     unreadable,
     unsynced,
+    crmUnallocated,
     clients: clients.size,
     spend: sum(pages, (p) => p.spend),
     lpv,

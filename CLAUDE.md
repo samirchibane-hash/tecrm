@@ -143,6 +143,11 @@ one shared query so the page makes a single Meta call. Pure logic lives in
   *verdict* is cost per website lead against that client's own CPL benchmark (the same Poisson
   test ads get — it's the only number carrying dollars), while its *conversion rate* isolates
   the page from the price of its traffic. A page can convert well and still cost too much.
+- **CRM leads are a second source, never merged.** `allocateCrmLeads` puts a GoHighLevel lead
+  on a page by the ad name the funnel passes through (`utm_content`). A lead with no ad name is
+  placed only when the client has exactly one page with ad traffic — flagged `crmInferred` and
+  labelled as inferred in the UI — and is otherwise reported as unallocated rather than split
+  across pages. CRM leads never feed `leads`, the conversion rate, the ranking or the verdict.
 - **One ranked list, not a winners/losers split.** Pages are ordered by `benchmarkIndex`
   (cost per lead ÷ that client's benchmark), which is the only way a page from a cheap
   market and one from a dear market belong in the same ranking. Pages that spent with no

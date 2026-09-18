@@ -25,6 +25,7 @@ import { Dash, VerdictPill } from "@/components/creative-performance/CreativeBit
 import { ANGLE_LABEL, OFFER_LABEL } from "@/components/creative-performance/labels";
 import { usePortfolioCreatives, type CreativeRange } from "@/components/creative-performance/useCreativePerformance";
 import { useFunnelRepoLinks } from "@/components/funnel-pages/useAccountLinks";
+import { useAllGhlConversions } from "@/hooks/useAccountGhlConversions";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { formatCount, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,7 @@ import {
   analyzePortfolioFunnel,
   type CopyGroup,
   type FunnelAccountInfo,
+  type PortfolioGhl,
   type PortfolioPage,
 } from "./portfolioFunnel";
 
@@ -71,6 +73,29 @@ function OfferTags({ page }: { page: PortfolioPage }) {
       <StatusPill status="info">{OFFER_LABEL[page.offer]}</StatusPill>
       {page.angle && page.angle !== "none" && <StatusPill status="neutral">{ANGLE_LABEL[page.angle]}</StatusPill>}
     </div>
+  );
+}
+
+/**
+ * Leads the CRM holds for this page. Never merged with the Meta number beside
+ * it: an inferred count has to look different from a matched one.
+ */
+function CrmLeads({ page }: { page: PortfolioPage }) {
+  if (page.crmLeads === 0) return <Dash title="No CRM lead is attributed to this page in this period" />;
+  if (!page.crmInferred) {
+    return (
+      <span className="tabular-nums text-foreground" title="Matched by ad name (utm_content) from GoHighLevel">
+        {formatCount(page.crmLeads)}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="tabular-nums italic text-muted-foreground underline decoration-dotted underline-offset-2"
+      title={`${page.crmLeads} GoHighLevel lead${page.crmLeads === 1 ? "" : "s"} carry no ad name. This is the client's only page with ad traffic, so they're shown here — inferred, not tracked: Meta recorded no ad click for them.`}
+    >
+      {formatCount(page.crmLeads)}*
+    </span>
   );
 }
 
@@ -168,6 +193,7 @@ function RankedPages({ pages }: { pages: PortfolioPage[] }) {
               <dl className="grid grid-cols-3 gap-2 text-xs">
                 <div><dt className="text-muted-foreground">Spend</dt><dd className="font-medium tabular-nums text-foreground">{formatUsd(p.spend)}</dd></div>
                 <div><dt className="text-muted-foreground">Leads</dt><dd className="font-medium tabular-nums text-foreground">{formatCount(p.leads)}</dd></div>
+                <div><dt className="text-muted-foreground">CRM leads</dt><dd className="font-medium"><CrmLeads page={p} /></dd></div>
                 <div><dt className="text-muted-foreground">Cost / lead</dt><dd className="font-medium tabular-nums text-foreground">{p.costPer !== null ? formatUsd(p.costPer) : "—"}</dd></div>
                 <div className="col-span-3"><dt className="text-muted-foreground">Conversion</dt><dd><RateBar page={p} scaleMax={scaleMax} /></dd></div>
               </dl>
@@ -184,7 +210,10 @@ function RankedPages({ pages }: { pages: PortfolioPage[] }) {
                 <TableHead>Verdict</TableHead>
                 <TableHead className="text-right">Spend</TableHead>
                 <TableHead className="text-right">Page views</TableHead>
-                <TableHead className="text-right">Leads</TableHead>
+                <TableHead className="text-right" title="Website leads Meta attributed to the ads pointing here">Leads</TableHead>
+                <TableHead className="text-right" title="Leads GoHighLevel holds for this page. A different source from Meta's, so the two are never added together.">
+                  CRM leads
+                </TableHead>
                 <TableHead className="w-[150px] text-right" title="Website leads ÷ page views, with its 95% range">Conversion</TableHead>
                 <TableHead className="text-right">Cost / lead</TableHead>
                 <TableHead className="text-right" title="Cost per lead against this client's own CPL target, or their average when no target is set">
@@ -201,6 +230,7 @@ function RankedPages({ pages }: { pages: PortfolioPage[] }) {
                   <TableCell className="py-2 text-right tabular-nums">{formatUsd(p.spend)}</TableCell>
                   <TableCell className="py-2 text-right tabular-nums">{formatCount(p.lpv)}</TableCell>
                   <TableCell className="py-2 text-right tabular-nums">{formatCount(p.leads)}</TableCell>
+                  <TableCell className="py-2 text-right"><CrmLeads page={p} /></TableCell>
                   <TableCell className="py-2"><RateBar page={p} scaleMax={scaleMax} /></TableCell>
                   <TableCell className="py-2 text-right tabular-nums">
                     {p.costPer !== null ? formatUsd(p.costPer, { decimals: true }) : <Dash title="No leads in this period" />}
@@ -372,10 +402,21 @@ export function PortfolioFunnelBoard({
 }) {
   const { data, isLoading, isError, error, refetch, isFetching } = usePortfolioCreatives(range);
   const { data: links = [], isLoading: linksLoading } = useFunnelRepoLinks();
+  const period = data?.accounts.find((a) => a.period)?.period ?? null;
+  const { data: ghlRows = [] } = useAllGhlConversions(period?.since ?? "");
+
+  const ghl = useMemo((): PortfolioGhl => {
+    const byAccount = new Map<string, { type: string | null; created_on: string; "Ad Name": string | null }[]>();
+    for (const r of ghlRows) {
+      if (!r.tecrm_id) continue;
+      byAccount.set(r.tecrm_id, [...(byAccount.get(r.tecrm_id) ?? []), r]);
+    }
+    return { byAccount, since: period?.since, until: period?.until };
+  }, [ghlRows, period]);
 
   const board = useMemo(
-    () => analyzePortfolioFunnel(data?.accounts ?? [], accounts, links, hiddenAccounts),
-    [data, accounts, links, hiddenAccounts],
+    () => analyzePortfolioFunnel(data?.accounts ?? [], accounts, links, hiddenAccounts, ghl),
+    [data, accounts, links, hiddenAccounts, ghl],
   );
 
   return (
@@ -481,7 +522,17 @@ export function PortfolioFunnelBoard({
             and still read “Too early”. Conversion is website leads ÷ landing page views, both from Meta — it isolates
             the page from the price of its traffic. Headlines and offers pool every page that uses them across clients
             and compare conversion at 95% confidence; that pooling mixes markets and audiences, so read it as the next
-            test to run, not a settled answer.
+            test to run, not a settled answer. <strong className="font-medium text-foreground/90">CRM leads</strong> are a
+            separate source — what GoHighLevel holds, matched to a page by the ad name the funnel passes through. They are
+            never added to Meta's leads and never feed the ranking or the conversion rate. A count marked{" "}
+            <span className="italic">1*</span> carries no ad name and is shown on the client's only page with ad traffic
+            because there is nowhere else it could have come from: an inference, not a measurement, and Meta recorded no
+            ad click for it.
+            {board.crmUnallocated > 0 && (
+              <> {formatCount(board.crmUnallocated)} CRM {board.crmUnallocated === 1 ? "lead carries" : "leads carry"} no
+                ad name at a client running several pages, so {board.crmUnallocated === 1 ? "it isn't" : "they aren't"}{" "}
+                shown against any page rather than being split across them.</>
+            )}
           </p>
         </>
       )}
