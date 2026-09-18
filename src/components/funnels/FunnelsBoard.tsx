@@ -43,7 +43,7 @@ export function FunnelsBoard({
   accounts: FunnelAccountInfo[];
   hiddenAccounts: string[];
 }) {
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>("traffic");
   const [query, setQuery] = useState("");
 
   const { data, isLoading, isError, error, refetch, isFetching } = usePortfolioCreatives(range);
