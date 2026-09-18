@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import AccountDetail from "./pages/AccountDetail";
 import Creatives from "./pages/Creatives";
+import Funnels from "./pages/Funnels";
 import AllTasks from "./pages/AllTasks";
 import Revenue from "./pages/Revenue";
 import ClaudeLog from "./pages/ClaudeLog";
@@ -38,6 +39,7 @@ const App = () => (
               <Route path="/account/:accountName" element={<AccountDetail />} />
               <Route path="/tasks" element={<AllTasks />} />
               <Route path="/creatives" element={<Creatives />} />
+              <Route path="/funnels" element={<Funnels />} />
               <Route path="/revenue" element={<Revenue />} />
               <Route path="/claude-log" element={<ClaudeLog />} />
               <Route path="/settings" element={<Navigate to={`/settings/${SETTINGS_SECTIONS[0].slug}`} replace />} />

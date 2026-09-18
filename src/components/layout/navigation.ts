@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   Image as ImageIcon,
+  Split,
   ListTodo,
   CircleDollarSign,
   GitCommitHorizontal,
@@ -19,6 +20,7 @@ export type NavItem = {
 export const MAIN_NAV: NavItem[] = [
   { title: "Performance", to: "/", icon: LayoutDashboard, alsoActiveOn: ["/account/", "/onboarding/"] },
   { title: "Creatives", to: "/creatives", icon: ImageIcon },
+  { title: "Funnels", to: "/funnels", icon: Split },
   { title: "Tasks", to: "/tasks", icon: ListTodo },
   { title: "Revenue", to: "/revenue", icon: CircleDollarSign },
   { title: "Claude Log", to: "/claude-log", icon: GitCommitHorizontal },

@@ -53,6 +53,8 @@ export interface FunnelPageCopy {
 export interface FunnelPageVersion {
   url: string;
   version: number;
+  /** Split-test arm. "a" for an ordinary sequential rewrite. */
+  variant: string;
   page_headline: string | null;
   valid_from: string;
   valid_to: string | null;

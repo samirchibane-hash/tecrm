@@ -438,7 +438,7 @@ serve(async (req) => {
     // Not an error: the account simply isn't linked to Meta yet.
     const actId = account.fb_ad_account_id as string | null;
     if (!actId) {
-      return json({ adAccount: null, period: null, accountSpend: null, appointmentsTracked: false, ads: [], assets: null, fetchedAt: new Date().toISOString() });
+      return json({ adAccount: null, period: null, accountSpend: null, appointmentsTracked: false, ads: [], assets: null, daily: null, fetchedAt: new Date().toISOString() });
     }
 
     const result = await loadAccount(actId, range, body.detail !== false, token);

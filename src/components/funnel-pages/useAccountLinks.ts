@@ -49,7 +49,7 @@ export function useFunnelPageVersions() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("funnel_page_copy_versions")
-        .select("version, page_headline, valid_from, valid_to, account_links!inner(url)")
+        .select("version, variant, page_headline, valid_from, valid_to, account_links!inner(url)")
         .order("valid_from", { ascending: true });
       if (error) throw error;
       return (data ?? []).map((row) => {
@@ -57,6 +57,7 @@ export function useFunnelPageVersions() {
         return {
           url: Array.isArray(link) ? link[0]?.url ?? "" : link.url,
           version: row.version,
+          variant: (row.variant as string | null) ?? "a",
           page_headline: row.page_headline,
           valid_from: row.valid_from,
           valid_to: row.valid_to,
