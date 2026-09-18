@@ -224,7 +224,16 @@ function assetRows(rows: Graph[] | null, key: "title_asset" | "body_asset", appo
   return [...merged.values()];
 }
 
-async function loadAccount(actId: string, range: Range, detail: boolean, token: string) {
+/**
+ * Per-ad, per-day rows. The only way to tell which landing page *version* earned
+ * a lead is to know the day it landed, so the Funnel scorecard asks for these
+ * when it needs to split a page's figures at a copy change. A day is the finest
+ * grain Meta reports, so a version that changed mid-day leaves that one day
+ * ambiguous — the dashboard says so rather than splitting it further.
+ */
+const DAILY_FIELDS = "ad_id,date_start,spend,inline_link_clicks,actions";
+
+async function loadAccount(actId: string, range: Range, detail: boolean, token: string, daily = false) {
   // Asset breakdowns only exist for ads that rotate assets; if Meta refuses the
   // breakdown the report still works, scored per ad instead of per text.
   const optional = (p: Promise<Graph[]>) =>
@@ -243,7 +252,7 @@ async function loadAccount(actId: string, range: Range, detail: boolean, token: 
       limit: "500",
     }, token);
 
-  const [meta, tracking, insightRows, liveAds, titleRows, bodyRows] = await Promise.all([
+  const [meta, tracking, insightRows, liveAds, titleRows, bodyRows, dailyRows] = await Promise.all([
     graph(actId, { fields: `name,currency,${nestedInsights(range, "spend,date_start,date_stop")}` }, token),
     graph(`${actId}/insights`, { date_preset: "last_90d", fields: "conversions" }, token),
     graphAll(`${actId}/insights`, { level: "ad", ...rangeParams(range), fields: INSIGHT_FIELDS, filtering: DELIVERED, limit: "500" }, token),
@@ -254,6 +263,16 @@ async function loadAccount(actId: string, range: Range, detail: boolean, token: 
     }, token),
     detail ? optional(breakdown("title_asset")) : Promise.resolve(null),
     detail ? optional(breakdown("body_asset")) : Promise.resolve(null),
+    daily
+      ? graphAll(`${actId}/insights`, {
+          level: "ad",
+          ...rangeParams(range),
+          time_increment: "1",
+          fields: DAILY_FIELDS,
+          filtering: DELIVERED,
+          limit: "500",
+        }, token)
+      : Promise.resolve(null),
   ]);
 
   // Creative details for ads that delivered in the period but aren't live now.
@@ -341,6 +360,16 @@ async function loadAccount(actId: string, range: Range, detail: boolean, token: 
     assets: detail
       ? { headlines: assetRows(titleRows, "title_asset", appointmentsTracked), bodies: assetRows(bodyRows, "body_asset", appointmentsTracked) }
       : null,
+    daily: dailyRows
+      ? dailyRows.map((r) => ({
+          adId: r.ad_id as string,
+          date: r.date_start as string,
+          spend: num(r.spend) ?? 0,
+          linkClicks: num(r.inline_link_clicks) ?? actionCount(r, "link_click"),
+          landingPageViews: actionCount(r, "landing_page_view"),
+          webLeads: actionCount(r, "offsite_conversion.fb_pixel_lead"),
+        }))
+      : null,
   };
 }
 
@@ -382,9 +411,10 @@ serve(async (req) => {
       if (error) throw new Error(`accounts: ${error.message}`);
 
       const detail = body.detail === true;
+      const daily = body.daily === true;
       const results = await Promise.all((accounts ?? []).map(async (a) => {
         try {
-          return { accountId: a.id, accountName: a.account_name, ...(await loadAccount(a.fb_ad_account_id, range, detail, token)), error: null };
+          return { accountId: a.id, accountName: a.account_name, ...(await loadAccount(a.fb_ad_account_id, range, detail, token, daily)), error: null };
         } catch (e) {
           const code = e instanceof MetaError ? e.code : "ERROR";
           return { accountId: a.id, accountName: a.account_name, error: { code, message: e instanceof Error ? e.message : "Unknown error" } };

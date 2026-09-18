@@ -80,6 +80,33 @@ export interface PageCopyVersion {
   previousHeadline: string | null;
 }
 
+/**
+ * One version of a page, with the figures it earned on its own. This is the
+ * unit a copy test is actually about: v1 is off, v2 is live, and each carries
+ * what it did while it was up, never a blended number across both.
+ */
+export interface PageVersionRow {
+  version: number;
+  headline: string | null;
+  /** "live" = serving now. "off" = replaced; its numbers are final. */
+  status: "live" | "off";
+  /** Days inside the period this version was live for. */
+  days: number;
+  spend: number;
+  lpv: number;
+  leads: number;
+  cvr: number | null;
+  interval: { low: number; high: number } | null;
+  costPerLead: number | null;
+  /**
+   * The day a version changed is split between two versions and Meta reports no
+   * finer than a day, so that day's figures sit with whichever version held most
+   * of it. True here means this version owns such a day: its totals are within
+   * one day's traffic of exact.
+   */
+  hasSplitDay: boolean;
+}
+
 export interface PortfolioPage extends Judgement, PageCopyVersion {
   key: string;             // normalized URL
   accountId: string;
@@ -122,6 +149,12 @@ export interface PortfolioPage extends Judgement, PageCopyVersion {
    * inference, not a measurement — the UI has to say so.
    */
   crmInferred: boolean;
+  /**
+   * This page's versions, newest first, each with its own figures. Empty when
+   * the page has no copy history, or when day-level rows weren't fetched — in
+   * which case the UI shows the blended row alone rather than guessing a split.
+   */
+  versionRows: PageVersionRow[];
 }
 
 /** A headline or an offer, pooled across every page that uses it. */
@@ -248,6 +281,89 @@ export function resolveCopyVersion(
     spanned: overlapping.length,
     previousHeadline: prior?.page_headline ?? null,
   };
+}
+
+/**
+ * The version live for the greater part of a given day.
+ *
+ * Meta reports no finer than a day, so a day containing a change belongs partly
+ * to each version. Midday decides it: a version that took over in the morning
+ * owns that day, one that took over at night does not. That misplaces at most
+ * one day's traffic per change, and `hasSplitDay` tells the reader which rows
+ * carry the uncertainty instead of hiding it.
+ */
+function versionOnDay(ordered: FunnelPageVersion[], day: string): FunnelPageVersion | null {
+  const midday = `${day}T12:00:00.000Z`;
+  for (let i = ordered.length - 1; i >= 0; i--) {
+    const v = ordered[i];
+    // The earliest version reaches back indefinitely (history starts with the sync).
+    const from = i === 0 ? "" : v.valid_from;
+    if (from <= midday && (v.valid_to === null || v.valid_to > midday)) return v;
+  }
+  return null;
+}
+
+/** Several ads point at one page, so their day rows are summed into one series. */
+function mergeDays(rows: { date: string; spend: number; lpv: number; leads: number }[]) {
+  const byDate = new Map<string, { date: string; spend: number; lpv: number; leads: number }>();
+  for (const r of rows) {
+    const m = byDate.get(r.date) ?? { date: r.date, spend: 0, lpv: 0, leads: 0 };
+    m.spend += r.spend;
+    m.lpv += r.lpv;
+    m.leads += r.leads;
+    byDate.set(r.date, m);
+  }
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** True when a version boundary falls inside this calendar day. */
+const isSplitDay = (ordered: FunnelPageVersion[], day: string) =>
+  ordered.some((v, i) => i > 0 && v.valid_from >= `${day}T00:00:00.000Z` && v.valid_from <= `${day}T23:59:59.999Z`);
+
+/**
+ * Split one page's figures across the versions that earned them, using day-level
+ * rows. Returns [] when there are no daily rows or no history: a split we can't
+ * measure is not one we invent.
+ */
+export function splitPageVersions(
+  versions: FunnelPageVersion[],
+  days: { date: string; spend: number; lpv: number; leads: number }[],
+): PageVersionRow[] {
+  if (versions.length === 0 || days.length === 0) return [];
+
+  const ordered = [...versions].sort((a, b) => a.valid_from.localeCompare(b.valid_from));
+  const buckets = new Map<number, { spend: number; lpv: number; leads: number; days: number; split: boolean }>();
+
+  for (const d of days) {
+    const v = versionOnDay(ordered, d.date);
+    if (!v) continue;
+    const b = buckets.get(v.version) ?? { spend: 0, lpv: 0, leads: 0, days: 0, split: false };
+    b.spend += d.spend;
+    b.lpv += d.lpv;
+    b.leads += d.leads;
+    b.days += 1;
+    b.split ||= isSplitDay(ordered, d.date);
+    buckets.set(v.version, b);
+  }
+
+  return ordered
+    .filter((v) => buckets.has(v.version))
+    .map((v): PageVersionRow => {
+      const b = buckets.get(v.version)!;
+      return {
+        version: v.version,
+        headline: v.page_headline,
+        status: v.valid_to === null ? "live" : "off",
+        days: b.days,
+        spend: b.spend,
+        lpv: b.lpv,
+        leads: b.leads,
+        costPerLead: b.leads > 0 ? b.spend / b.leads : null,
+        hasSplitDay: b.split,
+        ...rate(b.leads, b.lpv),
+      };
+    })
+    .sort((a, b) => b.version - a.version);
 }
 
 function rate(leads: number, lpv: number) {
@@ -447,6 +563,15 @@ export function analyzePortfolioFunnel(
       if (key.startsWith("__")) continue; // no page, or several Meta didn't split
       byPage.set(key, [...(byPage.get(key) ?? []), ad]);
     }
+
+    // Day-level rows, indexed by ad, so each page's figures can be cut at a copy change.
+    const dailyByAd = new Map<string, { date: string; spend: number; lpv: number; leads: number }[]>();
+    for (const d of acct.daily ?? []) {
+      dailyByAd.set(d.adId, [
+        ...(dailyByAd.get(d.adId) ?? []),
+        { date: d.date, spend: d.spend, lpv: d.landingPageViews, leads: d.webLeads },
+      ]);
+    }
     if (byPage.size > 0) clients.add(acct.accountName);
 
     for (const [key, ads] of byPage) {
@@ -478,6 +603,10 @@ export function analyzePortfolioFunnel(
             : null,
         crmLeads: 0,
         crmInferred: false,
+        versionRows: splitPageVersions(
+          versionsByPage.get(key) ?? [],
+          mergeDays(ads.flatMap((a) => dailyByAd.get(a.id) ?? [])),
+        ),
         ...resolveCopyVersion(versionsByPage.get(key) ?? [], ghl.since, ghl.until),
         ...rate(leads, lpv),
         ...verdict,

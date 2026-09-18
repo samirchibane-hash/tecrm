@@ -10,6 +10,7 @@ import {
   analyzePortfolioFunnel,
   headlineKey,
   resolveCopyVersion,
+  splitPageVersions,
   type FunnelPageCopy,
   type FunnelPageVersion,
 } from "@/components/funnel/portfolioFunnel";
@@ -370,6 +371,45 @@ describe("portfolio funnel", () => {
     it("marks a first-seen date as first-seen, and a genuine go-live as not", () => {
       expect(resolveCopyVersion([V1, V2], "2026-08-05", "2026-08-20").sinceIsFirstSeen).toBe(true);
       expect(resolveCopyVersion([V1, V2], "2026-09-11", "2026-09-17").sinceIsFirstSeen).toBe(false);
+    });
+
+    describe("per-version performance", () => {
+      const day = (date: string, spend: number, lpv: number, leads: number) => ({ date, spend, lpv, leads });
+
+      it("gives each version only the days it was live for, newest first", () => {
+        const rows = splitPageVersions(
+          [V1, V2], // V1 ends 2026-09-10T00:00Z, V2 opens then
+          [day("2026-09-08", 100, 100, 5), day("2026-09-09", 100, 100, 5), day("2026-09-11", 100, 100, 20)],
+        );
+        expect(rows.map((r) => r.version)).toEqual([2, 1]);
+        const [v2, v1] = rows;
+        expect(v1).toMatchObject({ status: "off", days: 2, spend: 200, lpv: 200, leads: 10 });
+        expect(v2).toMatchObject({ status: "live", days: 1, spend: 100, lpv: 100, leads: 20 });
+        expect(v1.cvr).toBeCloseTo(0.05);
+        expect(v2.cvr).toBeCloseTo(0.2);
+        expect(v1.costPerLead).toBeCloseTo(20);
+      });
+
+      it("puts the changeover day with whichever version held most of it, and flags it", () => {
+        // V2 opens at 00:00, so it owns the whole changeover day.
+        const rows = splitPageVersions([V1, V2], [day("2026-09-10", 100, 100, 9)]);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ version: 2, days: 1, leads: 9, hasSplitDay: true });
+      });
+
+      it("leaves an evening changeover's day with the version it replaced", () => {
+        // The real rollout: live at 2026-09-18T03:28Z, so Sep 18 is mostly v2's,
+        // but a version opening after midday would not take that day.
+        const lateV1 = version("https://k.co/lp-1", 1, "Old", "2026-08-01T00:00:00Z", "2026-09-18T20:00:00Z");
+        const lateV2 = version("https://k.co/lp-1", 2, "New", "2026-09-18T20:00:00Z");
+        const rows = splitPageVersions([lateV1, lateV2], [day("2026-09-18", 100, 100, 4)]);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ version: 1, hasSplitDay: true });
+      });
+
+      it("invents no split when there are no daily rows", () => {
+        expect(splitPageVersions([V1, V2], [])).toEqual([]);
+      });
     });
 
     it("marks the page and its pooled headline when the period mixes versions", () => {

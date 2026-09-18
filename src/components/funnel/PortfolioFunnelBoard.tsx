@@ -91,6 +91,57 @@ function CopyVersion({ page }: { page: PortfolioPage }) {
   );
 }
 
+/**
+ * A page's versions, each with what it earned while it was up. This is the row
+ * a copy test is actually about: the live version and the ones it replaced,
+ * never blended. Only rendered when day-level rows made a real split possible.
+ */
+function VersionHistory({ page }: { page: PortfolioPage }) {
+  if (page.versionRows.length < 2) return null;
+
+  return (
+    <div className="mt-2 space-y-1 border-l-2 border-border/60 pl-2.5">
+      {page.versionRows.map((v) => (
+        <div key={v.version} className="flex items-start gap-2 text-[11px]">
+          <span className="shrink-0 pt-px">
+            <StatusPill status={v.status === "live" ? "success" : "neutral"}>
+              v{v.version} · {v.status === "live" ? "Live" : "Off"}
+            </StatusPill>
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-muted-foreground" title={v.headline ?? undefined}>
+              {v.headline ? `“${v.headline}”` : "Copy not recorded"}
+            </p>
+            <p className="tabular-nums text-muted-foreground">
+              {v.days} {v.days === 1 ? "day" : "days"} · {formatUsd(v.spend)} · {formatCount(v.lpv)} views ·{" "}
+              {formatCount(v.leads)} {v.leads === 1 ? "lead" : "leads"}
+              {v.costPerLead !== null && <> · {formatUsd(v.costPerLead)}/lead</>}
+              {v.hasSplitDay && (
+                <span
+                  className="ml-1 text-warning"
+                  title="The day this version changed is shared with the other version. Meta reports no finer than a day, so that day sits with whichever version held most of it."
+                >
+                  ±1 day
+                </span>
+              )}
+            </p>
+          </div>
+          <span
+            className="shrink-0 pt-px text-right font-semibold tabular-nums text-foreground"
+            title={
+              v.cvr === null || !v.interval
+                ? "Too few page views for a conversion rate"
+                : `${pct(v.cvr)}, 95% range ${pct(v.interval.low)}–${pct(v.interval.high)}`
+            }
+          >
+            {v.cvr === null ? <Dash title="No conversion rate yet" /> : pct(v.cvr)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** A page's own hero headline — the thing the scorecard exists to compare. */
 function Headline({ page }: { page: PortfolioPage }) {
   if (!page.headline) {
@@ -191,6 +242,7 @@ function PageIdentity({ page }: { page: PortfolioPage }) {
       </div>
       <Headline page={page} />
       <OfferTags page={page} />
+      <VersionHistory page={page} />
     </div>
   );
 }

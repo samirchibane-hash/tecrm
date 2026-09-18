@@ -73,6 +73,20 @@ export interface AssetRow {
   appointments: number | null;
 }
 
+/**
+ * One ad's numbers for one day. Requested only when a caller needs to attribute
+ * performance to a window narrower than the reporting period — splitting a
+ * landing page's figures at a copy change is the reason this exists.
+ */
+export interface DailyAdRow {
+  adId: string;
+  date: string; // YYYY-MM-DD, in the ad account's timezone
+  spend: number;
+  linkClicks: number;
+  landingPageViews: number;
+  webLeads: number;
+}
+
 export interface AccountCreatives {
   adAccount: { id: string; name: string; currency: string } | null;
   period: { since: string; until: string } | null;
@@ -82,6 +96,8 @@ export interface AccountCreatives {
   ads: CreativeAd[];
   /** Null when not requested; each list is null when Meta refused that breakdown. */
   assets: { headlines: AssetRow[] | null; bodies: AssetRow[] | null } | null;
+  /** Per-ad, per-day rows. Null unless the caller asked for them. */
+  daily: DailyAdRow[] | null;
 }
 
 export interface CreativePerformance extends AccountCreatives {
@@ -149,6 +165,8 @@ export function usePortfolioCreatives(range: CreativeRange, enabled = true) {
     enabled,
     staleTime: 5 * 60 * 1000,
     retry: noRetryOnAccess,
-    queryFn: () => invoke<PortfolioPerformance>(supabase, { scope: "all", ...range }),
+    // daily: the funnel board splits each page's figures at its copy changes,
+    // which needs day-level rows — the period total can't be cut at a boundary.
+    queryFn: () => invoke<PortfolioPerformance>(supabase, { scope: "all", ...range, daily: true }),
   });
 }
