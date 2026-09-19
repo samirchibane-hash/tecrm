@@ -39,6 +39,12 @@ function Stat({ label, value, title }: { label: string; value: React.ReactNode; 
  * not to the arm the visitor was shown, so it cannot split a test at all.
  */
 function SplitTestPanel({ test }: { test: SplitTest }) {
+  // Opt-ins the page saw that never arrived as an attributable CRM lead. Arms
+  // with no attribution at all are left out: unknown is not a shortfall.
+  const dropped = test.arms.reduce(
+    (s, a) => s + (a.crmLeads === null ? 0 : Math.max(0, a.optIns - a.crmLeads)),
+    0,
+  );
   return (
     <section className="rounded-lg border border-border/60 bg-muted/30 p-3">
       <header className="mb-2 flex flex-wrap items-center gap-2">
@@ -67,7 +73,22 @@ function SplitTestPanel({ test }: { test: SplitTest }) {
                   {arm.headline ? `“${arm.headline}”` : "Copy not recorded for this arm"}
                 </p>
                 <p className="text-[11px] tabular-nums text-muted-foreground">
-                  {formatCount(arm.views)} views · {formatCount(arm.leads)} {arm.leads === 1 ? "lead" : "leads"}
+                  {formatCount(arm.views)} views ·{" "}
+                  <span title="Form submits the page itself recorded. The rate on the right is built on this and views, both measured by the same beacon.">
+                    {formatCount(arm.optIns)} {arm.optIns === 1 ? "opt-in" : "opt-ins"}
+                  </span>
+                  {arm.crmLeads !== null && (
+                    <span
+                      title={
+                        arm.crmLeads < arm.optIns
+                          ? `${formatCount(arm.optIns - arm.crmLeads)} of this arm's opt-ins reached GoHighLevel without their page and variant, so they can't be counted against this page. Map the lp_page contact field on this sub-account.`
+                          : "GoHighLevel contacts carrying this page and this arm — the same measure as the Leads figure above"
+                      }
+                    >
+                      {" "}· {formatCount(arm.crmLeads)} in CRM
+                      {arm.crmLeads < arm.optIns && <> (−{formatCount(arm.optIns - arm.crmLeads)})</>}
+                    </span>
+                  )}
                   {/* Never render an unattributed arm as "0 booked": no lp_variant on
                       the lead means unknown, and a zero here would read as a page
                       that books nobody. */}
@@ -111,7 +132,21 @@ function SplitTestPanel({ test }: { test: SplitTest }) {
       <p className="mt-2 text-[11px] text-muted-foreground">
         {test.decided
           ? "An arm is ahead at 95% confidence — safe to call and roll out."
-          : "No arm has separated yet. Views and leads are counted by the page itself, not by Meta; booked comes from GoHighLevel."}
+          : "No arm has separated yet."}{" "}
+        Views and opt-ins are counted by the page itself, so the rate compares like with like;
+        the CRM and booked figures come from GoHighLevel and only count leads carrying this
+        page and arm.
+        {dropped > 0 && (
+          <>
+            {" "}
+            <span className="text-danger">
+              {formatCount(dropped)} {dropped === 1 ? "opt-in" : "opt-ins"} never reached the CRM
+              with a page and variant, so {dropped === 1 ? "it isn't" : "they aren't"} in this
+              page&rsquo;s lead count — map the <code className="font-mono">lp_page</code> contact
+              field on this sub-account.
+            </span>
+          </>
+        )}
       </p>
     </section>
   );

@@ -47,7 +47,21 @@ export interface SplitArm {
   headline: string | null;
   weight: number | null;
   views: number;
-  leads: number;
+  /**
+   * Form submits the page itself recorded. Not the same thing as a lead in the
+   * CRM, and deliberately not called one: the page sees every opt-in, while the
+   * CRM only holds the ones that reached GoHighLevel carrying both lp_page and
+   * lp_variant. This is the count the arm's rate is built on, because it and
+   * `views` are measured by the same beacon on the same page.
+   */
+  optIns: number;
+  /**
+   * Leads the CRM holds for this arm — the same measure the page card's Leads
+   * figure uses, so the two reconcile. Null when this arm has no attribution.
+   * Fewer than `optIns` means opt-ins reached GoHighLevel without their page
+   * and variant, usually an unmapped `lp_page` custom field on that account.
+   */
+  crmLeads: number | null;
   cvr: number | null;
   interval: { low: number; high: number } | null;
   /**
@@ -169,7 +183,7 @@ export function scoreArms(arms: SplitArm[]): { arms: SplitArm[]; decided: boolea
   let decided = false;
   for (const a of eligible) {
     if (a === leader) continue;
-    a.pValue = twoProportionPValue(leader.leads, leader.views, a.leads, a.views);
+    a.pValue = twoProportionPValue(leader.optIns, leader.views, a.optIns, a.views);
     if (a.pValue !== null && a.pValue < SIGNIFICANCE) {
       a.status = "behind";
       decided = true;
@@ -184,11 +198,11 @@ function buildTest(
   days: VariantDayRecord[],
   bookings: VariantBookingRecord[],
 ): SplitTest {
-  const byVariant = new Map<string, { views: number; leads: number }>();
+  const byVariant = new Map<string, { views: number; optIns: number }>();
   for (const d of days) {
-    const b = byVariant.get(d.variant) ?? { views: 0, leads: 0 };
+    const b = byVariant.get(d.variant) ?? { views: 0, optIns: 0 };
     b.views += d.views;
-    b.leads += d.leads;
+    b.optIns += d.leads;
     byVariant.set(d.variant, b);
   }
 
@@ -209,19 +223,20 @@ function buildTest(
       ?.page_headline ?? null;
 
   const arms = keys.map((variant): SplitArm => {
-    const b = byVariant.get(variant) ?? { views: 0, leads: 0 };
+    const b = byVariant.get(variant) ?? { views: 0, optIns: 0 };
     const crm = bookedBy.get(variant) ?? null;
     return {
       variant,
       headline: headlineFor(variant),
       weight: record.weights?.[variant] ?? null,
       views: b.views,
-      leads: b.leads,
+      optIns: b.optIns,
+      crmLeads: crm?.leads ?? null,
       status: "needs_traffic",
       pValue: null,
       booked: crm?.booked ?? null,
       bookedRate: crm && crm.leads > 0 ? crm.booked / crm.leads : null,
-      ...rate(b.leads, b.views),
+      ...rate(b.optIns, b.views),
     };
   });
 

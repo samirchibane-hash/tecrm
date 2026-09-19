@@ -32,13 +32,14 @@ const account = (id: string, name: string, ads: ReturnType<typeof adTo>[]): Port
   error: null,
 });
 
-const arm = (variant: string, views: number, leads: number): SplitArm => ({
+const arm = (variant: string, views: number, optIns: number): SplitArm => ({
   variant,
   headline: null,
   weight: 50,
   views,
-  leads,
-  cvr: views > 0 ? leads / views : null,
+  optIns,
+  crmLeads: null,
+  cvr: views > 0 ? optIns / views : null,
   interval: null,
   booked: null,
   bookedRate: null,
@@ -225,7 +226,7 @@ describe("funnels board", () => {
     const b = board({ links: [link("Kinetico", "https://k.co/lp-1", "LP 1")], tests, variantDays });
     const arms = b.rows[0].runningTest!.arms;
     expect(arms.find((a) => a.variant === "a")!.views).toBe(200);
-    expect(arms.find((a) => a.variant === "b")!.leads).toBe(30);
+    expect(arms.find((a) => a.variant === "b")!.optIns).toBe(30);
   });
 });
 
@@ -264,6 +265,31 @@ describe("booked appointments per arm", () => {
     expect(arms.find((a) => a.variant === "a")!.booked).toBe(4);
     expect(arms.find((a) => a.variant === "a")!.bookedRate).toBeCloseTo(0.4);
     expect(arms.find((a) => a.variant === "b")!.bookedRate).toBeCloseTo(0.8);
+  });
+
+  it("keeps the page's opt-ins and the CRM's leads apart on the same arm", () => {
+    // The real case: meridian-1 arm B recorded two opt-ins on the page, but one
+    // reached GoHighLevel with lp_variant and no lp_page, so only one can be
+    // counted against this page. Reporting "2 leads" beside the card's "1 lead"
+    // was the bug — the arm now carries both numbers under different names.
+    const b = board({
+      links,
+      tests,
+      variantDays: [
+        { url: "https://k.co/lp-1", variant: "b", day: "2026-09-18", views: 11, leads: 1 },
+        { url: "https://k.co/lp-1", variant: "b", day: "2026-09-19", views: 8, leads: 1 },
+      ],
+      variantBookings: [attributed("https://k.co/lp-1", "b", 1, 1)],
+    });
+    const armB = b.rows[0].runningTest!.arms.find((a) => a.variant === "b")!;
+    expect(armB.views).toBe(19);
+    expect(armB.optIns).toBe(2);
+    expect(armB.crmLeads).toBe(1);
+    expect(armB.booked).toBe(1);
+    // The rate stays on the page's own numbers: views and opt-ins share a beacon.
+    expect(armB.cvr).toBeCloseTo(2 / 19);
+    // Booked is rated against the CRM's own leads, never against opt-ins.
+    expect(armB.bookedRate).toBe(1);
   });
 
   it("ignores bookings from outside the test's window", () => {
