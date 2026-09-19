@@ -53,11 +53,15 @@ function board(opts: {
   tests?: SplitTestRecord[];
   variantDays?: VariantDayRecord[];
   variantBookings?: VariantBookingRecord[];
+  ghl?: { type: string | null; created_on: string; "Ad Name": string | null }[];
   hidden?: string[];
 }) {
   const portfolio = opts.portfolio ?? [];
   const accounts = [{ id: "a1", account_name: "Kinetico", target_cpl: 50 }];
-  const funnel = analyzePortfolioFunnel(portfolio, accounts, opts.links, opts.hidden ?? [], undefined, opts.versions ?? []);
+  const ghl = opts.ghl
+    ? { byAccount: new Map([["a1", opts.ghl]]), since: undefined, until: undefined }
+    : undefined;
+  const funnel = analyzePortfolioFunnel(portfolio, accounts, opts.links, opts.hidden ?? [], ghl, opts.versions ?? []);
   return buildFunnelsBoard({
     links: opts.links,
     pages: funnel.pages,
@@ -66,9 +70,12 @@ function board(opts: {
     tests: opts.tests ?? [],
     variantDays: opts.variantDays ?? [],
     variantBookings: opts.variantBookings ?? [],
+    crmUnallocatedByAccount: funnel.crmUnallocatedByAccount,
     hidden: opts.hidden ?? [],
   });
 }
+
+const crmLead = (adName: string | null) => ({ type: "lead", created_on: "2026-09-18", "Ad Name": adName });
 
 describe("entry pages", () => {
   it("keeps landing pages and drops the funnel's own steps", () => {
@@ -107,7 +114,42 @@ describe("funnels board", () => {
     expect(row.perf?.spend).toBe(1000);
     expect(row.ads.map((a) => a.id)).toEqual(["dear", "cheap"]);
     expect(b.withTraffic).toBe(1);
-    expect(b.cvr).toBeCloseTo(22 / 500);
+    // Meta counted 22 leads on these ads. With no CRM contact behind them the
+    // board reports none: the pixel's number is not a lead count here.
+    expect(b.leads).toBe(0);
+    expect(b.cvr).toBe(0);
+  });
+
+  it("counts leads the CRM holds, not the pixel's inflated count", () => {
+    const b = board({
+      links: [link("Kinetico", "https://k.co/lp-1", "LP 1", "Soft water")],
+      portfolio: [account("a1", "Kinetico", [adTo("dear", "https://k.co/lp-1", 900, 20, 450)])],
+      ghl: [crmLead("Ad dear"), crmLead("Ad dear")],
+    });
+    // Meta claimed 20; two contacts exist.
+    expect(b.rows[0].verifiedLeads).toBe(2);
+    expect(b.leads).toBe(2);
+    expect(b.cvr).toBeCloseTo(2 / 450);
+    expect(b.rows[0].verifiedPartial).toBe(false);
+  });
+
+  it("marks a page's verified count as a floor when the client has unplaced leads", () => {
+    const b = board({
+      links: [link("Kinetico", "https://k.co/lp-1", "LP 1"), link("Kinetico", "https://k.co/lp-2", "LP 2")],
+      portfolio: [account("a1", "Kinetico", [
+        adTo("one", "https://k.co/lp-1", 500, 5, 250),
+        adTo("two", "https://k.co/lp-2", 500, 5, 250),
+      ])],
+      // No ad name, and the client runs two pages with traffic: unplaceable.
+      ghl: [crmLead(null)],
+    });
+    expect(b.unallocatedLeads).toBe(1);
+    expect(b.rows.every((r) => r.verifiedPartial)).toBe(true);
+  });
+
+  it("reports no lead count at all for a page with no ad traffic", () => {
+    const b = board({ links: [link("Kinetico", "https://k.co/lp-1", "LP 1")] });
+    expect(b.rows[0].verifiedLeads).toBeNull();
   });
 
   it("hides a client that's hidden from the dashboard", () => {

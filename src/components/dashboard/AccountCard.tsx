@@ -13,7 +13,6 @@ import {
   BarChart3,
   CalendarCheck,
   UserCheck,
-  Target,
   PhoneCall,
   X,
   SquareArrowOutUpRight,
@@ -31,8 +30,6 @@ const CPL_TARGET = 40;
 const APPT_TARGET = 200;
 
 const COST_TARGETS: Partial<Record<KpiKey, number>> = {
-  leadsCost: CPL_TARGET,
-  fbLeadsCost: CPL_TARGET,
   ghlCostPerLead: CPL_TARGET,
   apptCost: APPT_TARGET,
   webApptCost: APPT_TARGET,
@@ -59,7 +56,7 @@ const STATUS_TEXT: Record<string, string> = {
 };
 
 const LOWER_IS_BETTER_KEYS = new Set<KpiKey>([
-  "ghlCostPerLead", "ghlCostPerAppt", "leadsCost", "fbLeadsCost",
+  "ghlCostPerLead", "ghlCostPerAppt",
   "apptCost", "webApptCost", "avgCPC", "avgCPM",
 ]);
 
@@ -115,7 +112,6 @@ export function getPalette(label: string, options: ChangeLogOption[]) {
 export type KpiKey =
   | "totalSpend" | "totalClicks" | "totalImpressions" | "totalReach" | "avgCTR" | "avgCPC" | "avgCPM"
   | "webApptTotal" | "webApptCost" | "apptTotal" | "apptCost"
-  | "leadsTotal" | "leadsCost" | "fbLeadsTotal" | "fbLeadsCost"
   | "ghlLeads" | "ghlAppointments" | "ghlCostPerLead" | "ghlCostPerAppt"
   | "soldCount" | "totalRevenue" | "adRoi";
 
@@ -139,13 +135,9 @@ export const ALL_KPIS: { key: KpiKey; label: string; icon: typeof DollarSign; so
   { key: "webApptCost", label: "Cost/Web Appt", icon: CalendarCheck, source: "meta", format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
   { key: "apptTotal", label: "Appts Scheduled", icon: PhoneCall, source: "meta", format: (v) => v.toLocaleString() },
   { key: "apptCost", label: "Cost/Appt", icon: PhoneCall, source: "meta", format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
-  { key: "leadsTotal", label: "Leads", icon: UserCheck, source: "meta", format: (v) => v.toLocaleString() },
-  { key: "leadsCost", label: "Cost/Lead", icon: UserCheck, source: "meta", format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
-  { key: "fbLeadsTotal", label: "FB Leads", icon: Target, source: "meta", format: (v) => v.toLocaleString() },
-  { key: "fbLeadsCost", label: "Cost/FB Lead", icon: Target, source: "meta", format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
-  { key: "ghlLeads", label: "GHL Leads", icon: UserCheck, source: "ghl", format: (v) => v.toLocaleString() },
+  { key: "ghlLeads", label: "Leads", icon: UserCheck, source: "ghl", format: (v) => v.toLocaleString() },
   { key: "ghlAppointments", label: "GHL Appts", icon: CalendarCheck, source: "ghl", format: (v) => v.toLocaleString() },
-  { key: "ghlCostPerLead", label: "Cost/GHL Lead", icon: DollarSign, source: "blended", format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
+  { key: "ghlCostPerLead", label: "Cost/Lead", icon: DollarSign, source: "blended", format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
   { key: "ghlCostPerAppt", label: "Cost/GHL Appt", icon: DollarSign, source: "blended", format: (v) => v > 0 ? `$${v.toFixed(2)}` : "–" },
   { key: "soldCount", label: "Deals Sold", icon: Trophy, source: "ghl", format: (v) => v.toLocaleString() },
   { key: "totalRevenue", label: "Revenue", icon: DollarSign, source: "ghl", format: (v) => v > 0 ? `$${v.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "–" },
@@ -153,6 +145,9 @@ export const ALL_KPIS: { key: KpiKey; label: string; icon: typeof DollarSign; so
 ];
 
 const KPI_SOURCE = new Map<KpiKey, KpiSource>(ALL_KPIS.map((k) => [k.key, k.source]));
+
+/** Every KPI key that still has a definition, for validating saved settings. */
+export const ALL_KPI_KEYS = new Set<KpiKey>(ALL_KPIS.map((k) => k.key));
 
 /** True when this KPI cannot be computed without the Meta ad feed. */
 export function dependsOnMeta(key: KpiKey): boolean {
@@ -249,10 +244,6 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
     const webApptCostRaw = prevRows.reduce((s, r) => s + (r["Conversions: Website Appointments Scheduled - Cost"] ?? 0), 0);
     const apptTotal = prevRows.reduce((s, r) => s + (r["Conversions: Appointments Scheduled - Total"] ?? 0), 0);
     const apptCostRaw = prevRows.reduce((s, r) => s + (r["Conversions: Appointments Scheduled - Cost"] ?? 0), 0);
-    const leadsTotal = prevRows.reduce((s, r) => s + (r["Conversions: Leads - Total"] ?? 0), 0);
-    const leadsCostRaw = prevRows.reduce((s, r) => s + (r["Conversions: Leads - Cost"] ?? 0), 0);
-    const fbLeadsTotal = prevRows.reduce((s, r) => s + (r["Conversions: All On-Facebook Leads - Total"] ?? 0), 0);
-    const fbLeadsCostRaw = prevRows.reduce((s, r) => s + (r["Conversions: All On-Facebook Leads - Cost"] ?? 0), 0);
     const ghlLeads = prevGhlConversions.filter(c => c.type?.toLowerCase() === 'lead' || c.type?.toLowerCase() === 'water test').length;
     const ghlAppointments = prevGhlConversions.filter(c => c.type?.toLowerCase() === 'appointment' || c.type?.toLowerCase() === 'water test').length;
     const soldCount = prevGhlConversions.filter(c => c.appointment_status === "sold").length;
@@ -261,8 +252,6 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
       totalSpend, totalClicks, totalImpressions, totalReach, avgCTR, avgCPC, avgCPM,
       webApptTotal, webApptCost: webApptTotal > 0 ? webApptCostRaw / webApptTotal : 0,
       apptTotal, apptCost: apptTotal > 0 ? apptCostRaw / apptTotal : 0,
-      leadsTotal, leadsCost: leadsTotal > 0 ? leadsCostRaw / leadsTotal : 0,
-      fbLeadsTotal, fbLeadsCost: fbLeadsTotal > 0 ? fbLeadsCostRaw / fbLeadsTotal : 0,
       ghlLeads, ghlAppointments,
       ghlCostPerLead: ghlLeads > 0 ? totalSpend / ghlLeads : 0,
       ghlCostPerAppt: ghlAppointments > 0 ? totalSpend / ghlAppointments : 0,
@@ -277,7 +266,6 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
       totalSpend: 0, totalClicks: 0, totalImpressions: 0, totalReach: 0,
       avgCTR: 0, avgCPC: 0, avgCPM: 0,
       webApptTotal: 0, webApptCost: 0, apptTotal: 0, apptCost: 0,
-      leadsTotal: 0, leadsCost: 0, fbLeadsTotal: 0, fbLeadsCost: 0,
       ghlLeads: 0, ghlAppointments: 0, ghlCostPerLead: 0, ghlCostPerAppt: 0,
       soldCount: 0, totalRevenue: 0, adRoi: 0,
     };
@@ -295,10 +283,6 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
     const webApptCost = rows.reduce((s, r) => s + (r["Conversions: Website Appointments Scheduled - Cost"] ?? 0), 0);
     const apptTotal = rows.reduce((s, r) => s + (r["Conversions: Appointments Scheduled - Total"] ?? 0), 0);
     const apptCost = rows.reduce((s, r) => s + (r["Conversions: Appointments Scheduled - Cost"] ?? 0), 0);
-    const leadsTotal = rows.reduce((s, r) => s + (r["Conversions: Leads - Total"] ?? 0), 0);
-    const leadsCost = rows.reduce((s, r) => s + (r["Conversions: Leads - Cost"] ?? 0), 0);
-    const fbLeadsTotal = rows.reduce((s, r) => s + (r["Conversions: All On-Facebook Leads - Total"] ?? 0), 0);
-    const fbLeadsCost = rows.reduce((s, r) => s + (r["Conversions: All On-Facebook Leads - Cost"] ?? 0), 0);
 
     const ghlLeads = ghlConversions.filter(c => c.type?.toLowerCase() === 'lead' || c.type?.toLowerCase() === 'water test').length;
     const ghlAppointments = ghlConversions.filter(c => c.type?.toLowerCase() === 'appointment' || c.type?.toLowerCase() === 'water test').length;
@@ -312,8 +296,6 @@ export function AccountCard({ accountName, rows, prevRows = [], prevDateRange, v
       totalSpend, totalClicks, totalImpressions, totalReach, avgCTR, avgCPC, avgCPM,
       webApptTotal, webApptCost: webApptTotal > 0 ? webApptCost / webApptTotal : 0,
       apptTotal, apptCost: apptTotal > 0 ? apptCost / apptTotal : 0,
-      leadsTotal, leadsCost: leadsTotal > 0 ? leadsCost / leadsTotal : 0,
-      fbLeadsTotal, fbLeadsCost: fbLeadsTotal > 0 ? fbLeadsCost / fbLeadsTotal : 0,
       ghlLeads, ghlAppointments,
       ghlCostPerLead: ghlLeads > 0 ? totalSpend / ghlLeads : 0,
       ghlCostPerAppt: ghlAppointments > 0 ? totalSpend / ghlAppointments : 0,

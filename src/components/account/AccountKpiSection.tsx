@@ -14,7 +14,7 @@ import type { AccountBrief, AccountTask } from "./queries";
 const CHARTABLE_KEYS = new Set<KpiKey>([
   "totalSpend", "totalClicks", "totalImpressions", "totalReach",
   "avgCTR", "avgCPC", "avgCPM",
-  "webApptTotal", "apptTotal", "leadsTotal", "fbLeadsTotal",
+  "webApptTotal", "apptTotal",
   "ghlLeads", "ghlAppointments", "ghlCostPerLead", "ghlCostPerAppt",
 ]);
 
@@ -94,11 +94,10 @@ export function AccountKpiSection({
     const webApptCostRaw = sum((r) => r["Conversions: Website Appointments Scheduled - Cost"]);
     const apptTotal = sum((r) => r["Conversions: Appointments Scheduled - Total"]);
     const apptCostRaw = sum((r) => r["Conversions: Appointments Scheduled - Cost"]);
-    const leadsTotal = sum((r) => r["Conversions: Leads - Total"]);
-    const leadsCostRaw = sum((r) => r["Conversions: Leads - Cost"]);
-    const fbLeadsTotal = sum((r) => r["Conversions: All On-Facebook Leads - Total"]);
-    const fbLeadsCostRaw = sum((r) => r["Conversions: All On-Facebook Leads - Cost"]);
     const type = (c: { type: string | null }) => c.type?.toLowerCase();
+    // The lead count, full stop. One lead = one contact GoHighLevel actually
+    // holds. Meta's pixel lead is not reported anywhere on this screen: GHL's
+    // CAPI re-fires on every contact update, so Meta ran ~2x truth portfolio-wide.
     const ghlLeads = ghlConversions.filter((c) => type(c) === "lead" || type(c) === "water test").length;
     const ghlAppointments = ghlConversions.filter((c) => type(c) === "appointment" || type(c) === "water test").length;
     const sold = ghlConversions.filter((c) => c.appointment_status === "sold");
@@ -113,8 +112,6 @@ export function AccountKpiSection({
       avgCPM: avg((r) => r["Cost: CPM"]),
       webApptTotal, webApptCost: webApptTotal > 0 ? webApptCostRaw / webApptTotal : 0,
       apptTotal, apptCost: apptTotal > 0 ? apptCostRaw / apptTotal : 0,
-      leadsTotal, leadsCost: leadsTotal > 0 ? leadsCostRaw / leadsTotal : 0,
-      fbLeadsTotal, fbLeadsCost: fbLeadsTotal > 0 ? fbLeadsCostRaw / fbLeadsTotal : 0,
       ghlLeads, ghlAppointments,
       ghlCostPerLead: ghlLeads > 0 ? totalSpend / ghlLeads : 0,
       ghlCostPerAppt: ghlAppointments > 0 ? totalSpend / ghlAppointments : 0,
@@ -124,12 +121,12 @@ export function AccountKpiSection({
   }, [filteredAdData, ghlConversions]);
 
   const chartSeriesData = useMemo(() => {
-    type Day = { spend: number; clicks: number; impressions: number; reach: number; ctr_sum: number; cpc_sum: number; cpm_sum: number; count: number; webApptTotal: number; apptTotal: number; leadsTotal: number; fbLeadsTotal: number };
+    type Day = { spend: number; clicks: number; impressions: number; reach: number; ctr_sum: number; cpc_sum: number; cpm_sum: number; count: number; webApptTotal: number; apptTotal: number };
     const adByDate: Record<string, Day> = {};
     filteredAdData.forEach((r) => {
       const date = r["Report: Date"];
       if (!date) return;
-      const d = (adByDate[date] ??= { spend: 0, clicks: 0, impressions: 0, reach: 0, ctr_sum: 0, cpc_sum: 0, cpm_sum: 0, count: 0, webApptTotal: 0, apptTotal: 0, leadsTotal: 0, fbLeadsTotal: 0 });
+      const d = (adByDate[date] ??= { spend: 0, clicks: 0, impressions: 0, reach: 0, ctr_sum: 0, cpc_sum: 0, cpm_sum: 0, count: 0, webApptTotal: 0, apptTotal: 0 });
       d.spend += r["Cost: Amount spend"] ?? 0;
       d.clicks += r["Performance: Clicks"] ?? 0;
       d.impressions += r["Performance: Impressions"] ?? 0;
@@ -140,8 +137,6 @@ export function AccountKpiSection({
       d.count += 1;
       d.webApptTotal += r["Conversions: Website Appointments Scheduled - Total"] ?? 0;
       d.apptTotal += r["Conversions: Appointments Scheduled - Total"] ?? 0;
-      d.leadsTotal += r["Conversions: Leads - Total"] ?? 0;
-      d.fbLeadsTotal += r["Conversions: All On-Facebook Leads - Total"] ?? 0;
     });
     const ghlByDate: Record<string, { leads: number; appts: number }> = {};
     ghlConversions.forEach((c) => {
@@ -158,7 +153,7 @@ export function AccountKpiSection({
     const pick: Partial<Record<KpiKey, (d: Day) => number>> = {
       totalSpend: (d) => d.spend, totalClicks: (d) => d.clicks, totalImpressions: (d) => d.impressions, totalReach: (d) => d.reach,
       avgCTR: (d) => (d.count > 0 ? d.ctr_sum / d.count : 0), avgCPC: (d) => (d.count > 0 ? d.cpc_sum / d.count : 0), avgCPM: (d) => (d.count > 0 ? d.cpm_sum / d.count : 0),
-      webApptTotal: (d) => d.webApptTotal, apptTotal: (d) => d.apptTotal, leadsTotal: (d) => d.leadsTotal, fbLeadsTotal: (d) => d.fbLeadsTotal,
+      webApptTotal: (d) => d.webApptTotal, apptTotal: (d) => d.apptTotal,
     };
     const series: Partial<Record<KpiKey, { date: string; value: number }[]>> = {};
     for (const [key, f] of Object.entries(pick) as [KpiKey, (d: Day) => number][]) {

@@ -5,7 +5,7 @@ import { dependsOnMeta, type KpiKey } from "@/components/dashboard/AccountCard";
 const CHARTABLE = new Set<KpiKey>([
   "totalSpend", "totalClicks", "totalImpressions", "totalReach",
   "avgCTR", "avgCPC", "avgCPM",
-  "webApptTotal", "apptTotal", "leadsTotal", "fbLeadsTotal",
+  "webApptTotal", "apptTotal",
   "ghlLeads", "ghlAppointments", "ghlCostPerLead", "ghlCostPerAppt",
 ]);
 

@@ -105,7 +105,7 @@ const MIN_DATE = startOfDay(new Date(2026, 1, 12)); // Feb 12, 2026 — GHL sync
 const CHARTABLE_KEYS = new Set<KpiKey>([
   "totalSpend", "totalClicks", "totalImpressions", "totalReach",
   "avgCTR", "avgCPC", "avgCPM",
-  "webApptTotal", "apptTotal", "leadsTotal", "fbLeadsTotal",
+  "webApptTotal", "apptTotal",
   "ghlLeads", "ghlAppointments", "ghlCostPerLead", "ghlCostPerAppt",
 ]);
 
@@ -587,10 +587,6 @@ function ClientReportView({ accountId, decodedName }: { accountId: string; decod
     const webApptCostRaw = filteredAdData.reduce((s, r) => s + (r["Conversions: Website Appointments Scheduled - Cost"] ?? 0), 0);
     const apptTotal = filteredAdData.reduce((s, r) => s + (r["Conversions: Appointments Scheduled - Total"] ?? 0), 0);
     const apptCostRaw = filteredAdData.reduce((s, r) => s + (r["Conversions: Appointments Scheduled - Cost"] ?? 0), 0);
-    const leadsTotal = filteredAdData.reduce((s, r) => s + (r["Conversions: Leads - Total"] ?? 0), 0);
-    const leadsCostRaw = filteredAdData.reduce((s, r) => s + (r["Conversions: Leads - Cost"] ?? 0), 0);
-    const fbLeadsTotal = filteredAdData.reduce((s, r) => s + (r["Conversions: All On-Facebook Leads - Total"] ?? 0), 0);
-    const fbLeadsCostRaw = filteredAdData.reduce((s, r) => s + (r["Conversions: All On-Facebook Leads - Cost"] ?? 0), 0);
 
     const ghlLeads = ghlConversions.filter((c) => c.type?.toLowerCase() === "lead" || c.type?.toLowerCase() === "water test").length;
     const ghlAppointments = ghlConversions.filter((c) => c.type?.toLowerCase() === "appointment" || c.type?.toLowerCase() === "water test").length;
@@ -604,8 +600,6 @@ function ClientReportView({ accountId, decodedName }: { accountId: string; decod
       totalSpend, totalClicks, totalImpressions, totalReach, avgCTR, avgCPC, avgCPM,
       webApptTotal, webApptCost: webApptTotal > 0 ? webApptCostRaw / webApptTotal : 0,
       apptTotal, apptCost: apptTotal > 0 ? apptCostRaw / apptTotal : 0,
-      leadsTotal, leadsCost: leadsTotal > 0 ? leadsCostRaw / leadsTotal : 0,
-      fbLeadsTotal, fbLeadsCost: fbLeadsTotal > 0 ? fbLeadsCostRaw / fbLeadsTotal : 0,
       ghlLeads, ghlAppointments,
       ghlCostPerLead: ghlLeads > 0 ? totalSpend / ghlLeads : 0,
       ghlCostPerAppt: ghlAppointments > 0 ? totalSpend / ghlAppointments : 0,
@@ -620,12 +614,12 @@ function ClientReportView({ accountId, decodedName }: { accountId: string; decod
     const adByDate: Record<string, {
       spend: number; clicks: number; impressions: number; reach: number;
       ctr_sum: number; cpc_sum: number; cpm_sum: number; count: number;
-      webApptTotal: number; apptTotal: number; leadsTotal: number; fbLeadsTotal: number;
+      webApptTotal: number; apptTotal: number;
     }> = {};
     filteredAdData.forEach((r) => {
       const date = r["Report: Date"];
       if (!date) return;
-      if (!adByDate[date]) adByDate[date] = { spend: 0, clicks: 0, impressions: 0, reach: 0, ctr_sum: 0, cpc_sum: 0, cpm_sum: 0, count: 0, webApptTotal: 0, apptTotal: 0, leadsTotal: 0, fbLeadsTotal: 0 };
+      if (!adByDate[date]) adByDate[date] = { spend: 0, clicks: 0, impressions: 0, reach: 0, ctr_sum: 0, cpc_sum: 0, cpm_sum: 0, count: 0, webApptTotal: 0, apptTotal: 0 };
       const d = adByDate[date];
       d.spend += r["Cost: Amount spend"] ?? 0;
       d.clicks += r["Performance: Clicks"] ?? 0;
@@ -637,8 +631,6 @@ function ClientReportView({ accountId, decodedName }: { accountId: string; decod
       d.count += 1;
       d.webApptTotal += r["Conversions: Website Appointments Scheduled - Total"] ?? 0;
       d.apptTotal += r["Conversions: Appointments Scheduled - Total"] ?? 0;
-      d.leadsTotal += r["Conversions: Leads - Total"] ?? 0;
-      d.fbLeadsTotal += r["Conversions: All On-Facebook Leads - Total"] ?? 0;
     });
 
     // Aggregate GHL data by date
@@ -667,8 +659,6 @@ function ClientReportView({ accountId, decodedName }: { accountId: string; decod
         case "avgCPM":          value = d.count > 0 ? d.cpm_sum / d.count : 0; break;
         case "webApptTotal":    value = d.webApptTotal; break;
         case "apptTotal":       value = d.apptTotal; break;
-        case "leadsTotal":      value = d.leadsTotal; break;
-        case "fbLeadsTotal":    value = d.fbLeadsTotal; break;
       }
       return { date, value: +value.toFixed(3) };
     });
@@ -678,7 +668,6 @@ function ClientReportView({ accountId, decodedName }: { accountId: string; decod
       totalImpressions: adSeries("totalImpressions"), totalReach: adSeries("totalReach"),
       avgCTR: adSeries("avgCTR"), avgCPC: adSeries("avgCPC"), avgCPM: adSeries("avgCPM"),
       webApptTotal: adSeries("webApptTotal"), apptTotal: adSeries("apptTotal"),
-      leadsTotal: adSeries("leadsTotal"), fbLeadsTotal: adSeries("fbLeadsTotal"),
       ghlLeads: ghlDates.map((date) => ({ date, value: ghlByDate[date].leads })),
       ghlAppointments: ghlDates.map((date) => ({ date, value: ghlByDate[date].appts })),
       ghlCostPerLead: [...new Set([...adDates, ...ghlDates])].sort().map((date) => {

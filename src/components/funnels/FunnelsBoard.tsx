@@ -75,6 +75,7 @@ export function FunnelsBoard({
       tests,
       variantDays,
       variantBookings,
+      crmUnallocatedByAccount: funnel.crmUnallocatedByAccount,
       hidden: hiddenAccounts,
     });
   }, [data, accounts, links, hiddenAccounts, ghl, versions, tests, variantDays, variantBookings]);
@@ -134,7 +135,10 @@ export function FunnelsBoard({
           label="Page views → leads"
           value={board.cvr !== null ? `${(board.cvr * 100).toFixed(1)}%` : "—"}
           icon={MousePointerClick}
-          detail={`${formatCount(board.lpv)} views · ${formatCount(board.leads)} leads`}
+          detail={
+            `${formatCount(board.lpv)} views · ${formatCount(board.leads)} verified leads` +
+            (board.unallocatedLeads > 0 ? ` · +${formatCount(board.unallocatedLeads)} unplaced` : "")
+          }
         />
         <KpiStatCard
           label="Split tests running"
@@ -174,9 +178,14 @@ export function FunnelsBoard({
       </div>
 
       <p className="text-[11px] text-muted-foreground">
-        Meta Ads · {periodCaption}
+        Spend and views from Meta Ads · leads from GoHighLevel contacts · {periodCaption}
         {data && <> · updated {formatDistanceToNowStrict(new Date(data.fetchedAt), { addSuffix: true })}</>}
         {" · "}entry pages only; booking and thank-you pages are funnel steps, not destinations
+      </p>
+      <p className="text-[11px] text-muted-foreground">
+        Meta&rsquo;s own lead count is not shown: GoHighLevel&rsquo;s Conversions API re-fires on
+        every contact update, so the pixel counts a single opt-in several times. A lead here is
+        one contact the CRM holds, placed on the page by the ad name the funnel passes through.
       </p>
 
       {rows.length === 0 ? (

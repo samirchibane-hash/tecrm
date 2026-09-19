@@ -1,16 +1,14 @@
 import type { KpiKey } from "@/components/dashboard/AccountCard";
 import type { AdRow } from "@/hooks/useCouplerData";
 
-// Meta conversion KPIs and the proxy column each one is built from.
+// Meta conversion KPIs and the proxy column each one is built from. Leads are
+// deliberately absent: the lead count comes from GoHighLevel contacts, not from
+// Meta's pixel, which double-counts a single opt-in (see `ghlLeads`).
 const CONVERSION_FIELD: Partial<Record<KpiKey, keyof AdRow>> = {
   webApptTotal: "Conversions: Website Appointments Scheduled - Total",
   webApptCost: "Conversions: Website Appointments Scheduled - Total",
   apptTotal: "Conversions: Appointments Scheduled - Total",
   apptCost: "Conversions: Appointments Scheduled - Total",
-  leadsTotal: "Conversions: Leads - Total",
-  leadsCost: "Conversions: Leads - Total",
-  fbLeadsTotal: "Conversions: All On-Facebook Leads - Total",
-  fbLeadsCost: "Conversions: All On-Facebook Leads - Total",
 };
 
 export const NOT_TRACKED_REASON = "Not tracked: this client's funnel doesn't send the event to Meta";

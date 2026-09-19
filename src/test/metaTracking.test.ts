@@ -7,21 +7,23 @@ const row = (overrides: Partial<AdRow>): AdRow =>
     "Cost: Amount spend": 100,
     "Conversions: Website Appointments Scheduled - Total": null,
     "Conversions: Appointments Scheduled - Total": null,
-    "Conversions: Leads - Total": null,
-    "Conversions: All On-Facebook Leads - Total": null,
     ...overrides,
   }) as AdRow;
 
 describe("untrackedKpis", () => {
   it("marks appointment KPIs untracked when the proxy left them null on every row", () => {
     const untracked = untrackedKpis([
-      row({ "Conversions: Leads - Total": 3 }),
-      row({ "Conversions: Leads - Total": 0 }),
+      row({ "Conversions: Website Appointments Scheduled - Total": null }),
+      row({ "Conversions: Website Appointments Scheduled - Total": null }),
     ]);
     expect(untracked.has("apptTotal")).toBe(true);
     expect(untracked.has("apptCost")).toBe(true);
     expect(untracked.has("webApptTotal")).toBe(true);
-    expect(untracked.has("leadsTotal")).toBe(false);
+  });
+
+  it("never reports a lead KPI: leads are counted from GoHighLevel, not Meta", () => {
+    const untracked = untrackedKpis([row({ "Conversions: Appointments Scheduled - Total": 1 })]);
+    expect([...untracked].every((k) => !k.toLowerCase().includes("lead"))).toBe(true);
   });
 
   it("treats a tracked event with zero this period as tracked, so it reads 0 not 'Not tracked'", () => {

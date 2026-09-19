@@ -138,7 +138,7 @@ function AdsPanel({ row }: { row: FunnelRow }) {
               {ad.adset && <p className="truncate text-[11px] text-muted-foreground" title={ad.adset}>{ad.adset}</p>}
             </div>
             <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-              {formatUsd(ad.spend)} · {formatCount(ad.lpv)} views · {formatCount(ad.leads)} leads
+              {formatUsd(ad.spend)} · {formatCount(ad.lpv)} views
             </span>
             {ad.adsManagerUrl && (
               <a
@@ -243,11 +243,31 @@ export function FunnelPageCard({ row }: { row: FunnelRow }) {
         <dl className="hidden shrink-0 grid-cols-4 gap-4 sm:grid" style={{ minWidth: 300 }}>
           <Stat label="Spend" value={perf ? formatUsd(perf.spend) : <Dash title="No ad traffic in this period" />} />
           <Stat label="Views" value={perf ? formatCount(perf.lpv) : <Dash title="No ad traffic in this period" />} />
-          <Stat label="Leads" value={perf ? formatCount(perf.leads) : <Dash title="No ad traffic in this period" />} />
+          <Stat
+            label="Leads"
+            value={
+              row.verifiedLeads === null
+                ? <Dash title="No ad traffic in this period" />
+                : `${formatCount(row.verifiedLeads)}${row.verifiedPartial || perf?.crmInferred ? "*" : ""}`
+            }
+            title={
+              row.verifiedLeads === null
+                ? undefined
+                : perf?.crmInferred
+                  ? "Inferred: these CRM leads carry no ad name, and this is the client's only page with ad traffic"
+                  : row.verifiedPartial
+                    ? "At least this many: some of this client's CRM leads carry no ad name and could not be placed on one page"
+                    : "Contacts GoHighLevel holds, matched to this page by ad name (utm_content)"
+            }
+          />
           <Stat
             label="Conv."
-            value={perf?.cvr != null ? pct(perf.cvr) : <Dash title="No conversion rate for this period" />}
-            title={perf?.interval ? `95% range ${pct(perf.interval.low)}–${pct(perf.interval.high)}` : undefined}
+            value={row.verifiedCvr != null ? pct(row.verifiedCvr) : <Dash title="No conversion rate for this period" />}
+            title={
+              row.verifiedInterval
+                ? `Verified leads ÷ page views · 95% range ${pct(row.verifiedInterval.low)}–${pct(row.verifiedInterval.high)}`
+                : undefined
+            }
           />
         </dl>
       </button>
@@ -280,11 +300,16 @@ export function FunnelPageCard({ row }: { row: FunnelRow }) {
               <Stat label="Spend" value={formatUsd(perf.spend)} />
               <Stat label="Link clicks" value={formatCount(perf.linkClicks)} />
               <Stat label="Page views" value={formatCount(perf.lpv)} />
-              <Stat label="Meta leads" value={formatCount(perf.leads)} />
               <Stat
-                label="CRM leads"
-                value={perf.crmLeads > 0 ? `${formatCount(perf.crmLeads)}${perf.crmInferred ? "*" : ""}` : <Dash title="No CRM lead attributed to this page" />}
-                title={perf.crmInferred ? "Inferred: these leads carry no ad name and this is the client's only page with ad traffic" : "Matched by ad name (utm_content)"}
+                label="Verified leads"
+                value={`${formatCount(perf.crmLeads)}${perf.crmInferred || row.verifiedPartial ? "*" : ""}`}
+                title={
+                  perf.crmInferred
+                    ? "Inferred: these leads carry no ad name and this is the client's only page with ad traffic"
+                    : row.verifiedPartial
+                      ? "At least this many: some of this client's CRM leads carry no ad name and could not be placed on one page"
+                      : "Contacts GoHighLevel holds, matched by ad name (utm_content)"
+                }
               />
               <Stat
                 label="Cost / lead"

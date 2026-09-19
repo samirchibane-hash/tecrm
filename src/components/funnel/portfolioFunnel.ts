@@ -206,6 +206,12 @@ export interface PortfolioFunnel {
   mixedCopyPages: number;
   /** CRM leads no page could be attributed to: no ad name, and the client runs several pages. */
   crmUnallocated: number;
+  /**
+   * The same figure split by account id. A page whose client appears here has a
+   * verified lead count that is a floor, not a total — the UI has to say so
+   * rather than let a page read as a clean zero.
+   */
+  crmUnallocatedByAccount: Map<string, number>;
   clients: number;
   spend: number;
   lpv: number;
@@ -586,11 +592,11 @@ const isLead = (t: string | null | undefined) => {
  * shown as such. It is never spread across pages: a made-up split would read
  * exactly like a measured one.
  */
-function allocateCrmLeads(pages: PortfolioPage[], ghl: PortfolioGhl): number {
+function allocateCrmLeads(pages: PortfolioPage[], ghl: PortfolioGhl): Map<string, number> {
   const byAccount = new Map<string, PortfolioPage[]>();
   for (const p of pages) byAccount.set(p.accountId, [...(byAccount.get(p.accountId) ?? []), p]);
 
-  let unallocated = 0;
+  const unallocated = new Map<string, number>();
   for (const [accountId, accountPages] of byAccount) {
     const rows = ghl.byAccount.get(accountId) ?? [];
     // An ad name maps to a page through the ads that page collected.
@@ -614,7 +620,7 @@ function allocateCrmLeads(pages: PortfolioPage[], ghl: PortfolioGhl): number {
       entry[0].crmLeads += loose;
       entry[0].crmInferred = true;
     } else {
-      unallocated += loose;
+      unallocated.set(accountId, (unallocated.get(accountId) ?? 0) + loose);
     }
   }
   return unallocated;
@@ -745,7 +751,8 @@ export function analyzePortfolioFunnel(
     }
   }
 
-  const crmUnallocated = allocateCrmLeads(pages, ghl);
+  const crmUnallocatedByAccount = allocateCrmLeads(pages, ghl);
+  const crmUnallocated = [...crmUnallocatedByAccount.values()].reduce((s, n) => s + n, 0);
 
   const winners = pages.filter((p) => p.verdict === "winner").sort((a, b) => b.savings - a.savings);
   const wasters = pages.filter((p) => p.verdict === "waster").sort((a, b) => b.excessSpend - a.excessSpend);
@@ -776,6 +783,7 @@ export function analyzePortfolioFunnel(
     unsynced,
     mixedCopyPages: pages.filter((p) => p.spanned > 1).length,
     crmUnallocated,
+    crmUnallocatedByAccount,
     clients: clients.size,
     spend: sum(pages, (p) => p.spend),
     lpv,

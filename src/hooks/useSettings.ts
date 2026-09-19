@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { useSupabase, useSupabaseScope } from "@/integrations/supabase/SupabaseContext";
-import type { KpiKey } from "@/components/dashboard/AccountCard";
+import { ALL_KPI_KEYS, type KpiKey } from "@/components/dashboard/AccountCard";
 
 export type ChangeLogOption = {
   label: string;
@@ -53,8 +53,7 @@ const DEFAULTS: Omit<SettingsRow, "id" | "updated_at"> = {
   enabled_kpis: [
     "totalSpend", "totalClicks", "totalImpressions", "totalReach",
     "avgCTR", "avgCPC", "avgCPM", "webApptTotal", "webApptCost",
-    "apptTotal", "apptCost", "leadsTotal", "leadsCost",
-    "fbLeadsTotal", "fbLeadsCost", "ghlLeads", "ghlAppointments",
+    "apptTotal", "apptCost", "ghlLeads", "ghlAppointments", "ghlCostPerLead",
   ] as KpiKey[],
   change_log_options: [
     { label: "CRM", sub_options: [] },
@@ -85,6 +84,18 @@ function normalizeOnboardingChecklists(raw: unknown): OnboardingChecklists {
   } as OnboardingChecklists;
 }
 
+/**
+ * Keep only KPIs that still exist. A saved settings row outlives the KPI list:
+ * the Meta lead keys were removed when the lead count moved to GoHighLevel, and
+ * a stale key left in here would ask the dashboard to render a KPI with no
+ * definition. Falls back to the defaults if a row somehow names none that exist.
+ */
+function knownKpis(raw: unknown, fallback: KpiKey[]): KpiKey[] {
+  if (!Array.isArray(raw)) return fallback;
+  const kept = raw.filter((k): k is KpiKey => ALL_KPI_KEYS.has(k as KpiKey));
+  return kept.length > 0 ? kept : fallback;
+}
+
 async function fetchSettings(supabase: SupabaseClient<Database>): Promise<Omit<SettingsRow, "id" | "updated_at">> {
   const { data, error } = await supabase
     .from("settings" as any)
@@ -94,9 +105,9 @@ async function fetchSettings(supabase: SupabaseClient<Database>): Promise<Omit<S
   if (error) throw error;
   if (!data) return DEFAULTS;
   return {
-    enabled_kpis: (data as any).enabled_kpis ?? DEFAULTS.enabled_kpis,
+    enabled_kpis: knownKpis((data as any).enabled_kpis, DEFAULTS.enabled_kpis),
     change_log_options: normalizeChangeLogOptions((data as any).default_campaigns),
-    visible_kpis: (data as any).visible_kpis ?? DEFAULTS.visible_kpis,
+    visible_kpis: knownKpis((data as any).visible_kpis, DEFAULTS.visible_kpis),
     hidden_accounts: (data as any).hidden_accounts ?? DEFAULTS.hidden_accounts,
     onboarding_checklists: normalizeOnboardingChecklists((data as any).onboarding_checklists),
   };

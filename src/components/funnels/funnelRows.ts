@@ -38,7 +38,6 @@ export interface FunnelAd {
   spend: number;
   linkClicks: number;
   lpv: number;
-  leads: number;
   adsManagerUrl: string | null;
 }
 
@@ -101,6 +100,25 @@ export interface FunnelRow {
   copySyncedAt: string | null;
   /** Performance in the selected period. Null when no ad sent traffic here. */
   perf: PortfolioPage | null;
+  /**
+   * Leads this page produced, counted as contacts GoHighLevel actually holds.
+   * This is the only lead number the board shows: Meta's pixel lead is not
+   * reported here, because GHL's CAPI re-fires on contact updates and inflated
+   * every account roughly twofold. Null when no ad sent traffic to the page.
+   */
+  verifiedLeads: number | null;
+  /**
+   * True when this client has CRM leads that carry no ad name and could not be
+   * placed on any one page, so `verifiedLeads` is a floor rather than a total.
+   */
+  verifiedPartial: boolean;
+  /**
+   * Verified leads ÷ page views, with its Wilson interval. Computed here rather
+   * than read off `perf.cvr`, which is Meta's lead count over the same views and
+   * so runs high. Null when the page had no ad traffic.
+   */
+  verifiedCvr: number | null;
+  verifiedInterval: { low: number; high: number } | null;
   ads: FunnelAd[];
   versions: VersionEntry[];
   liveVersion: number | null;
@@ -117,7 +135,10 @@ export interface FunnelsBoard {
   runningTests: number;
   spend: number;
   lpv: number;
+  /** Verified leads across every page with traffic: GHL contacts, never Meta's pixel. */
   leads: number;
+  /** Verified leads that belong to no single page, so `leads` is a floor. */
+  unallocatedLeads: number;
   cvr: number | null;
 }
 
@@ -223,6 +244,7 @@ export function buildFunnelsBoard({
   tests,
   variantDays,
   variantBookings = [],
+  crmUnallocatedByAccount = new Map(),
   hidden = [],
   entryOnly = true,
 }: {
@@ -233,6 +255,8 @@ export function buildFunnelsBoard({
   tests: SplitTestRecord[];
   variantDays: VariantDayRecord[];
   variantBookings?: VariantBookingRecord[];
+  /** Per account id, CRM leads that could not be placed on one page. */
+  crmUnallocatedByAccount?: Map<string, number>;
   hidden?: string[];
   entryOnly?: boolean;
 }): FunnelsBoard {
@@ -256,7 +280,6 @@ export function buildFunnelsBoard({
           spend: ad.spend,
           linkClicks: ad.linkClicks,
           lpv: ad.landingPageViews,
-          leads: ad.webLeads,
           adsManagerUrl: ad.adsManagerUrl ?? null,
         },
       ]);
@@ -307,6 +330,10 @@ export function buildFunnelsBoard({
         pageBookings.filter((b) => within(t)(b.day)),
       ));
 
+    const perf = perfByKey.get(key) ?? null;
+    // A page with no ad traffic has no lead count to report — that is unknown,
+    // not zero, so every verified figure below stays null for it.
+    const verified = perf ? rate(perf.crmLeads, perf.lpv) : { cvr: null, interval: null };
     rows.push({
       key,
       url: link.url,
@@ -318,7 +345,11 @@ export function buildFunnelsBoard({
       offer: copy.offer,
       angle: copy.angle,
       copySyncedAt: link.copy_synced_at,
-      perf: perfByKey.get(key) ?? null,
+      perf,
+      verifiedLeads: perf ? perf.crmLeads : null,
+      verifiedPartial: !!perf && (crmUnallocatedByAccount.get(perf.accountId) ?? 0) > 0,
+      verifiedCvr: verified.cvr,
+      verifiedInterval: verified.interval,
       ads: (adsByKey.get(key) ?? []).sort((a, b) => b.spend - a.spend),
       versions: [...pageVersions]
         .sort((a, b) => b.valid_from.localeCompare(a.valid_from))
@@ -346,7 +377,13 @@ export function buildFunnelsBoard({
 
   const withTraffic = rows.filter((r) => r.perf !== null);
   const lpv = withTraffic.reduce((s, r) => s + (r.perf?.lpv ?? 0), 0);
-  const leads = withTraffic.reduce((s, r) => s + (r.perf?.leads ?? 0), 0);
+  // Verified leads, not Meta's. `perf.leads` is Meta's pixel count and is
+  // deliberately not summed here: it counts one opt-in several times.
+  const leads = withTraffic.reduce((s, r) => s + (r.verifiedLeads ?? 0), 0);
+  const shownAccounts = new Set(rows.map((r) => r.perf?.accountId).filter((id): id is string => !!id));
+  const unallocatedLeads = [...crmUnallocatedByAccount]
+    .filter(([id]) => shownAccounts.has(id))
+    .reduce((s, [, n]) => s + n, 0);
 
   return {
     rows,
@@ -357,6 +394,7 @@ export function buildFunnelsBoard({
     spend: withTraffic.reduce((s, r) => s + (r.perf?.spend ?? 0), 0),
     lpv,
     leads,
+    unallocatedLeads,
     cvr: rate(leads, lpv).cvr,
   };
 }
