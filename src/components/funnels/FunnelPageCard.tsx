@@ -34,17 +34,14 @@ function Stat({ label, value, title }: { label: string; value: React.ReactNode; 
 }
 
 /**
- * A split test, arm by arm. The rate here is measured from the page's own view
- * and lead events, never Meta's: Meta attributes a view to the ad that sent it,
- * not to the arm the visitor was shown, so it cannot split a test at all.
+ * A split test, arm by arm.
+ *
+ * Views come from the page's own beacon because Meta attributes a view to the
+ * ad that sent it, not to the arm the visitor was shown, so it cannot split a
+ * test. Leads are the attributed GoHighLevel contacts the rest of this screen
+ * counts — one definition of a lead on the page, top to bottom.
  */
 function SplitTestPanel({ test }: { test: SplitTest }) {
-  // Opt-ins the page saw that never arrived as an attributable CRM lead. Arms
-  // with no attribution at all are left out: unknown is not a shortfall.
-  const dropped = test.arms.reduce(
-    (s, a) => s + (a.crmLeads === null ? 0 : Math.max(0, a.optIns - a.crmLeads)),
-    0,
-  );
   return (
     <section className="rounded-lg border border-border/60 bg-muted/30 p-3">
       <header className="mb-2 flex flex-wrap items-center gap-2">
@@ -74,19 +71,13 @@ function SplitTestPanel({ test }: { test: SplitTest }) {
                 </p>
                 <p className="text-[11px] tabular-nums text-muted-foreground">
                   {formatCount(arm.views)} views ·{" "}
-                  <span title="Form submits the page itself recorded. The rate on the right is built on this and views, both measured by the same beacon.">
-                    {formatCount(arm.optIns)} {arm.optIns === 1 ? "opt-in" : "opt-ins"}
-                  </span>
-                  {arm.crmLeads !== null && (
-                    <span
-                      title={
-                        arm.crmLeads < arm.optIns
-                          ? `${formatCount(arm.optIns - arm.crmLeads)} of this arm's opt-ins reached GoHighLevel without both an lp_page and an lp_variant, so they can't be counted against this page.`
-                          : "GoHighLevel contacts carrying this page and this arm — the same measure as the Leads figure above"
-                      }
-                    >
-                      {" "}· {formatCount(arm.crmLeads)} in CRM
-                      {arm.crmLeads < arm.optIns && <> (−{formatCount(arm.optIns - arm.crmLeads)})</>}
+                  {arm.leads === null ? (
+                    <span title="No lead on this arm carries both an lp_page and an lp_variant, so its count is unknown rather than zero">
+                      leads not tracked
+                    </span>
+                  ) : (
+                    <span title={ATTRIBUTED}>
+                      {formatCount(arm.leads)} {arm.leads === 1 ? "lead" : "leads"}
                     </span>
                   )}
                   {/* Never render an unattributed arm as "0 booked": no lp_variant on
@@ -133,22 +124,8 @@ function SplitTestPanel({ test }: { test: SplitTest }) {
         {test.decided
           ? "An arm is ahead at 95% confidence — safe to call and roll out."
           : "No arm has separated yet."}{" "}
-        Views and opt-ins are counted by the page itself, so the rate compares like with like;
-        the CRM and booked figures come from GoHighLevel and only count leads carrying this
-        page and arm.
-        {dropped > 0 && (
-          <>
-            {" "}
-            <span className="text-danger">
-              {formatCount(dropped)} {dropped === 1 ? "opt-in" : "opt-ins"} reached the CRM without
-              both an <code className="font-mono">lp_page</code> and an{" "}
-              <code className="font-mono">lp_variant</code>, so{" "}
-              {dropped === 1 ? "it is" : "they are"} not in this page&rsquo;s lead count. Leads from
-              before this client&rsquo;s fields were mapped read this way for good; if recent ones
-              do too, check the Create Contact step.
-            </span>
-          </>
-        )}
+        Views come from the page, which is the only thing that knows which arm a visitor saw.
+        Leads and booked count the same attributed GoHighLevel contacts as the figures above.
       </p>
     </section>
   );

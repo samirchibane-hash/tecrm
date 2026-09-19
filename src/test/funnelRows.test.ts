@@ -32,14 +32,13 @@ const account = (id: string, name: string, ads: ReturnType<typeof adTo>[]): Port
   error: null,
 });
 
-const arm = (variant: string, views: number, optIns: number): SplitArm => ({
+const arm = (variant: string, views: number, leads: number): SplitArm => ({
   variant,
   headline: null,
   weight: 50,
   views,
-  optIns,
-  crmLeads: null,
-  cvr: views > 0 ? optIns / views : null,
+  leads,
+  cvr: views > 0 ? leads / views : null,
   interval: null,
   booked: null,
   bookedRate: null,
@@ -226,7 +225,7 @@ describe("funnels board", () => {
     const b = board({ links: [link("Kinetico", "https://k.co/lp-1", "LP 1")], tests, variantDays });
     const arms = b.rows[0].runningTest!.arms;
     expect(arms.find((a) => a.variant === "a")!.views).toBe(200);
-    expect(arms.find((a) => a.variant === "b")!.optIns).toBe(30);
+    expect(arms.find((a) => a.variant === "b")!.views).toBe(200);
   });
 });
 
@@ -267,14 +266,14 @@ describe("booked appointments per arm", () => {
     expect(arms.find((a) => a.variant === "b")!.bookedRate).toBeCloseTo(0.8);
   });
 
-  it("keeps the page's opt-ins and the CRM's leads apart on the same arm", () => {
-    // The real case: meridian-1 arm B recorded two opt-ins on the page, but one
-    // reached GoHighLevel with lp_variant and no lp_page, so only one can be
-    // counted against this page. Reporting "2 leads" beside the card's "1 lead"
-    // was the bug — the arm now carries both numbers under different names.
+  it("counts an arm's leads the way the card does, not the way the page does", () => {
+    // The real case: meridian-1 arm B recorded two opt-ins on the page, but only
+    // one reached GoHighLevel carrying both lp_page and lp_variant. The arm
+    // reports that one, so it agrees with the card above it.
     const b = board({
       links,
       tests,
+      portfolio: [account("a1", "Kinetico", [adTo("one", "https://k.co/lp-1", 500, 5, 250)])],
       variantDays: [
         { url: "https://k.co/lp-1", variant: "b", day: "2026-09-18", views: 11, leads: 1 },
         { url: "https://k.co/lp-1", variant: "b", day: "2026-09-19", views: 8, leads: 1 },
@@ -283,13 +282,26 @@ describe("booked appointments per arm", () => {
     });
     const armB = b.rows[0].runningTest!.arms.find((a) => a.variant === "b")!;
     expect(armB.views).toBe(19);
-    expect(armB.optIns).toBe(2);
-    expect(armB.crmLeads).toBe(1);
+    expect(armB.leads).toBe(1);
     expect(armB.booked).toBe(1);
-    // The rate stays on the page's own numbers: views and opt-ins share a beacon.
-    expect(armB.cvr).toBeCloseTo(2 / 19);
-    // Booked is rated against the CRM's own leads, never against opt-ins.
+    expect(armB.cvr).toBeCloseTo(1 / 19);
     expect(armB.bookedRate).toBe(1);
+    // And the card's own figure is the same number.
+    expect(b.rows[0].verifiedLeads).toBe(1);
+  });
+
+  it("leaves an arm with no attributed lead unrated rather than at zero", () => {
+    const b = board({
+      links,
+      tests,
+      variantDays: [{ url: "https://k.co/lp-1", variant: "a", day: "2026-09-16", views: 300, leads: 9 }],
+    });
+    const armA = b.rows[0].runningTest!.arms.find((a) => a.variant === "a")!;
+    // The page saw nine opt-ins; none carried a page and variant.
+    expect(armA.views).toBe(300);
+    expect(armA.leads).toBeNull();
+    expect(armA.cvr).toBeNull();
+    expect(armA.status).toBe("needs_traffic");
   });
 
   it("ignores bookings from outside the test's window", () => {

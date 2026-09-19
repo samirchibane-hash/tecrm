@@ -48,20 +48,12 @@ export interface SplitArm {
   weight: number | null;
   views: number;
   /**
-   * Form submits the page itself recorded. Not the same thing as a lead in the
-   * CRM, and deliberately not called one: the page sees every opt-in, while the
-   * CRM only holds the ones that reached GoHighLevel carrying both lp_page and
-   * lp_variant. This is the count the arm's rate is built on, because it and
-   * `views` are measured by the same beacon on the same page.
+   * Leads on this arm: GoHighLevel contacts carrying both lp_page and
+   * lp_variant, exactly as the page card above counts them. One definition of
+   * a lead on this whole screen. Null when this arm has no attributed lead at
+   * all, which is unknown rather than zero.
    */
-  optIns: number;
-  /**
-   * Leads the CRM holds for this arm — the same measure the page card's Leads
-   * figure uses, so the two reconcile. Null when this arm has no attribution.
-   * Fewer than `optIns` means opt-ins reached GoHighLevel without their page
-   * and variant, usually an unmapped `lp_page` custom field on that account.
-   */
-  crmLeads: number | null;
+  leads: number | null;
   cvr: number | null;
   interval: { low: number; high: number } | null;
   /**
@@ -183,7 +175,7 @@ export function scoreArms(arms: SplitArm[]): { arms: SplitArm[]; decided: boolea
   let decided = false;
   for (const a of eligible) {
     if (a === leader) continue;
-    a.pValue = twoProportionPValue(leader.optIns, leader.views, a.optIns, a.views);
+    a.pValue = twoProportionPValue(leader.leads!, leader.views, a.leads!, a.views);
     if (a.pValue !== null && a.pValue < SIGNIFICANCE) {
       a.status = "behind";
       decided = true;
@@ -198,17 +190,14 @@ function buildTest(
   days: VariantDayRecord[],
   bookings: VariantBookingRecord[],
 ): SplitTest {
-  const byVariant = new Map<string, { views: number; optIns: number }>();
-  for (const d of days) {
-    const b = byVariant.get(d.variant) ?? { views: 0, optIns: 0 };
-    b.views += d.views;
-    b.optIns += d.leads;
-    byVariant.set(d.variant, b);
-  }
+  // Views are the page's own — only the page knows which arm a visitor saw.
+  // Leads are not: they are the attributed GoHighLevel contacts, same as the
+  // card above, so this screen has one definition of a lead.
+  const viewsBy = new Map<string, number>();
+  for (const d of days) viewsBy.set(d.variant, (viewsBy.get(d.variant) ?? 0) + d.views);
 
-  // Booked is kept in its own map, on purpose. An arm missing from it has no
-  // GHL attribution and must read as unknown; an arm present with 0 booked is
-  // a real zero. Defaulting to 0 would erase that difference.
+  // An arm missing from this map has no GHL attribution and must read as
+  // unknown; an arm present with 0 is a real zero. Defaulting to 0 erases that.
   const bookedBy = new Map<string, { leads: number; booked: number }>();
   for (const b of bookings) {
     const e = bookedBy.get(b.variant) ?? { leads: 0, booked: 0 };
@@ -217,26 +206,25 @@ function buildTest(
     bookedBy.set(b.variant, e);
   }
   // Every arm the test declares weights for, plus any that reported events.
-  const keys = [...new Set([...Object.keys(record.weights ?? {}), ...byVariant.keys()])].sort();
+  const keys = [...new Set([...Object.keys(record.weights ?? {}), ...viewsBy.keys()])].sort();
   const headlineFor = (variant: string) =>
     versions.filter((v) => v.variant === variant).sort((a, b) => b.valid_from.localeCompare(a.valid_from))[0]
       ?.page_headline ?? null;
 
   const arms = keys.map((variant): SplitArm => {
-    const b = byVariant.get(variant) ?? { views: 0, optIns: 0 };
+    const views = viewsBy.get(variant) ?? 0;
     const crm = bookedBy.get(variant) ?? null;
     return {
       variant,
       headline: headlineFor(variant),
       weight: record.weights?.[variant] ?? null,
-      views: b.views,
-      optIns: b.optIns,
-      crmLeads: crm?.leads ?? null,
+      views,
+      leads: crm?.leads ?? null,
       status: "needs_traffic",
       pValue: null,
       booked: crm?.booked ?? null,
       bookedRate: crm && crm.leads > 0 ? crm.booked / crm.leads : null,
-      ...rate(b.optIns, b.views),
+      ...(crm ? rate(crm.leads, views) : { cvr: null, interval: null }),
     };
   });
 
