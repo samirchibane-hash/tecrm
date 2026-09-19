@@ -18,6 +18,9 @@ import { useFunnelSplitTests, useVariantBookings, useVariantDaily } from "./useF
 
 type Filter = "all" | "traffic" | "tests" | "idle";
 
+/** Earlier than any conversion this CRM holds, so "All time" really is all of it. */
+const ALL_TIME_FLOOR = "2024-01-01";
+
 const FILTERS: { value: Filter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "traffic", label: "With traffic" },
@@ -54,7 +57,10 @@ export function FunnelsBoard({
   const period = data?.accounts.find((a) => a.period)?.period ?? null;
   const { data: variantDays = [] } = useVariantDaily(period?.since, period?.until);
   const { data: variantBookings = [] } = useVariantBookings(period?.since, period?.until);
-  const { data: ghlRows = [] } = useAllGhlConversions(period?.since ?? "");
+  // On "All time" Meta reports no period. The CRM query needs *some* floor or it
+  // stays disabled and the unattributed count silently reads zero, which would
+  // claim full attribution coverage on the one range least likely to have it.
+  const { data: ghlRows = [] } = useAllGhlConversions(period?.since ?? ALL_TIME_FLOOR);
 
   // Leads the CRM holds that no page can claim, because the funnel never passed
   // an lp_page/lp_variant for them. Never added to the board's count — it is

@@ -38,3 +38,28 @@ export function periodText(since: string, until: string): string {
     ? `${format(a, "MMM d")} – ${format(b, "MMM d, yyyy")}`
     : `${format(a, "MMM d, yyyy")} – ${format(b, "MMM d, yyyy")}`;
 }
+
+/**
+ * What the period control should read: the preset's name with the days it
+ * resolved to, e.g. "Month to Date (09/01 – 09/19)". A custom range has no
+ * preset name and shows the dates alone; no range at all is all time.
+ */
+export function periodLabel(range: DateRange | undefined, presetName: string): string {
+  if (!range?.from) return "All time";
+  const dates = range.to
+    ? `${format(range.from, "MM/dd")} – ${format(range.to, "MM/dd/yyyy")}`
+    : format(range.from, "MM/dd/yyyy");
+  return presetName ? `${presetName} (${dates})` : dates;
+}
+
+/**
+ * The picker's calendar range as the bounds the Meta query takes, so a screen
+ * reads Meta for exactly the days it is showing. Structurally a `CreativeRange`
+ * — spelled out here so this module stays free of component imports.
+ */
+export function toCreativeRange(
+  range: DateRange | undefined,
+): { preset: MetaPreset } | { since: string; until: string } {
+  if (!range?.from) return { preset: "maximum" };
+  return { since: format(range.from, "yyyy-MM-dd"), until: format(range.to ?? range.from, "yyyy-MM-dd") };
+}

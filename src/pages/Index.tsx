@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,17 +8,16 @@ import { StatusPill } from "@/components/StatusPill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DashboardPeriodPicker } from "@/components/dashboard/DashboardPeriodPicker";
+import { useDashboardPeriod } from "@/hooks/useDashboardPeriod";
 import { PortfolioCreativeBoard } from "@/components/creative-performance/PortfolioCreativeBoard";
 import { PortfolioFunnelBoard } from "@/components/funnel/PortfolioFunnelBoard";
-import type { CreativeRange } from "@/components/creative-performance/useCreativePerformance";
 import { formatUsd } from "@/lib/format";
 import { RefreshCw, Sparkles, ArrowRight, ChevronRight, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
-import { format, startOfDay, subDays, startOfMonth } from "date-fns";
+import { format, startOfDay, subDays } from "date-fns";
 import { useSettings } from "@/hooks/useSettings";
 import type { AdRow } from "@/hooks/useCouplerData";
-import type { DateRange } from "react-day-picker";
 
 // ─── KPI helpers ─────────────────────────────────────────────────────────────
 // Cost coloring reads each account's own targets (accounts.target_cpl /
@@ -148,11 +147,8 @@ const Index = () => {
   }, [launchedCreatives]);
 
   // ─── Date range ────────────────────────────────────────────────────────────
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: startOfMonth(new Date()),
-    to: startOfDay(new Date()),
-  });
-  const [presetLabel, setPresetLabel] = useState<string>("Month to Date");
+  // Shared with the Funnels page so one control means one set of days.
+  const { dateRange, label: dateLabel, creativeRange, onChange: onPeriodChange } = useDashboardPeriod("month_to_date");
 
   // GHL conversions — fetch a window covering current + previous period so deltas work.
   // Date range is in the query key so this refetches when the picker changes.
@@ -300,21 +296,6 @@ const Index = () => {
 
   const gapNames = tableRows.filter((r) => metaGaps.has(r.name)).map((r) => r.name);
 
-  const dateRangeStr = dateRange?.from
-    ? dateRange.to
-      ? `${format(dateRange.from, "MM/dd")} – ${format(dateRange.to, "MM/dd/yyyy")}`
-      : format(dateRange.from, "MM/dd/yyyy")
-    : null;
-  const dateLabel = presetLabel && dateRangeStr
-    ? `${presetLabel} (${dateRangeStr})`
-    : dateRangeStr ?? "All time";
-
-  // The creative scorecard reads Meta for exactly the days the table shows.
-  const creativeRange = useMemo((): CreativeRange => {
-    if (!dateRange?.from) return { preset: "maximum" };
-    return { since: format(dateRange.from, "yyyy-MM-dd"), until: format(dateRange.to ?? dateRange.from, "yyyy-MM-dd") };
-  }, [dateRange]);
-
   return (
     <div className="bg-background">
       <div className="mx-auto max-w-5xl px-4 py-6 sm:py-10 sm:px-6 lg:px-8">
@@ -325,11 +306,7 @@ const Index = () => {
           description="Every client's results, and the creatives and landing pages driving or draining them"
           actions={
             <>
-              <DashboardPeriodPicker
-                dateRange={dateRange}
-                label={dateLabel}
-                onChange={(range, label) => { setDateRange(range); setPresetLabel(label); }}
-              />
+              <DashboardPeriodPicker dateRange={dateRange} label={dateLabel} onChange={onPeriodChange} />
               <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} aria-label="Refresh Meta data" title="Refresh Meta data">
                 <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
               </Button>
