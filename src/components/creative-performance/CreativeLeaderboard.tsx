@@ -10,15 +10,12 @@ import { CreativeName, CreativeThumbnail, Dash, VerdictPill } from "./CreativeBi
 import { LabelEditor } from "./LabelEditor";
 import { adNameKey, type GhlMatch } from "./ghl";
 import { labelCreative, type CreativeLabels } from "./labels";
-import { FATIGUE_FREQUENCY, METRIC_NOUN, type Metric, type ScoredAd, type Verdict } from "./verdicts";
+import { FATIGUE_FREQUENCY, METRIC_NOUN, hookRate, type Metric, type ScoredAd, type Verdict } from "./verdicts";
 
 type SortKey = "spend" | "results" | "costPer" | "appointments" | "crm" | "ctr" | "hook" | "frequency" | "verdict";
 
 // Money wasters first when sorting by verdict: they're the decision to make.
 const VERDICT_RANK: Record<Verdict, number> = { waster: 0, winner: 1, on_par: 2, learning: 3, unscored: 4, no_delivery: 5 };
-
-const hookRate = (s: ScoredAd) =>
-  s.ad.videoPlays !== null && s.ad.impressions > 0 ? (s.ad.videoPlays / s.ad.impressions) * 100 : null;
 
 /** Every ad that spent in the period (live or not) plus live ads yet to deliver. */
 export function CreativeLeaderboard({
@@ -60,7 +57,7 @@ export function CreativeLeaderboard({
     appointments: (s) => s.ad.appointments,
     crm: (s) => (showCrm ? crmLeads(s) : null),
     ctr: (s) => s.ad.linkCtr,
-    hook: hookRate,
+    hook: (s) => hookRate(s.ad),
     frequency: (s) => s.ad.frequency,
     verdict: (s) => VERDICT_RANK[s.verdict],
   };
@@ -130,7 +127,7 @@ export function CreativeLeaderboard({
     );
   };
   const hook = (s: ScoredAd): ReactNode => {
-    const h = hookRate(s);
+    const h = hookRate(s.ad);
     if (h === null) return <Dash title={s.ad.format === "video" ? "No impressions" : "Images have no hook rate"} />;
     const hold = s.ad.thruplays !== null && s.ad.videoPlays ? `${Math.round((s.ad.thruplays / s.ad.videoPlays) * 100)}% held to ThruPlay` : undefined;
     return <span title={hold}>{formatPercent(h, 1)}</span>;

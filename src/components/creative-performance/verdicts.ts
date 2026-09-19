@@ -31,6 +31,10 @@ const JUDGE_AFTER = -Math.log(ALPHA); // ≈2.3 benchmark-costs of spend with ze
 /** Frequency at which a local audience has seen the ad often enough to tire of it. */
 export const FATIGUE_FREQUENCY = 3;
 
+/** Video hook rate in percent: 3-second plays ÷ impressions. Null for images and for no delivery. */
+export const hookRate = (ad: Pick<CreativeAd, "videoPlays" | "impressions">): number | null =>
+  ad.videoPlays !== null && ad.impressions > 0 ? (ad.videoPlays / ad.impressions) * 100 : null;
+
 export const METRIC_NOUN: Record<Metric, { one: string; many: string; costLabel: string }> = {
   leads: { one: "lead", many: "leads", costLabel: "Cost / lead" },
   appointments: { one: "appt", many: "appts", costLabel: "Cost / appt" },

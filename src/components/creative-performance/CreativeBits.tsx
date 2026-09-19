@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Clock3, Film, Image as ImageIcon, Minus, OctagonX, TrendingUp, CircleHelp, CirclePause } from "lucide-react";
 import { StatusPill, type Status } from "@/components/StatusPill";
+import { deliveryStatusText } from "./adStatus";
 import { cn } from "@/lib/utils";
 import type { CreativeAd } from "./useCreativePerformance";
 import type { Verdict } from "./verdicts";
@@ -8,45 +9,43 @@ import type { Verdict } from "./verdicts";
 // Small pieces every creative surface shares (account leaderboard, action
 // board, breakdowns, the cross-client board), so an ad reads the same everywhere.
 
-export function CreativeThumbnail({ ad, size = "md" }: { ad: Pick<CreativeAd, "thumbnailUrl" | "format">; size?: "sm" | "md" }) {
+/**
+ * `sm` / `md` identify an ad in a dense row. `xl` is for the creative gallery,
+ * where the point is to *look* at the ad, so it shows the whole frame
+ * (object-contain — Meta serves a 320px thumbnail, cropping it to a square
+ * would hide the headline burnt into most of these creatives).
+ */
+const THUMB_SIZE = {
+  sm: { box: "h-10 w-10", icon: "h-5 w-5" },
+  md: { box: "h-12 w-12", icon: "h-5 w-5" },
+  xl: { box: "h-[200px] w-[200px]", icon: "h-10 w-10" },
+} as const;
+
+export function CreativeThumbnail({ ad, size = "md" }: { ad: Pick<CreativeAd, "thumbnailUrl" | "format">; size?: keyof typeof THUMB_SIZE }) {
   const [broken, setBroken] = useState(false);
   const FormatIcon = ad.format === "video" ? Film : ImageIcon;
+  const big = size === "xl";
   return (
-    <div
-      className={cn(
-        "relative shrink-0 overflow-hidden rounded-md border border-border/60 bg-muted",
-        size === "sm" ? "h-10 w-10" : "h-12 w-12",
-      )}
-    >
+    <div className={cn("relative shrink-0 overflow-hidden rounded-md border border-border/60 bg-muted", THUMB_SIZE[size].box)}>
       {ad.thumbnailUrl && !broken ? (
-        <img src={ad.thumbnailUrl} alt="" loading="lazy" className="h-full w-full object-cover" onError={() => setBroken(true)} />
+        <img
+          src={ad.thumbnailUrl}
+          alt=""
+          loading="lazy"
+          className={cn("h-full w-full", big ? "object-contain" : "object-cover")}
+          onError={() => setBroken(true)}
+        />
       ) : (
-        <FormatIcon className="absolute inset-0 m-auto h-5 w-5 text-muted-foreground/40" aria-hidden />
+        <FormatIcon className={cn("absolute inset-0 m-auto text-muted-foreground/40", THUMB_SIZE[size].icon)} aria-hidden />
       )}
       {ad.format === "video" && ad.thumbnailUrl && !broken && (
-        <span className="absolute bottom-0.5 right-0.5 rounded bg-background/85 p-0.5">
-          <Film className="h-2.5 w-2.5 text-foreground" aria-hidden />
+        <span className={cn("absolute rounded bg-background/85", big ? "bottom-1.5 right-1.5 p-1" : "bottom-0.5 right-0.5 p-0.5")}>
+          <Film className={cn("text-foreground", big ? "h-3.5 w-3.5" : "h-2.5 w-2.5")} aria-hidden />
         </span>
       )}
     </div>
   );
 }
-
-const STATUS_TEXT: Record<string, string> = {
-  ACTIVE: "Live",
-  PAUSED: "Paused",
-  ADSET_PAUSED: "Ad set paused",
-  CAMPAIGN_PAUSED: "Campaign paused",
-  ARCHIVED: "Archived",
-  DELETED: "Deleted",
-  WITH_ISSUES: "Has issues",
-  DISAPPROVED: "Disapproved",
-  PENDING_REVIEW: "In review",
-  IN_PROCESS: "Processing",
-};
-
-const deliveryStatusText = (status: string) =>
-  STATUS_TEXT[status] ?? status.toLowerCase().replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 
 /** Ad name (links to Ads Manager) over a quiet line of format · ad set · delivery status. */
 export function CreativeName({ ad, sub }: { ad: CreativeAd; sub?: React.ReactNode }) {

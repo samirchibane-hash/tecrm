@@ -20,6 +20,10 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { DashboardPeriodPicker } from "@/components/dashboard/DashboardPeriodPicker";
+import { PortfolioCreativeGallery } from "@/components/creative-performance/PortfolioCreativeGallery";
+import { useDashboardPeriod } from "@/hooks/useDashboardPeriod";
+import { useSettings } from "@/hooks/useSettings";
 import {
   Plus, X, Trash2, Image as ImageIcon, ExternalLink,
   Search, Camera, Film, Loader2, User, Check,
@@ -63,10 +67,21 @@ const Creatives = () => {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
 
-  // Active tab
-  type TabId = "library" | "requests";
-  const initialTab: TabId = searchParams.get("tab") === "requests" ? "requests" : "library";
+  // Active tab. Performance opens first: what the ads are doing decides what
+  // gets briefed next, so it comes before the library and the request queue.
+  type TabId = "performance" | "library" | "requests";
+  const TAB_IDS: TabId[] = ["performance", "library", "requests"];
+  const param = searchParams.get("tab");
+  const initialTab: TabId = TAB_IDS.find((t) => t === param) ?? "performance";
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+
+  // ── Creative performance state ──────────────────────────────────────────
+  // The same period control the Performance and Funnels screens use, so a range
+  // means the same days on every screen.
+  const { dateRange, label: periodLabel, creativeRange, onChange: onPeriodChange } = useDashboardPeriod();
+  // Clients hidden from the Performance dashboard stay hidden here: one setting,
+  // one meaning, so a hidden client can't reappear on another screen.
+  const { settings } = useSettings();
 
   // ── Template Library state ──────────────────────────────────────────────
   // Template Library columns default to every client; the operator can hide specific
@@ -409,11 +424,17 @@ const Creatives = () => {
 
         <PageHeader
           title="Creatives"
-          description="Template library, creative requests, and ad output management"
+          description="Live creative performance, the template library, and the request queue"
+          actions={
+            activeTab === "performance" ? (
+              <DashboardPeriodPicker dateRange={dateRange} label={periodLabel} onChange={onPeriodChange} />
+            ) : undefined
+          }
         />
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
           <TabsList className="mb-6">
+            <TabsTrigger value="performance">Creative Performance</TabsTrigger>
             <TabsTrigger value="library">Template Library</TabsTrigger>
             <TabsTrigger value="requests" className="gap-1.5">
               Creative Requests
@@ -425,7 +446,17 @@ const Creatives = () => {
             </TabsTrigger>
           </TabsList>
 
-          {/* ────────────── TAB 1: Template Library ────────────── */}
+          {/* ────────────── TAB 1: Creative Performance ────────────── */}
+          <TabsContent value="performance">
+            <PortfolioCreativeGallery
+              range={creativeRange}
+              periodCaption={periodLabel}
+              accounts={accounts.map((a) => ({ id: a.id, account_name: a.account_name, target_cpl: a.target_cpl }))}
+              hiddenAccounts={settings.hidden_accounts}
+            />
+          </TabsContent>
+
+          {/* ────────────── TAB 2: Template Library ────────────── */}
           <TabsContent value="library">
             <div className="mb-6 flex flex-wrap items-center gap-2 justify-between">
               <div className="flex flex-wrap items-center gap-2">
@@ -572,7 +603,7 @@ const Creatives = () => {
             )}
           </TabsContent>
 
-          {/* ────────────── TAB 2: Creative Requests ────────────── */}
+          {/* ────────────── TAB 3: Creative Requests ────────────── */}
           <TabsContent value="requests">
             {/* Toolbar */}
             <div className="mb-6 flex flex-wrap items-center gap-2 justify-between">
