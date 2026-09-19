@@ -81,7 +81,7 @@ function SplitTestPanel({ test }: { test: SplitTest }) {
                     <span
                       title={
                         arm.crmLeads < arm.optIns
-                          ? `${formatCount(arm.optIns - arm.crmLeads)} of this arm's opt-ins reached GoHighLevel without their page and variant, so they can't be counted against this page. Map the lp_page contact field on this sub-account.`
+                          ? `${formatCount(arm.optIns - arm.crmLeads)} of this arm's opt-ins reached GoHighLevel without both an lp_page and an lp_variant, so they can't be counted against this page.`
                           : "GoHighLevel contacts carrying this page and this arm — the same measure as the Leads figure above"
                       }
                     >
@@ -140,10 +140,12 @@ function SplitTestPanel({ test }: { test: SplitTest }) {
           <>
             {" "}
             <span className="text-danger">
-              {formatCount(dropped)} {dropped === 1 ? "opt-in" : "opt-ins"} never reached the CRM
-              with a page and variant, so {dropped === 1 ? "it isn't" : "they aren't"} in this
-              page&rsquo;s lead count — map the <code className="font-mono">lp_page</code> contact
-              field on this sub-account.
+              {formatCount(dropped)} {dropped === 1 ? "opt-in" : "opt-ins"} reached the CRM without
+              both an <code className="font-mono">lp_page</code> and an{" "}
+              <code className="font-mono">lp_variant</code>, so{" "}
+              {dropped === 1 ? "it is" : "they are"} not in this page&rsquo;s lead count. Leads from
+              before this client&rsquo;s fields were mapped read this way for good; if recent ones
+              do too, check the Create Contact step.
             </span>
           </>
         )}
