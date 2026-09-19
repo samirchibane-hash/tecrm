@@ -53,15 +53,12 @@ function board(opts: {
   tests?: SplitTestRecord[];
   variantDays?: VariantDayRecord[];
   variantBookings?: VariantBookingRecord[];
-  ghl?: { type: string | null; created_on: string; "Ad Name": string | null }[];
+  unattributedLeads?: number;
   hidden?: string[];
 }) {
   const portfolio = opts.portfolio ?? [];
   const accounts = [{ id: "a1", account_name: "Kinetico", target_cpl: 50 }];
-  const ghl = opts.ghl
-    ? { byAccount: new Map([["a1", opts.ghl]]), since: undefined, until: undefined }
-    : undefined;
-  const funnel = analyzePortfolioFunnel(portfolio, accounts, opts.links, opts.hidden ?? [], ghl, opts.versions ?? []);
+  const funnel = analyzePortfolioFunnel(portfolio, accounts, opts.links, opts.hidden ?? [], undefined, opts.versions ?? []);
   return buildFunnelsBoard({
     links: opts.links,
     pages: funnel.pages,
@@ -70,12 +67,14 @@ function board(opts: {
     tests: opts.tests ?? [],
     variantDays: opts.variantDays ?? [],
     variantBookings: opts.variantBookings ?? [],
-    crmUnallocatedByAccount: funnel.crmUnallocatedByAccount,
+    unattributedLeads: opts.unattributedLeads ?? 0,
     hidden: opts.hidden ?? [],
   });
 }
 
-const crmLead = (adName: string | null) => ({ type: "lead", created_on: "2026-09-18", "Ad Name": adName });
+/** An attributed lead: GHL saw both lp_page (→ url) and lp_variant. */
+const attributed = (url: string, variant: string, leads: number, booked = 0): VariantBookingRecord =>
+  ({ url, variant, day: "2026-09-18", leads, booked });
 
 describe("entry pages", () => {
   it("keeps landing pages and drops the funnel's own steps", () => {
@@ -114,37 +113,68 @@ describe("funnels board", () => {
     expect(row.perf?.spend).toBe(1000);
     expect(row.ads.map((a) => a.id)).toEqual(["dear", "cheap"]);
     expect(b.withTraffic).toBe(1);
-    // Meta counted 22 leads on these ads. With no CRM contact behind them the
-    // board reports none: the pixel's number is not a lead count here.
+    // Meta counted 22 leads on these ads. None carry an lp_page/lp_variant, so
+    // the board claims no measurement at all rather than reporting the pixel.
+    expect(b.rows[0].verifiedLeads).toBeNull();
     expect(b.leads).toBe(0);
-    expect(b.cvr).toBe(0);
   });
 
-  it("counts leads the CRM holds, not the pixel's inflated count", () => {
+  it("counts only leads carrying an lp_page and lp_variant", () => {
     const b = board({
       links: [link("Kinetico", "https://k.co/lp-1", "LP 1", "Soft water")],
       portfolio: [account("a1", "Kinetico", [adTo("dear", "https://k.co/lp-1", 900, 20, 450)])],
-      ghl: [crmLead("Ad dear"), crmLead("Ad dear")],
+      variantBookings: [attributed("https://k.co/lp-1", "a", 2), attributed("https://k.co/lp-1", "b", 1)],
     });
-    // Meta claimed 20; two contacts exist.
-    expect(b.rows[0].verifiedLeads).toBe(2);
-    expect(b.leads).toBe(2);
-    expect(b.cvr).toBeCloseTo(2 / 450);
-    expect(b.rows[0].verifiedPartial).toBe(false);
+    // Meta claimed 20; three leads were proved to come from this page.
+    expect(b.rows[0].verifiedLeads).toBe(3);
+    expect(b.leads).toBe(3);
+    expect(b.cvr).toBeCloseTo(3 / 450);
   });
 
-  it("marks a page's verified count as a floor when the client has unplaced leads", () => {
+  it("reads a client with no attribution as not tracked, never as zero", () => {
     const b = board({
       links: [link("Kinetico", "https://k.co/lp-1", "LP 1"), link("Kinetico", "https://k.co/lp-2", "LP 2")],
       portfolio: [account("a1", "Kinetico", [
         adTo("one", "https://k.co/lp-1", 500, 5, 250),
         adTo("two", "https://k.co/lp-2", 500, 5, 250),
       ])],
-      // No ad name, and the client runs two pages with traffic: unplaceable.
-      ghl: [crmLead(null)],
+      unattributedLeads: 9,
     });
-    expect(b.unallocatedLeads).toBe(1);
-    expect(b.rows.every((r) => r.verifiedPartial)).toBe(true);
+    expect(b.rows.every((r) => r.verifiedLeads === null)).toBe(true);
+    expect(b.rows.every((r) => r.verifiedCvr === null)).toBe(true);
+    // The leads exist; they just belong to no page. Reported, never counted.
+    expect(b.unattributedLeads).toBe(9);
+    expect(b.leads).toBe(0);
+  });
+
+  it("keeps a real zero once the client is sending attribution", () => {
+    const b = board({
+      links: [link("Kinetico", "https://k.co/lp-1", "LP 1"), link("Kinetico", "https://k.co/lp-2", "LP 2")],
+      portfolio: [account("a1", "Kinetico", [
+        adTo("one", "https://k.co/lp-1", 500, 5, 250),
+        adTo("two", "https://k.co/lp-2", 500, 5, 250),
+      ])],
+      variantBookings: [attributed("https://k.co/lp-1", "a", 4)],
+    });
+    const [one, two] = b.rows;
+    expect(one.verifiedLeads).toBe(4);
+    // Same client, attribution proven to work, no lead on this page: a real 0.
+    expect(two.verifiedLeads).toBe(0);
+    expect(two.verifiedCvr).toBe(0);
+  });
+
+  it("rates attributed leads only against the views of measured pages", () => {
+    const b = board({
+      links: [link("Kinetico", "https://k.co/lp-1", "LP 1"), link("Other", "https://o.co/lp-1", "LP 1")],
+      portfolio: [
+        account("a1", "Kinetico", [adTo("one", "https://k.co/lp-1", 500, 5, 100)]),
+        account("a2", "Other", [adTo("two", "https://o.co/lp-1", 500, 5, 900)]),
+      ],
+      variantBookings: [attributed("https://k.co/lp-1", "a", 10)],
+    });
+    // Only Kinetico is measured. Dividing by all 1,000 views would report 1%.
+    expect(b.cvr).toBeCloseTo(10 / 100);
+    expect(b.measuredLpv).toBe(100);
   });
 
   it("reports no lead count at all for a page with no ad traffic", () => {

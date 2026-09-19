@@ -9,6 +9,11 @@ import { ANGLE_LABEL, OFFER_LABEL } from "@/components/creative-performance/labe
 import { MIN_ARM_VIEWS, type FunnelRow, type SplitArm, type SplitTest } from "./funnelRows";
 
 const pct = (r: number) => `${(r * 100).toFixed(1)}%`;
+
+const ATTRIBUTED =
+  "GoHighLevel contacts carrying this page's lp_page and an lp_variant, from the ad's UTM parameters";
+const NOT_TRACKED =
+  "Not tracked: this client's GHL sub-account hasn't sent an attributed lead, so its lead count is unknown rather than zero. Map the lp_page and lp_variant contact custom fields to start counting.";
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
 const ARM_STATUS: Record<SplitArm["status"], { status: "success" | "danger" | "neutral"; label: string; help: string }> = {
@@ -247,25 +252,17 @@ export function FunnelPageCard({ row }: { row: FunnelRow }) {
             label="Leads"
             value={
               row.verifiedLeads === null
-                ? <Dash title="No ad traffic in this period" />
-                : `${formatCount(row.verifiedLeads)}${row.verifiedPartial || perf?.crmInferred ? "*" : ""}`
+                ? <Dash title={perf ? NOT_TRACKED : "No ad traffic in this period"} />
+                : formatCount(row.verifiedLeads)
             }
-            title={
-              row.verifiedLeads === null
-                ? undefined
-                : perf?.crmInferred
-                  ? "Inferred: these CRM leads carry no ad name, and this is the client's only page with ad traffic"
-                  : row.verifiedPartial
-                    ? "At least this many: some of this client's CRM leads carry no ad name and could not be placed on one page"
-                    : "Contacts GoHighLevel holds, matched to this page by ad name (utm_content)"
-            }
+            title={row.verifiedLeads === null ? undefined : ATTRIBUTED}
           />
           <Stat
             label="Conv."
             value={row.verifiedCvr != null ? pct(row.verifiedCvr) : <Dash title="No conversion rate for this period" />}
             title={
               row.verifiedInterval
-                ? `Verified leads ÷ page views · 95% range ${pct(row.verifiedInterval.low)}–${pct(row.verifiedInterval.high)}`
+                ? `Attributed leads ÷ page views · 95% range ${pct(row.verifiedInterval.low)}–${pct(row.verifiedInterval.high)}`
                 : undefined
             }
           />
@@ -301,15 +298,9 @@ export function FunnelPageCard({ row }: { row: FunnelRow }) {
               <Stat label="Link clicks" value={formatCount(perf.linkClicks)} />
               <Stat label="Page views" value={formatCount(perf.lpv)} />
               <Stat
-                label="Verified leads"
-                value={`${formatCount(perf.crmLeads)}${perf.crmInferred || row.verifiedPartial ? "*" : ""}`}
-                title={
-                  perf.crmInferred
-                    ? "Inferred: these leads carry no ad name and this is the client's only page with ad traffic"
-                    : row.verifiedPartial
-                      ? "At least this many: some of this client's CRM leads carry no ad name and could not be placed on one page"
-                      : "Contacts GoHighLevel holds, matched by ad name (utm_content)"
-                }
+                label="Attributed leads"
+                value={row.verifiedLeads === null ? <Dash title={NOT_TRACKED} /> : formatCount(row.verifiedLeads)}
+                title={row.verifiedLeads === null ? undefined : ATTRIBUTED}
               />
               <Stat
                 label="Cost / lead"

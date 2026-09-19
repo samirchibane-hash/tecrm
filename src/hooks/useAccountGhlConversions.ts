@@ -31,7 +31,7 @@ export function useAllGhlConversions(since: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("ghl_conversions")
-        .select("tecrm_id, type, created_on, \"Ad Name\"")
+        .select("tecrm_id, type, created_on, \"Ad Name\", lp_variant, lp_page")
         .gte("created_on", since);
       if (error) throw error;
       return data;

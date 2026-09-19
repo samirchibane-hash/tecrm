@@ -101,21 +101,22 @@ export interface FunnelRow {
   /** Performance in the selected period. Null when no ad sent traffic here. */
   perf: PortfolioPage | null;
   /**
-   * Leads this page produced, counted as contacts GoHighLevel actually holds.
-   * This is the only lead number the board shows: Meta's pixel lead is not
-   * reported here, because GHL's CAPI re-fires on contact updates and inflated
-   * every account roughly twofold. Null when no ad sent traffic to the page.
+   * Leads this page produced, counted only where the lead carries both an
+   * `lp_page` and an `lp_variant` from the funnel's UTM parameters. Nothing
+   * else counts here: a lead the page cannot be proved to have produced tells
+   * you nothing about the page, and Meta's pixel lead counts one opt-in
+   * several times.
+   *
+   * Null means the measurement does not exist yet for this page's client —
+   * either the page had no ad traffic, or that sub-account has never sent an
+   * attributed lead, so its custom fields are not mapped. Null is never zero:
+   * a client with no attribution has an unknown lead count, not none.
    */
   verifiedLeads: number | null;
   /**
-   * True when this client has CRM leads that carry no ad name and could not be
-   * placed on any one page, so `verifiedLeads` is a floor rather than a total.
-   */
-  verifiedPartial: boolean;
-  /**
-   * Verified leads ÷ page views, with its Wilson interval. Computed here rather
-   * than read off `perf.cvr`, which is Meta's lead count over the same views and
-   * so runs high. Null when the page had no ad traffic.
+   * Attributed leads ÷ page views, with its Wilson interval. Computed here
+   * rather than read off `perf.cvr`, which is Meta's lead count over the same
+   * views and so runs high. Null whenever `verifiedLeads` is.
    */
   verifiedCvr: number | null;
   verifiedInterval: { low: number; high: number } | null;
@@ -135,10 +136,16 @@ export interface FunnelsBoard {
   runningTests: number;
   spend: number;
   lpv: number;
-  /** Verified leads across every page with traffic: GHL contacts, never Meta's pixel. */
+  /** Attributed leads across every page: carrying lp_page and lp_variant only. */
   leads: number;
-  /** Verified leads that belong to no single page, so `leads` is a floor. */
-  unallocatedLeads: number;
+  /**
+   * GHL leads in this period that carry no lp_page/lp_variant, so no page can
+   * claim them. Shown, never counted — it is the size of what attribution does
+   * not yet cover.
+   */
+  unattributedLeads: number;
+  /** Views belonging to pages whose leads are measured; the denominator of `cvr`. */
+  measuredLpv: number;
   cvr: number | null;
 }
 
@@ -244,7 +251,7 @@ export function buildFunnelsBoard({
   tests,
   variantDays,
   variantBookings = [],
-  crmUnallocatedByAccount = new Map(),
+  unattributedLeads = 0,
   hidden = [],
   entryOnly = true,
 }: {
@@ -255,8 +262,8 @@ export function buildFunnelsBoard({
   tests: SplitTestRecord[];
   variantDays: VariantDayRecord[];
   variantBookings?: VariantBookingRecord[];
-  /** Per account id, CRM leads that could not be placed on one page. */
-  crmUnallocatedByAccount?: Map<string, number>;
+  /** GHL leads in the period carrying no lp_page/lp_variant. */
+  unattributedLeads?: number;
   hidden?: string[];
   entryOnly?: boolean;
 }): FunnelsBoard {
@@ -331,9 +338,7 @@ export function buildFunnelsBoard({
       ));
 
     const perf = perfByKey.get(key) ?? null;
-    // A page with no ad traffic has no lead count to report — that is unknown,
-    // not zero, so every verified figure below stays null for it.
-    const verified = perf ? rate(perf.crmLeads, perf.lpv) : { cvr: null, interval: null };
+    const attributed = pageBookings.reduce((s, b) => s + b.leads, 0);
     rows.push({
       key,
       url: link.url,
@@ -346,10 +351,11 @@ export function buildFunnelsBoard({
       angle: copy.angle,
       copySyncedAt: link.copy_synced_at,
       perf,
-      verifiedLeads: perf ? perf.crmLeads : null,
-      verifiedPartial: !!perf && (crmUnallocatedByAccount.get(perf.accountId) ?? 0) > 0,
-      verifiedCvr: verified.cvr,
-      verifiedInterval: verified.interval,
+      // Filled in below, once it is known whether this client sends attribution
+      // at all: a page under a client that never has cannot be read as zero.
+      verifiedLeads: attributed,
+      verifiedCvr: null,
+      verifiedInterval: null,
       ads: (adsByKey.get(key) ?? []).sort((a, b) => b.spend - a.spend),
       versions: [...pageVersions]
         .sort((a, b) => b.valid_from.localeCompare(a.valid_from))
@@ -368,6 +374,22 @@ export function buildFunnelsBoard({
     });
   }
 
+  // A client that has never sent an attributed lead in this period has no
+  // measurement, not a measurement of zero — every one of its pages reads
+  // "not tracked" until its GHL custom fields are mapped. A client that does
+  // send them can be read literally, so a genuine zero on one of its pages is
+  // a real zero (design rule #5: unmapped and zero are different states).
+  const attributedClients = new Set(rows.filter((r) => r.verifiedLeads! > 0).map((r) => r.accountName));
+  for (const r of rows) {
+    if (!r.perf || !attributedClients.has(r.accountName)) {
+      r.verifiedLeads = null;
+      continue;
+    }
+    const { cvr, interval } = rate(r.verifiedLeads!, r.perf.lpv);
+    r.verifiedCvr = cvr;
+    r.verifiedInterval = interval;
+  }
+
   // Clients together, then biggest spender first, then idle pages by name — so
   // the page costing the most money is always the first thing read.
   rows.sort((a, b) =>
@@ -377,13 +399,16 @@ export function buildFunnelsBoard({
 
   const withTraffic = rows.filter((r) => r.perf !== null);
   const lpv = withTraffic.reduce((s, r) => s + (r.perf?.lpv ?? 0), 0);
-  // Verified leads, not Meta's. `perf.leads` is Meta's pixel count and is
-  // deliberately not summed here: it counts one opt-in several times.
-  const leads = withTraffic.reduce((s, r) => s + (r.verifiedLeads ?? 0), 0);
-  const shownAccounts = new Set(rows.map((r) => r.perf?.accountId).filter((id): id is string => !!id));
-  const unallocatedLeads = [...crmUnallocatedByAccount]
-    .filter(([id]) => shownAccounts.has(id))
-    .reduce((s, [, n]) => s + n, 0);
+  // Attributed leads only. `perf.leads` is Meta's pixel count and is
+  // deliberately never summed here: it counts one opt-in several times.
+  //
+  // The rate divides by the views of the *measured* pages alone. Dividing
+  // attributed leads by every page's views would mix a numerator that excludes
+  // unmapped clients with a denominator that includes them, and report a
+  // conversion rate lower than any real page's.
+  const measured = withTraffic.filter((r) => r.verifiedLeads !== null);
+  const leads = measured.reduce((s, r) => s + (r.verifiedLeads ?? 0), 0);
+  const measuredLpv = measured.reduce((s, r) => s + (r.perf?.lpv ?? 0), 0);
 
   return {
     rows,
@@ -394,7 +419,9 @@ export function buildFunnelsBoard({
     spend: withTraffic.reduce((s, r) => s + (r.perf?.spend ?? 0), 0),
     lpv,
     leads,
-    unallocatedLeads,
-    cvr: rate(leads, lpv).cvr,
+    unattributedLeads,
+    /** Over the views of pages whose leads are actually measured, not all views. */
+    measuredLpv,
+    cvr: rate(leads, measuredLpv).cvr,
   };
 }

@@ -52,9 +52,24 @@ export function FunnelsBoard({
   const { data: tests = [] } = useFunnelSplitTests();
 
   const period = data?.accounts.find((a) => a.period)?.period ?? null;
-  const { data: variantDays = [] } = useVariantDaily(period?.since);
-  const { data: variantBookings = [] } = useVariantBookings(period?.since);
+  const { data: variantDays = [] } = useVariantDaily(period?.since, period?.until);
+  const { data: variantBookings = [] } = useVariantBookings(period?.since, period?.until);
   const { data: ghlRows = [] } = useAllGhlConversions(period?.since ?? "");
+
+  // Leads the CRM holds that no page can claim, because the funnel never passed
+  // an lp_page/lp_variant for them. Never added to the board's count — it is
+  // there so a low number reads as "not measured yet" rather than "not working".
+  const unattributedLeads = useMemo(() => {
+    const visible = new Set(accounts.filter((a) => !hiddenAccounts.includes(a.account_name)).map((a) => a.id));
+    return ghlRows.filter((r) => {
+      if (!r.tecrm_id || !visible.has(r.tecrm_id)) return false;
+      if (period?.since && r.created_on < period.since) return false;
+      if (period?.until && r.created_on > period.until) return false;
+      const type = r.type?.toLowerCase();
+      if (type !== "lead" && type !== "water test") return false;
+      return !r.lp_variant || !r.lp_page;
+    }).length;
+  }, [ghlRows, accounts, hiddenAccounts, period]);
 
   const ghl = useMemo((): PortfolioGhl => {
     const byAccount = new Map<string, { type: string | null; created_on: string; "Ad Name": string | null }[]>();
@@ -75,10 +90,10 @@ export function FunnelsBoard({
       tests,
       variantDays,
       variantBookings,
-      crmUnallocatedByAccount: funnel.crmUnallocatedByAccount,
+      unattributedLeads,
       hidden: hiddenAccounts,
     });
-  }, [data, accounts, links, hiddenAccounts, ghl, versions, tests, variantDays, variantBookings]);
+  }, [data, accounts, links, hiddenAccounts, ghl, versions, tests, variantDays, variantBookings, unattributedLeads]);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -136,8 +151,8 @@ export function FunnelsBoard({
           value={board.cvr !== null ? `${(board.cvr * 100).toFixed(1)}%` : "—"}
           icon={MousePointerClick}
           detail={
-            `${formatCount(board.lpv)} views · ${formatCount(board.leads)} verified leads` +
-            (board.unallocatedLeads > 0 ? ` · +${formatCount(board.unallocatedLeads)} unplaced` : "")
+            `${formatCount(board.measuredLpv)} views · ${formatCount(board.leads)} attributed ${board.leads === 1 ? "lead" : "leads"}` +
+            (board.unattributedLeads > 0 ? ` · ${formatCount(board.unattributedLeads)} unattributed` : "")
           }
         />
         <KpiStatCard
@@ -178,14 +193,18 @@ export function FunnelsBoard({
       </div>
 
       <p className="text-[11px] text-muted-foreground">
-        Spend and views from Meta Ads · leads from GoHighLevel contacts · {periodCaption}
+        Spend and views from Meta Ads · leads from attributed GoHighLevel contacts · {periodCaption}
         {data && <> · updated {formatDistanceToNowStrict(new Date(data.fetchedAt), { addSuffix: true })}</>}
         {" · "}entry pages only; booking and thank-you pages are funnel steps, not destinations
       </p>
       <p className="text-[11px] text-muted-foreground">
-        Meta&rsquo;s own lead count is not shown: GoHighLevel&rsquo;s Conversions API re-fires on
-        every contact update, so the pixel counts a single opt-in several times. A lead here is
-        one contact the CRM holds, placed on the page by the ad name the funnel passes through.
+        A lead here is one the funnel proved this page produced: a GoHighLevel contact carrying
+        both <code className="font-mono">lp_page</code> and <code className="font-mono">lp_variant</code>{" "}
+        from the ad&rsquo;s UTM parameters. Nothing else is counted — not Meta&rsquo;s pixel lead,
+        which counts one opt-in several times, and not a CRM contact with no arm on it, which says
+        nothing about which page earned it. Attribution went live on 18 Sep 2026, so pages read from
+        there, and a client whose GHL custom fields aren&rsquo;t mapped yet shows
+        &ldquo;not tracked&rdquo; rather than zero.
       </p>
 
       {rows.length === 0 ? (

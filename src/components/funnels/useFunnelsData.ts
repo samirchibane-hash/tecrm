@@ -59,14 +59,15 @@ export function useFunnelSplitTests() {
  * not to the arm the visitor actually saw, so it cannot split a test. The two
  * sources will never agree exactly and are never added together.
  */
-export function useVariantDaily(since: string | undefined) {
+export function useVariantDaily(since: string | undefined, until?: string) {
   return useQuery({
-    queryKey: ["funnel-variant-daily", since ?? "all"],
+    queryKey: ["funnel-variant-daily", since ?? "all", until ?? "now"],
     queryFn: async (): Promise<VariantDayRecord[]> => {
       let q = supabase
         .from("funnel_variant_daily")
         .select("variant, day, views, leads, account_links!inner(url)");
       if (since) q = q.gte("day", since);
+      if (until) q = q.lte("day", until);
       const { data, error } = await q;
       if (error) throw error;
       return (data ?? []).map((r) => ({
@@ -90,7 +91,7 @@ export interface VariantBookingRecord {
 }
 
 /**
- * Per-arm booked appointments by day, from GHL conversions.
+ * Per-arm attributed leads and booked appointments by day, from GHL conversions.
  *
  * The page can report a view and an opt-in because both happen on the page.
  * The booking does not — it happens on the GHL calendar, minutes or days later
@@ -99,14 +100,15 @@ export interface VariantBookingRecord {
  * `useVariantDaily`; these two sources measure different steps and are never
  * added together.
  */
-export function useVariantBookings(since: string | undefined) {
+export function useVariantBookings(since: string | undefined, until?: string) {
   return useQuery({
-    queryKey: ["ghl-variant-bookings", since ?? "all"],
+    queryKey: ["ghl-variant-bookings", since ?? "all", until ?? "now"],
     queryFn: async (): Promise<VariantBookingRecord[]> => {
       let q = supabase
         .from("ghl_conversion_variant_daily")
         .select("url, variant, day, leads, booked");
       if (since) q = q.gte("day", since);
+      if (until) q = q.lte("day", until);
       const { data, error } = await q;
       if (error) throw error;
       return (data ?? []).map((r) => ({
