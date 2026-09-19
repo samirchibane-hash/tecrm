@@ -1,20 +1,12 @@
 import { useCallback, useMemo, useState } from "react";
-import { startOfDay, startOfMonth, subDays } from "date-fns";
+import { startOfDay, startOfMonth } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { periodLabel, toCreativeRange } from "@/lib/periods";
 
-/** Where a screen's period control starts, named as the picker names it. */
-export type PeriodDefault = "month_to_date" | "last_28d";
-
-const DEFAULTS: Record<PeriodDefault, { range: DateRange; name: string }> = {
-  month_to_date: {
-    range: { from: startOfMonth(new Date()), to: startOfDay(new Date()) },
-    name: "Month to Date",
-  },
-  last_28d: {
-    range: { from: startOfDay(subDays(new Date(), 28)), to: startOfDay(subDays(new Date(), 1)) },
-    name: "Last 28 days",
-  },
+/** Every screen opens on the month so far, and says so in the same words. */
+const MONTH_TO_DATE = {
+  range: (): DateRange => ({ from: startOfMonth(new Date()), to: startOfDay(new Date()) }),
+  name: "Month to Date",
 };
 
 /**
@@ -22,12 +14,13 @@ const DEFAULTS: Record<PeriodDefault, { range: DateRange; name: string }> = {
  * that shows one.
  *
  * It exists so Performance and Funnels cannot drift: the same control has to
- * mean the same days, carry the same label, and resolve to the same Meta query
- * on both, and that only holds if one place decides all three.
+ * open on the same days, mean the same days, carry the same label and resolve
+ * to the same Meta query on both, and that only holds if one place decides all
+ * four. That includes the starting period — hence no argument here.
  */
-export function useDashboardPeriod(initial: PeriodDefault = "month_to_date") {
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(DEFAULTS[initial].range);
-  const [presetName, setPresetName] = useState<string>(DEFAULTS[initial].name);
+export function useDashboardPeriod() {
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(MONTH_TO_DATE.range);
+  const [presetName, setPresetName] = useState<string>(MONTH_TO_DATE.name);
 
   const onChange = useCallback((range: DateRange | undefined, name: string) => {
     setDateRange(range);

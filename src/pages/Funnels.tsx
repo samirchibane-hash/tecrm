@@ -11,12 +11,11 @@ import { useDashboardPeriod } from "@/hooks/useDashboardPeriod";
  *
  * The page wires data to the board and owns only the period control — the
  * board and its cards live in components/funnels. The period is the same
- * control the Performance dashboard uses, so a range means the same days on
- * both screens. It opens on the last 28 days, the nearest this control offers
- * to the 30 days this page used to default to.
+ * control the Performance dashboard uses, opening on the same month-to-date,
+ * so a range means the same days on both screens.
  */
 export default function Funnels() {
-  const { dateRange, label, creativeRange, onChange } = useDashboardPeriod("last_28d");
+  const { dateRange, label, creativeRange, onChange } = useDashboardPeriod();
 
   const { data: accounts = [] } = useQuery({
     queryKey: ["all-accounts"],

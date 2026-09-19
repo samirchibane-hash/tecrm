@@ -148,7 +148,7 @@ const Index = () => {
 
   // ─── Date range ────────────────────────────────────────────────────────────
   // Shared with the Funnels page so one control means one set of days.
-  const { dateRange, label: dateLabel, creativeRange, onChange: onPeriodChange } = useDashboardPeriod("month_to_date");
+  const { dateRange, label: dateLabel, creativeRange, onChange: onPeriodChange } = useDashboardPeriod();
 
   // GHL conversions — fetch a window covering current + previous period so deltas work.
   // Date range is in the query key so this refetches when the picker changes.
