@@ -1,6 +1,6 @@
 import { format } from "date-fns";
 import {
-  ExternalLink, FolderOpen, FolderUp, Globe, CalendarCheck, Building2,
+  CircleCheck, ExternalLink, FolderOpen, FolderUp, Globe, CalendarCheck, Building2,
   Image as ImageIcon, Film, User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -233,14 +233,19 @@ function TemplatePreview({ src, href, name }: { src: string; href: string | null
 
 function DeliverFooter({ href }: { href: string | null }) {
   return (
-    <div className="shrink-0 border-t border-border bg-primary/5 px-6 py-4">
+    // Ready = success green, so the delivery step stands out from the rest of
+    // the panel; no folder yet stays neutral.
+    <div className={cn("shrink-0 border-t px-6 py-4", href ? "border-success/40 bg-success/10" : "border-border bg-muted/40")}>
       {href ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground">Finished?</p>
-            <p className="text-xs text-muted-foreground">Upload completed assets to this brief's folder.</p>
+          <div className="flex min-w-0 items-start gap-3">
+            <CircleCheck className="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">Finished?</p>
+              <p className="text-xs text-muted-foreground">Upload completed assets to this brief's folder.</p>
+            </div>
           </div>
-          <Button asChild className="shrink-0 gap-2">
+          <Button asChild className="shrink-0 gap-2 bg-success text-success-foreground hover:bg-success/90">
             <a href={href} target="_blank" rel="noopener noreferrer">
               <FolderUp className="h-4 w-4" aria-hidden /> Open brief folder
               <span className="sr-only">(opens in a new tab)</span>
