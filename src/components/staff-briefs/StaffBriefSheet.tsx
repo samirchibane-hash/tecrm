@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import { ExternalLink, FolderOpen, LayoutTemplate, FolderKanban, User, Image as ImageIcon, Film, Globe, CalendarCheck } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { normalizePageUrl } from "@/lib/urls";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { StatusPill } from "@/components/StatusPill";
 import { STATUS_LABEL, type RequestStatus } from "@/components/creatives/types";
@@ -117,6 +118,8 @@ export function StaffBriefSheet({ brief, pages, pagesLoading, onClose }: Props) 
   );
 }
 
+const isHomePage = (url: string) => !normalizePageUrl(url).includes("/");
+
 const META_UNAVAILABLE: Record<Exclude<StaffClientPages["meta"], "ok">, string> = {
   not_linked: "This client's Meta ad account isn't linked in the CRM, so live pages can't be shown",
   no_access: "Can't read this client's Meta ad account right now, so live pages can't be shown",
@@ -130,6 +133,9 @@ function ClientPagesSection({ accountName, pages, loading }: {
   pages: StaffClientPages | null | undefined;
   loading: boolean;
 }) {
+  // A bare domain only redirects to the funnel's first landing page, so it isn't
+  // a page staff need to open.
+  const landingPages = (pages?.activePages ?? []).filter((p) => !isHomePage(p.url));
   return (
     <section aria-labelledby="staff-brief-pages">
       <h3 id="staff-brief-pages" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Landing pages</h3>
@@ -144,15 +150,23 @@ function ClientPagesSection({ accountName, pages, loading }: {
         <div className="space-y-2">
           {pages.meta !== "ok" ? (
             <BriefLink icon={Globe} label="Active landing pages" detail="" href={null} missing={META_UNAVAILABLE[pages.meta]} />
-          ) : pages.activePages.length === 0 ? (
-            <BriefLink icon={Globe} label="Active landing pages" detail="" href={null} missing="No ads are live for this client right now" />
+          ) : landingPages.length === 0 ? (
+            <BriefLink
+              icon={Globe}
+              label="Active landing pages"
+              detail=""
+              href={null}
+              missing={pages.activePages.length === 0
+                ? "No ads are live for this client right now"
+                : "Live ads point to the site's home page, not a specific landing page"}
+            />
           ) : (
-            pages.activePages.map((p) => (
+            landingPages.map((p) => (
               <BriefLink
                 key={p.url}
                 icon={Globe}
                 label={p.label}
-                detail={`${p.url.replace(/^https?:\/\//, "")} · ${p.ads} live ${p.ads === 1 ? "ad" : "ads"}`}
+                detail={p.url.replace(/^https?:\/\//, "")}
                 href={p.url}
                 missing=""
               />

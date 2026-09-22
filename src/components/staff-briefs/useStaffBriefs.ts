@@ -51,7 +51,7 @@ export type StaffClientPages = {
   /** not_linked = no Meta ad account in the CRM; no_access = the token can't read it. */
   meta: "ok" | "not_linked" | "no_access" | "error";
   metaMessage: string | null;
-  /** Pages a live Meta ad sends people to right now, most ads first. */
+  /** Pages a live Meta ad sends people to right now, most-used first. */
   activePages: (StaffPage & { ads: number })[];
   schedulePages: StaffPage[];
 };
