@@ -1309,6 +1309,27 @@ export type Database = {
         }
         Relationships: []
       }
+      staff_share_links: {
+        Row: {
+          created_at: string
+          rotated_at: string | null
+          scope: string
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          rotated_at?: string | null
+          scope: string
+          token?: string
+        }
+        Update: {
+          created_at?: string
+          rotated_at?: string | null
+          scope?: string
+          token?: string
+        }
+        Relationships: []
+      }
       stripe_customers: {
         Row: {
           account_id: string | null
@@ -1709,6 +1730,27 @@ export type Database = {
       report_account_id: { Args: never; Returns: string }
       report_account_name: { Args: never; Returns: string }
       set_github_token: { Args: { token: string }; Returns: undefined }
+      staff_creative_briefs: {
+        Args: { p_token: string }
+        Returns: {
+          account_name: string
+          ad_angle: string
+          ad_type: string
+          assigned_to: string | null
+          brief_drive_url: string | null
+          client_drive_url: string | null
+          created_at: string
+          id: string
+          is_template: boolean
+          notes: string | null
+          offer_type: string
+          status: string
+          template_link: string | null
+          template_name: string
+          template_preview_url: string | null
+          updated_at: string
+        }[]
+      }
       sync_funnel_pages: {
         Args: { p_pages: Json; p_site_id: string }
         Returns: Json

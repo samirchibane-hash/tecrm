@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { NewBriefDialog } from "@/components/creatives/NewBriefDialog";
@@ -27,7 +27,7 @@ import { useSettings } from "@/hooks/useSettings";
 import {
   Plus, X, Trash2, Image as ImageIcon, ExternalLink,
   Search, Camera, Film, Loader2, User, Check,
-  ClipboardList, ChevronsUpDown,
+  ClipboardList, ChevronsUpDown, Share2,
 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -635,9 +635,14 @@ const Creatives = () => {
                   </button>
                 )}
               </div>
-              <Button size="sm" className="gap-1.5" onClick={() => { setNewBriefDefaults({}); setNewBriefOpen(true); }}>
-                <ClipboardList className="h-4 w-4" /> New Brief
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" className="gap-1.5" asChild>
+                  <Link to="/settings/staff-links"><Share2 className="h-4 w-4" /> Share with staff</Link>
+                </Button>
+                <Button size="sm" className="gap-1.5" onClick={() => { setNewBriefDefaults({}); setNewBriefOpen(true); }}>
+                  <ClipboardList className="h-4 w-4" /> New Brief
+                </Button>
+              </div>
             </div>
 
             {requestsLoading && <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div>}

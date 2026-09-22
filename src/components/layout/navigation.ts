@@ -32,6 +32,7 @@ export const SETTINGS_SECTIONS = [
   { slug: "accounts", title: "Account Visibility", description: "Hide client cards from the Performance dashboard." },
   { slug: "features", title: "Client Features", description: "VIP-only services, enabled per client." },
   { slug: "team", title: "Team Members", description: "People you can assign creative requests and tasks to." },
+  { slug: "staff-links", title: "Staff Links", description: "Login-free links you can share with staff, such as the creative briefs queue." },
   { slug: "change-log", title: "Change Log Options", description: "Categories and sub-options for logging campaign changes." },
   { slug: "onboarding", title: "Onboarding Checklists", description: "The steps shown when onboarding a new client, per service." },
   { slug: "integrations", title: "Integrations", description: "GitHub and Stripe syncs, and how commits link to clients." },

@@ -13,6 +13,7 @@ import ClaudeLog from "./pages/ClaudeLog";
 import Settings from "./pages/Settings";
 import ClientReport from "./pages/ClientReport";
 import CallCenterReport from "./pages/CallCenterReport";
+import StaffBriefs from "./pages/StaffBriefs";
 import ClientOnboarding from "./pages/ClientOnboarding";
 import NotFound from "./pages/NotFound";
 import { AuthGate } from "./components/AuthGate";
@@ -31,6 +32,8 @@ const App = () => (
           {/* Public — client-facing report links, scoped by an unguessable per-account token */}
           <Route path="/report/:token" element={<ClientReport />} />
           <Route path="/cc-report/:token" element={<CallCenterReport />} />
+          {/* Public — read-only creative briefs for staff, scoped by the rotatable staff link token */}
+          <Route path="/briefs/:token" element={<StaffBriefs />} />
 
           {/* Admin — Supabase Auth session on the admin allowlist */}
           <Route element={<AuthGate />}>

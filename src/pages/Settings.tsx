@@ -7,6 +7,7 @@ import { KpiSettings } from "@/components/settings/KpiSettings";
 import { AccountVisibilitySettings } from "@/components/settings/AccountVisibilitySettings";
 import { ClientFeatureSettings } from "@/components/settings/ClientFeatureSettings";
 import { TeamSettings } from "@/components/settings/TeamSettings";
+import { StaffLinksSettings } from "@/components/settings/StaffLinksSettings";
 import { ChangeLogSettings } from "@/components/settings/ChangeLogSettings";
 import { OnboardingChecklistSettings } from "@/components/settings/OnboardingChecklistSettings";
 import { IntegrationsSettings } from "@/components/settings/IntegrationsSettings";
@@ -18,6 +19,7 @@ const SECTION_COMPONENTS: Record<SettingsSlug, React.ComponentType> = {
   accounts: AccountVisibilitySettings,
   features: ClientFeatureSettings,
   team: TeamSettings,
+  "staff-links": StaffLinksSettings,
   "change-log": ChangeLogSettings,
   onboarding: OnboardingChecklistSettings,
   integrations: IntegrationsSettings,
