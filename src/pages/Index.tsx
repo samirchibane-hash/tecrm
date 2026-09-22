@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { DashboardPeriodPicker } from "@/components/dashboard/DashboardPeriodPicker";
 import { useDashboardPeriod } from "@/hooks/useDashboardPeriod";
 import { PortfolioCreativeBoard } from "@/components/creative-performance/PortfolioCreativeBoard";
+import { usePortfolioCreatives } from "@/components/creative-performance/useCreativePerformance";
 import { PortfolioFunnelBoard } from "@/components/funnel/PortfolioFunnelBoard";
 import { formatUsd } from "@/lib/format";
 import { RefreshCw, Sparkles, ArrowRight, ChevronRight, Clock } from "lucide-react";
@@ -44,21 +45,6 @@ function pctDelta(curr: number, prev: number): { pct: string; up: boolean; flat:
   const pct = ((curr - prev) / prev) * 100;
   if (Math.abs(pct) < 0.5) return { pct: "0%", up: false, flat: true };
   return { pct: Math.abs(pct).toFixed(0) + "%", up: pct > 0, flat: false };
-}
-
-// Relative time rounded UP, no "about" prefix. Units step up with age:
-// ≤7 days → days, >7 days → weeks, >4 weeks → months.
-// e.g. 19h → "1 day", 8 days → "2 weeks", 30 days → "1 month".
-function timeAgo(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const days = Math.max(1, Math.ceil(diffMs / 86_400_000));
-  if (days <= 7) return `${days} day${days === 1 ? "" : "s"}`;
-  if (days <= 28) {
-    const weeks = Math.ceil(days / 7);
-    return `${weeks} week${weeks === 1 ? "" : "s"}`;
-  }
-  const months = Math.ceil(days / 30);
-  return `${months} month${months === 1 ? "" : "s"}`;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -104,51 +90,22 @@ const Index = () => {
     return map;
   }, [dbAccounts]);
 
-  // Most recent time a Task was launched, per account
-  const { data: launchedTasks = [] } = useQuery({
-    queryKey: ["last-launched-tasks"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("tasks")
-        .select("account_name, updated_at")
-        .eq("stage", "launched")
-        .order("updated_at", { ascending: false });
-      return data ?? [];
-    },
-  });
-
-  const lastTaskMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    launchedTasks.forEach((r) => {
-      if (r.account_name && !map[r.account_name]) map[r.account_name] = r.updated_at;
-    });
-    return map;
-  }, [launchedTasks]);
-
-  // Most recent time a Creative Request was launched, per account
-  const { data: launchedCreatives = [] } = useQuery({
-    queryKey: ["last-launched-creatives"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("creative_requests")
-        .select("account_name, updated_at")
-        .eq("status", "launched")
-        .order("updated_at", { ascending: false });
-      return data ?? [];
-    },
-  });
-
-  const lastCreativeMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    launchedCreatives.forEach((r) => {
-      if (r.account_name && !map[r.account_name]) map[r.account_name] = r.updated_at;
-    });
-    return map;
-  }, [launchedCreatives]);
-
   // ─── Date range ────────────────────────────────────────────────────────────
   // Shared with the Funnels page so one control means one set of days.
   const { dateRange, label: dateLabel, creativeRange, onChange: onPeriodChange } = useDashboardPeriod();
+
+  // Ads delivering right now, per account. Same query (and cache entry) as the
+  // scorecards below, so this adds no Meta call. Accounts with no ad account
+  // linked are absent from the response; ones Meta refused carry an error. Both
+  // read "—", never 0.
+  const { data: portfolio, isLoading: activeAdsLoading } = usePortfolioCreatives(creativeRange);
+  const activeAdsByName = useMemo(() => {
+    const map = new Map<string, number | null>();
+    portfolio?.accounts.forEach((a) => {
+      map.set(a.accountName, a.error || !a.ads ? null : a.ads.filter((ad) => ad.status === "ACTIVE").length);
+    });
+    return map;
+  }, [portfolio]);
 
   // GHL conversions — fetch a window covering current + previous period so deltas work.
   // Date range is in the query key so this refetches when the picker changes.
@@ -286,13 +243,11 @@ const Index = () => {
         ghlCostPerLead, prevGhlCostPerLead,
         ghlAppointments, prevGhlAppointments,
         ghlCostPerAppt, prevGhlCostPerAppt,
-        lastTask: lastTaskMap[name] ?? null,
-        lastCreative: lastCreativeMap[name] ?? null,
         targetCpl: targetsByName[name]?.cpl ?? null,
         targetCpa: targetsByName[name]?.cpa ?? null,
       };
     });
-  }, [accountGroups, accountIdMap, targetsByName, allGhlConversions, dateRange, prevDateRange, prevGroupMap, lastTaskMap, lastCreativeMap]);
+  }, [accountGroups, accountIdMap, targetsByName, allGhlConversions, dateRange, prevDateRange, prevGroupMap]);
 
   const gapNames = tableRows.filter((r) => metaGaps.has(r.name)).map((r) => r.name);
 
@@ -424,11 +379,11 @@ const Index = () => {
                     <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       CPA
                     </th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Last Task
-                    </th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Last Creative
+                    <th
+                      className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                      title="Ads delivering in Meta right now (not tied to the selected period)"
+                    >
+                      Active Ads
                     </th>
                     <th className="py-3 px-4 w-8" />
                   </tr>
@@ -540,31 +495,25 @@ const Index = () => {
                           )}
                         </td>
 
-                        {/* Last Task */}
-                        <td className="py-3.5 px-4 text-right">
-                          {row.lastTask ? (
-                            <span
-                              className="text-xs text-muted-foreground"
-                              title={new Date(row.lastTask).toLocaleString()}
-                            >
-                              {timeAgo(row.lastTask)}
-                            </span>
+                        {/* Active Ads */}
+                        <td className="py-3.5 px-4 text-right tabular-nums">
+                          {activeAdsLoading ? (
+                            <Skeleton className="h-4 w-6 ml-auto" />
+                          ) : typeof activeAdsByName.get(row.name) === "number" ? (
+                            <span className="font-medium text-foreground">{activeAdsByName.get(row.name)}</span>
                           ) : (
-                            <span className="text-muted-foreground">–</span>
-                          )}
-                        </td>
-
-                        {/* Last Creative */}
-                        <td className="py-3.5 px-4 text-right">
-                          {row.lastCreative ? (
                             <span
-                              className="text-xs text-muted-foreground"
-                              title={new Date(row.lastCreative).toLocaleString()}
+                              className="text-muted-foreground"
+                              title={
+                                !portfolio
+                                  ? "Meta ad data unavailable"
+                                  : activeAdsByName.has(row.name)
+                                    ? "Meta can't read this ad account"
+                                    : "No Meta ad account linked"
+                              }
                             >
-                              {timeAgo(row.lastCreative)}
+                              —
                             </span>
-                          ) : (
-                            <span className="text-muted-foreground">–</span>
                           )}
                         </td>
 
