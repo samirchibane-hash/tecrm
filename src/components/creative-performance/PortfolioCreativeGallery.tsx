@@ -4,7 +4,6 @@ import { formatDistanceToNowStrict } from "date-fns";
 import { AlertTriangle, DollarSign, OctagonX, RefreshCw, Target, TrendingUp } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiStatCard } from "@/components/dashboard/KpiStatCard";
@@ -13,6 +12,8 @@ import { SegmentedControl } from "@/components/SegmentedControl";
 import { formatCount, formatPercent, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { deliveryStatusText } from "./adStatus";
+import { CountFilter } from "./CountFilter";
+import { NO_COUNT_FILTER, describeCount, passesCount, type CountFilterValue } from "./countThreshold";
 import { CreativeName, CreativeThumbnail, Dash, VerdictPill } from "./CreativeBits";
 import type { PortfolioAccountInfo } from "./PortfolioCreativeBoard";
 import { usePortfolioCreatives, type CreativeRange, type LeadChannel } from "./useCreativePerformance";
@@ -22,11 +23,6 @@ const CHANNEL_LABEL: Record<LeadChannel, string> = { website: "Website leads", f
 const LEAD_NOUN: Record<LeadChannel, string> = { website: "Website leads", form: "Form leads" };
 
 const ALL = "all";
-
-// Lead-count filter. Counts the lead source on screen (website or form leads),
-// so one control serves both. Strict comparisons, matching the labels.
-type LeadOp = "any" | "gt" | "lt";
-const LEAD_OP_LABEL: Record<LeadOp, string> = { any: "Any lead count", gt: "More than", lt: "Fewer than" };
 
 type Row = ScoredAd & {
   accountId: string;
@@ -168,8 +164,9 @@ export function PortfolioCreativeGallery({
   const { data, isLoading, isError, error, refetch, isFetching } = usePortfolioCreatives(range);
   const [account, setAccount] = useState<string>(ALL);
   const [channelPick, setChannelPick] = useState<LeadChannel | null>(null);
-  const [leadOp, setLeadOp] = useState<LeadOp>("any");
-  const [leadCount, setLeadCount] = useState("");
+  // Leads count the source on screen (website or form), so one control serves both.
+  const [leadFilter, setLeadFilter] = useState<CountFilterValue>(NO_COUNT_FILTER);
+  const [apptFilter, setApptFilter] = useState<CountFilterValue>(NO_COUNT_FILTER);
 
   const { rows, unreadable, gaps, accountOptions } = useMemo(() => {
     const rows: Row[] = [];
@@ -222,25 +219,19 @@ export function PortfolioCreativeGallery({
   const derived: LeadChannel = channelSpend("form") > channelSpend("website") ? "form" : "website";
   const channel = channelPick && hasChannel(channelPick) ? channelPick : derived;
 
-  // Blank or invalid input leaves the list unfiltered rather than matching nothing.
-  const leadThreshold = leadOp !== "any" && leadCount.trim() !== "" && Number.isFinite(Number(leadCount))
-    ? Math.max(0, Number(leadCount))
-    : null;
-
   const listed = useMemo(
     () =>
       inAccount
         .filter((r) => r.channel === channel)
-        // An ad that didn't deliver has no lead count to compare, not zero leads,
-        // so it drops out whenever the filter is on.
-        .filter((r) =>
-          leadThreshold === null ||
-          (r.ad.delivered && (leadOp === "gt" ? r.results > leadThreshold : r.results < leadThreshold)),
-        )
+        // An ad that didn't deliver has nothing to compare (not zero leads), and an
+        // account that doesn't track appointments has unknown appts (not zero):
+        // both drop out while a filter is on.
+        .filter((r) => passesCount(r.ad.delivered ? r.results : null, leadFilter))
+        .filter((r) => passesCount(r.ad.delivered ? r.ad.appointments : null, apptFilter))
         // Spent-most first; ads that are live but haven't delivered sit at the end,
         // where they read as "nothing to judge yet" rather than as the worst ads.
         .sort((a, b) => Number(b.ad.delivered) - Number(a.ad.delivered) || b.ad.spend - a.ad.spend),
-    [inAccount, channel, leadOp, leadThreshold],
+    [inAccount, channel, leadFilter, apptFilter],
   );
 
   const totals = useMemo(() => {
@@ -266,6 +257,10 @@ export function PortfolioCreativeGallery({
     };
   }, [listed]);
 
+  const countFilterText = [
+    describeCount(leadFilter, LEAD_NOUN[channel].toLowerCase()),
+    describeCount(apptFilter, "appts"),
+  ].filter(Boolean).join(" and ");
   const pct = (n: number) => (totals.spend > 0 ? `${Math.round((n / totals.spend) * 100)}% of spend` : "");
   const listedGaps = gaps.filter((g) => g.channel === channel && (account === ALL || g.accountId === account));
 
@@ -374,34 +369,13 @@ export function PortfolioCreativeGallery({
               },
             ]}
           />
-          <div className="flex items-center gap-1.5">
-            <Select value={leadOp} onValueChange={(v) => setLeadOp(v as LeadOp)}>
-              <SelectTrigger className="h-8 w-[140px] text-xs" aria-label={`Filter by ${LEAD_NOUN[channel].toLowerCase()}`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(LEAD_OP_LABEL) as LeadOp[]).map((op) => (
-                  <SelectItem key={op} value={op} className="text-xs">{LEAD_OP_LABEL[op]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {leadOp !== "any" && (
-              <>
-                <Input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  step={1}
-                  value={leadCount}
-                  onChange={(e) => setLeadCount(e.target.value)}
-                  placeholder="0"
-                  className="h-8 w-16 text-xs tabular-nums"
-                  aria-label={`${LEAD_OP_LABEL[leadOp]} how many ${LEAD_NOUN[channel].toLowerCase()}`}
-                />
-                <span className="text-xs text-muted-foreground">{LEAD_NOUN[channel].toLowerCase()}</span>
-              </>
-            )}
-          </div>
+          <CountFilter
+            value={leadFilter}
+            onChange={setLeadFilter}
+            noun={LEAD_NOUN[channel].toLowerCase()}
+            anyLabel="Any lead count"
+          />
+          <CountFilter value={apptFilter} onChange={setApptFilter} noun="appts" anyLabel="Any appt count" />
         </div>
         <Button
           variant="outline"
@@ -429,8 +403,8 @@ export function PortfolioCreativeGallery({
         <p className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
           {rows.length === 0
             ? "No ads delivered in this period, and none are live."
-            : leadThreshold !== null
-              ? `No ads with ${LEAD_OP_LABEL[leadOp].toLowerCase()} ${formatCount(leadThreshold)} ${LEAD_NOUN[channel].toLowerCase()} in this period.`
+            : countFilterText
+              ? `No ads with ${countFilterText} in this period.`
               : hasChannel(channel === "website" ? "form" : "website")
               ? `No ${CHANNEL_LABEL[channel].toLowerCase()} ads here in this period — switch the lead source above.`
               : "No ads match this filter."}
