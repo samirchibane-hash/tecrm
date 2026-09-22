@@ -1,19 +1,23 @@
 import { format } from "date-fns";
-import { ExternalLink, FolderOpen, LayoutTemplate, FolderKanban, User, Image as ImageIcon, Film } from "lucide-react";
+import { ExternalLink, FolderOpen, LayoutTemplate, FolderKanban, User, Image as ImageIcon, Film, Globe, CalendarCheck } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { StatusPill } from "@/components/StatusPill";
 import { STATUS_LABEL, type RequestStatus } from "@/components/creatives/types";
-import { STAGE_TONE, adTypeLabel, briefTitle, type StaffBrief } from "./useStaffBriefs";
+import { STAGE_TONE, adTypeLabel, briefTitle, type StaffBrief, type StaffClientPages } from "./useStaffBriefs";
 
 interface Props {
   brief: StaffBrief | null;
+  /** This brief's client pages; undefined while loading, null if they couldn't load. */
+  pages: StaffClientPages | null | undefined;
+  pagesLoading: boolean;
   onClose: () => void;
 }
 
 // Read-only brief for staff. The three links are what a designer needs to start
 // work; a missing one says so in words instead of silently disappearing, so
 // "not on file" is never mistaken for "not needed".
-export function StaffBriefSheet({ brief, onClose }: Props) {
+export function StaffBriefSheet({ brief, pages, pagesLoading, onClose }: Props) {
   return (
     <Sheet open={!!brief} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent side="right" className="w-full sm:max-w-lg p-0 flex flex-col overflow-hidden">
@@ -62,6 +66,10 @@ export function StaffBriefSheet({ brief, onClose }: Props) {
                 </div>
               </section>
 
+              {!brief.is_template && (
+                <ClientPagesSection accountName={brief.account_name} pages={pages} loading={pagesLoading} />
+              )}
+
               {brief.template_preview_url && (
                 <section aria-labelledby="staff-brief-preview">
                   <h3 id="staff-brief-preview" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Template preview</h3>
@@ -106,6 +114,67 @@ export function StaffBriefSheet({ brief, onClose }: Props) {
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+const META_UNAVAILABLE: Record<Exclude<StaffClientPages["meta"], "ok">, string> = {
+  not_linked: "This client's Meta ad account isn't linked in the CRM, so live pages can't be shown",
+  no_access: "Can't read this client's Meta ad account right now, so live pages can't be shown",
+  error: "Couldn't reach Meta right now, so live pages can't be shown",
+};
+
+// The pages this client's ads send people to right now, and where they book.
+// Every gap is named: unknown (Meta unreadable) is never shown as "no pages".
+function ClientPagesSection({ accountName, pages, loading }: {
+  accountName: string;
+  pages: StaffClientPages | null | undefined;
+  loading: boolean;
+}) {
+  return (
+    <section aria-labelledby="staff-brief-pages">
+      <h3 id="staff-brief-pages" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Landing pages</h3>
+      {loading ? (
+        <div className="space-y-2" role="status" aria-label="Loading landing pages">
+          <Skeleton className="h-12 rounded-lg" />
+          <Skeleton className="h-12 rounded-lg" />
+        </div>
+      ) : !pages ? (
+        <p className="text-xs text-muted-foreground">Couldn't load {accountName}'s landing pages. Reload the page to try again.</p>
+      ) : (
+        <div className="space-y-2">
+          {pages.meta !== "ok" ? (
+            <BriefLink icon={Globe} label="Active landing pages" detail="" href={null} missing={META_UNAVAILABLE[pages.meta]} />
+          ) : pages.activePages.length === 0 ? (
+            <BriefLink icon={Globe} label="Active landing pages" detail="" href={null} missing="No ads are live for this client right now" />
+          ) : (
+            pages.activePages.map((p) => (
+              <BriefLink
+                key={p.url}
+                icon={Globe}
+                label={p.label}
+                detail={`${p.url.replace(/^https?:\/\//, "")} · ${p.ads} live ${p.ads === 1 ? "ad" : "ads"}`}
+                href={p.url}
+                missing=""
+              />
+            ))
+          )}
+          {pages.schedulePages.length === 0 ? (
+            <BriefLink icon={CalendarCheck} label="Schedule page" detail="" href={null} missing="No schedule page found in this client's funnel" />
+          ) : (
+            pages.schedulePages.map((p) => (
+              <BriefLink
+                key={p.url}
+                icon={CalendarCheck}
+                label={pages.schedulePages.length > 1 ? `Schedule page · ${p.label}` : "Schedule page"}
+                detail={p.url.replace(/^https?:\/\//, "")}
+                href={p.url}
+                missing=""
+              />
+            ))
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 

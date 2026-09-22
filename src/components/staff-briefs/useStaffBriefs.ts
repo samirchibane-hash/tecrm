@@ -44,3 +44,33 @@ export const adTypeLabel = (adType: string) => (adType === "image_ads" ? "Image 
 
 /** A brief's title: the client, or the template name for master-template production. */
 export const briefTitle = (b: StaffBrief) => (b.is_template ? b.template_name : b.account_name);
+
+export type StaffPage = { label: string; url: string };
+export type StaffClientPages = {
+  accountName: string;
+  /** not_linked = no Meta ad account in the CRM; no_access = the token can't read it. */
+  meta: "ok" | "not_linked" | "no_access" | "error";
+  metaMessage: string | null;
+  /** Pages a live Meta ad sends people to right now, most ads first. */
+  activePages: (StaffPage & { ads: number })[];
+  schedulePages: StaffPage[];
+};
+
+// Active landing pages come from Meta live (staff-client-pages), so they load
+// separately from the briefs and never hold the list up.
+export function useStaffClientPages(token: string) {
+  return useQuery({
+    queryKey: ["staff-client-pages", token],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("staff-client-pages", { body: { token } });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      const byClient = new Map<string, StaffClientPages>();
+      for (const c of (data.clients ?? []) as StaffClientPages[]) byClient.set(c.accountName, c);
+      return byClient;
+    },
+    enabled: !!token,
+    staleTime: 10 * 60 * 1000,
+    retry: 1,
+  });
+}

@@ -10,7 +10,7 @@ import { StatusPill } from "@/components/StatusPill";
 import { STATUS_STEPS, STATUS_LABEL, type RequestStatus } from "@/components/creatives/types";
 import { StaffBriefSheet } from "@/components/staff-briefs/StaffBriefSheet";
 import {
-  useStaffBriefs, InvalidStaffLinkError, STAGE_TONE, adTypeLabel, briefTitle, type StaffBrief,
+  useStaffBriefs, useStaffClientPages, InvalidStaffLinkError, STAGE_TONE, adTypeLabel, briefTitle, type StaffBrief,
 } from "@/components/staff-briefs/useStaffBriefs";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +20,7 @@ type View = "open" | "launched";
 export default function StaffBriefs() {
   const { token = "" } = useParams<{ token: string }>();
   const { data: briefs = [], isLoading, error, refetch } = useStaffBriefs(token);
+  const clientPages = useStaffClientPages(token);
 
   const [view, setView] = useState<View>("open");
   const [client, setClient] = useState("all");
@@ -125,7 +126,12 @@ export default function StaffBriefs() {
         )}
       </main>
 
-      <StaffBriefSheet brief={selected} onClose={() => setSelectedId(null)} />
+      <StaffBriefSheet
+        brief={selected}
+        pages={selected ? (clientPages.isError ? null : clientPages.data?.get(selected.account_name) ?? (clientPages.data ? null : undefined)) : undefined}
+        pagesLoading={clientPages.isLoading}
+        onClose={() => setSelectedId(null)}
+      />
     </div>
   );
 }

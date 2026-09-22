@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isAdminRequest, unauthorizedResponse } from "../_shared/admin-auth.ts";
+import { destinationUrls as sharedDestinationUrls } from "../_shared/meta-destinations.ts";
 
 // Creative performance read straight from the Meta Graph API (nothing stored).
 // Admin-only.
@@ -154,9 +155,6 @@ function summarizeResult(ins: Graph, goal: string | undefined, spend: number) {
 const uniqText = (xs: unknown[]): string[] =>
   [...new Set(xs.filter((x): x is string => typeof x === "string").map((x) => x.trim()).filter(Boolean))];
 
-// Instant-form ads carry a placeholder link, not a page anyone lands on.
-const isRealDestination = (u: string) => /^https?:\/\//i.test(u) && !/^https?:\/\/(www\.)?(fb\.me|facebook\.com|m\.facebook\.com)\b/i.test(u);
-
 /** The words and destination an ad shows, from whichever creative shape it uses. */
 function extractCopy(creative: Graph | undefined) {
   const oss = creative?.object_story_spec ?? {};
@@ -165,12 +163,7 @@ function extractCopy(creative: Graph | undefined) {
   const afs = creative?.asset_feed_spec ?? {};
   const texts = (xs: Graph[] | undefined) => (xs ?? []).map((x) => x?.text);
 
-  const destinationUrls = uniqText([
-    link.link,
-    link.call_to_action?.value?.link,
-    video.call_to_action?.value?.link,
-    ...(afs.link_urls ?? []).map((u: Graph) => u?.website_url),
-  ]).filter(isRealDestination);
+  const destinationUrls = sharedDestinationUrls(creative);
 
   const leadFormId =
     link.call_to_action?.value?.lead_gen_form_id ??
