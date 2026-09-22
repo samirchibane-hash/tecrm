@@ -75,7 +75,7 @@ const Index = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("id, full_name, business_name, service, plan, submitted_at, account_id")
+        .select("id, full_name, business_name, service, plan, submitted_at, account_id, status, onboarded_at")
         .is("account_id", null)
         .order("submitted_at", { ascending: false })
         .limit(10);
@@ -335,7 +335,7 @@ const Index = () => {
                       <p className="text-sm font-semibold text-foreground truncate">
                         {client.business_name ?? client.full_name}
                       </p>
-                      {!client.business_name && (
+                      {!client.onboarded_at && client.status !== "onboarded" && (
                         <StatusPill status="warning" className="shrink-0 gap-1">
                           <Clock className="h-2.5 w-2.5" aria-hidden />
                           Awaiting onboarding

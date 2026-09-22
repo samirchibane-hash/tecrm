@@ -87,6 +87,109 @@ async function upsertInChunks(db: ReturnType<typeof createClient>, table: string
   }
 }
 
+// The website's checkout webhook is meant to create a `clients` row the moment
+// someone pays, but it only logs a failed write and still answers Stripe 200, so
+// a paying customer can go missing from New Clients. This backstop gives every
+// live subscription whose Stripe customer has no CRM client one, onboarded or not.
+// Before this date the CRM wasn't the website's database, so older unlinked
+// customers are history, not new signups.
+const CLIENT_BACKFILL_SINCE = "2026-09-11T00:00:00Z";
+const LIVE_SUBSCRIPTION = new Set(["active", "trialing", "past_due"]);
+// ClearDeals (the /sales product) is run from its own project, so its
+// customers are not New Clients here.
+const isClearDeals = (sub: StripeObject, productName: Map<string, string>) =>
+  (sub.items?.data ?? []).some((item: StripeObject) => productName.get(item.price?.product)?.startsWith("ClearDeals"));
+
+// Same links the website sends (Treat-Engine-Website lib/crm.js).
+function onboardingLink(service: string | null, sessionId: string): string {
+  const path = service === "websites" ? "websites" : service === "sales" ? "sales" : "ads";
+  return `https://treatengine.com/${path}/onboarding?session_id=${sessionId}`;
+}
+
+async function backfillMissingClients(
+  db: ReturnType<typeof createClient>,
+  key: string,
+  subscriptions: StripeObject[],
+  productName: Map<string, string>,
+): Promise<number> {
+  const { data: unlinked, error } = await db
+    .from("stripe_customers")
+    .select("id, name, email, phone")
+    .is("client_id", null)
+    .eq("deleted", false)
+    .gte("created_at", CLIENT_BACKFILL_SINCE);
+  if (error) throw new Error(`unlinked customers: ${error.message}`);
+  if (!unlinked?.length) return 0;
+  const customers = new Map(unlinked.map((c) => [c.id as string, c]));
+
+  // One client per customer, from their newest live subscription.
+  const newestSub = new Map<string, StripeObject>();
+  for (const s of subscriptions) {
+    const customerId = typeof s.customer === "string" ? s.customer : s.customer?.id;
+    if (!customers.has(customerId) || !LIVE_SUBSCRIPTION.has(s.status)) continue;
+    if (isClearDeals(s, productName)) {
+      customers.delete(customerId);
+      newestSub.delete(customerId);
+      continue;
+    }
+    const seen = newestSub.get(customerId);
+    if (!seen || s.created > seen.created) newestSub.set(customerId, s);
+  }
+
+  let created = 0;
+  for (const [customerId, sub] of newestSub) {
+    // The checkout session carries service, plan and business name, and its id
+    // is what the webhook upserts on, so a late webhook retry can't add a second
+    // row. Looked up by customer: ClearDeals checkouts start a tier and a usage
+    // subscription, and only the tier is the checkout's own. Tablet add-on
+    // checkouts are orders, not signups.
+    let session: StripeObject | null = null;
+    try {
+      const sessions = await stripeList("checkout/sessions", key, { customer: customerId, status: "complete" });
+      session = sessions.find((s) => s.metadata?.kind !== "tablet_order") ?? null;
+    } catch (e) {
+      console.warn(`checkout session for ${customerId}:`, e instanceof Error ? e.message : e);
+    }
+    if (session?.metadata?.service === "sales") continue;
+    const customer = customers.get(customerId)!;
+    const service = session?.metadata?.service ?? null;
+    const sessionId = session?.id ?? `stripe:${sub.id}`;
+
+    const { data: inserted, error: insertError } = await db.from("clients").upsert({
+      session_id: sessionId,
+      service,
+      plan: session?.metadata?.plan ?? null,
+      // Checkout asks for the business name, so the card reads as the company
+      // even when the client never fills in onboarding.
+      business_name: session?.customer_details?.business_name ?? null,
+      full_name: session?.customer_details?.name ?? customer.name,
+      email: session?.customer_details?.email ?? customer.email,
+      phone: session?.customer_details?.phone ?? customer.phone,
+      amount_paid: session?.amount_total ?? null,
+      currency: session?.currency ?? sub.currency,
+      status: "pending",
+      onboarding_link: session ? onboardingLink(service, session.id) : null,
+      stripe_customer_id: customerId,
+      stripe_subscription_id: sub.id,
+      submitted_at: iso(session?.created ?? sub.created),
+    }, { onConflict: "session_id", ignoreDuplicates: true }).select("id");
+    if (insertError) {
+      console.error(`client backfill ${customerId}:`, insertError.message);
+      continue;
+    }
+    if (inserted?.length) {
+      created++;
+    } else {
+      // The webhook wrote the row but not its Stripe IDs; fill them so it links.
+      await db.from("clients")
+        .update({ stripe_customer_id: customerId, stripe_subscription_id: sub.id })
+        .eq("session_id", sessionId)
+        .is("stripe_customer_id", null);
+    }
+  }
+  return created;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -218,6 +321,8 @@ serve(async (req) => {
     }));
 
     const { data: linked } = await db.rpc("link_stripe_customers");
+    const clientsCreated = await backfillMissingClients(db, key, subscriptions, productName);
+    if (clientsCreated) await db.rpc("link_stripe_customers");
 
     const counts = {
       products: products.length,
@@ -226,6 +331,7 @@ serve(async (req) => {
       invoices: invoices.length,
       payments: payments.length,
       newly_linked: linked ?? 0,
+      clients_created: clientsCreated,
     };
     const ok = !paymentsResult.error;
     const error = paymentsResult.error ? `payments: ${paymentsResult.error}` : null;
