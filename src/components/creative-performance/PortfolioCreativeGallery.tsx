@@ -51,7 +51,14 @@ function AdCard({ row, rank, shareOfSpend }: { row: Row; rank: number; shareOfSp
   const hook = hookRate(ad);
   const headline = ad.copy.headlines[0] ?? null;
   return (
-    <li className={cn("flex flex-col gap-4 p-4 sm:flex-row", !ad.live && "bg-muted/20")}>
+    <li
+      className={cn(
+        "flex flex-col gap-4 p-4 sm:flex-row transition-[opacity,filter]",
+        // Paused ads dim as a whole row so they stand out when scanning; hover or
+        // keyboard focus brings one back to full contrast for reading.
+        !ad.live && "bg-muted/40 opacity-50 grayscale hover:opacity-100 hover:grayscale-0 focus-within:opacity-100 focus-within:grayscale-0",
+      )}
+    >
       <div className="flex shrink-0 items-start gap-3">
         <span className="w-5 pt-1 text-right text-xs font-semibold tabular-nums text-muted-foreground" aria-hidden>
           {rank}
