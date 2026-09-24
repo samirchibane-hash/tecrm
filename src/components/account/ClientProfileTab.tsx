@@ -3,6 +3,7 @@ import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { Tables } from "@/integrations/supabase/types";
 import { formatUsd } from "@/lib/format";
+import { externalHref } from "@/lib/urls";
 
 type Client = Tables<"clients">;
 type Hours = Record<string, { open: string; close: string; status: string }>;
@@ -34,7 +35,7 @@ function LinkField({ label, href }: { label: string; href: string | null }) {
     <Field
       label={label}
       value={
-        <a href={href} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-primary hover:underline">
+        <a href={externalHref(href)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-primary hover:underline">
           {href}
           <ExternalLink className="h-3 w-3" />
         </a>

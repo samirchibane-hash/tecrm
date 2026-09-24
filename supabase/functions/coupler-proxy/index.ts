@@ -208,7 +208,7 @@ serve(async (req) => {
 
     let accountsQuery = supabase
       .from("accounts")
-      .select("fb_ad_account_id")
+      .select("account_name, fb_ad_account_id")
       .not("fb_ad_account_id", "is", null);
 
     // Signed-in admins get every account. A client report page instead sends its
@@ -223,9 +223,8 @@ serve(async (req) => {
 
     if (error) throw new Error(`Failed to load accounts: ${error.message}`);
 
-    const adAccountIds = (accounts ?? [])
-      .map((a) => a.fb_ad_account_id as string)
-      .filter(Boolean);
+    // No .filter here: indexes must line up with `accounts` for the name lookup.
+    const adAccountIds = (accounts ?? []).map((a) => a.fb_ad_account_id as string);
 
     if (adAccountIds.length === 0) {
       return new Response(JSON.stringify([]), {
@@ -239,9 +238,15 @@ serve(async (req) => {
       adAccountIds.map((id) => fetchAccountInsights(id, token))
     );
 
-    const rows = settled
-      .filter((s): s is PromiseFulfilledResult<unknown[]> => s.status === "fulfilled")
-      .flatMap((s) => s.value);
+    // Label rows with the CRM account name, not Meta's. The dashboard groups by
+    // name, so a Meta account named differently ("True H20" vs "True H2O") would
+    // otherwise split one client into two cards.
+    const crmNames = (accounts ?? []).map((a) => a.account_name as string);
+    const rows = settled.flatMap((s, i) =>
+      s.status === "fulfilled"
+        ? s.value.map((r) => ({ ...r, "Account: Account name": crmNames[i] }))
+        : []
+    );
     const failures = settled
       .filter((s): s is PromiseRejectedResult => s.status === "rejected")
       .map((s) => s.reason);

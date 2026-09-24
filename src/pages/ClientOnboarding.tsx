@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { externalHref } from "@/lib/urls";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -327,7 +328,7 @@ export default function ClientOnboarding() {
               {client.website_url && (
                 <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4">
                   <span className="text-xs text-muted-foreground w-36 shrink-0 pt-0.5">Website</span>
-                  <a href={client.website_url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary flex items-center gap-1 hover:underline">
+                  <a href={externalHref(client.website_url)} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary flex items-center gap-1 hover:underline">
                     <Globe className="h-3.5 w-3.5" />
                     {client.website_url}
                     <ExternalLink className="h-3 w-3" />
@@ -407,7 +408,7 @@ export default function ClientOnboarding() {
               {client.facebook_url && (
                 <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4">
                   <span className="text-xs text-muted-foreground w-36 shrink-0 pt-0.5">Facebook URL</span>
-                  <a href={client.facebook_url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary flex items-center gap-1 hover:underline">
+                  <a href={externalHref(client.facebook_url)} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary flex items-center gap-1 hover:underline">
                     {client.facebook_url}
                     <ExternalLink className="h-3 w-3" />
                   </a>
