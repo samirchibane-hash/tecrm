@@ -874,6 +874,8 @@ export type Database = {
           domain: string
           ghl_inbound_webhook_url: string | null
           id: string
+          meta_access_token: string | null
+          meta_dataset_id: string | null
           repo: string
           root_dir: string
         }
@@ -883,6 +885,8 @@ export type Database = {
           domain: string
           ghl_inbound_webhook_url?: string | null
           id?: string
+          meta_access_token?: string | null
+          meta_dataset_id?: string | null
           repo?: string
           root_dir: string
         }
@@ -892,6 +896,8 @@ export type Database = {
           domain?: string
           ghl_inbound_webhook_url?: string | null
           id?: string
+          meta_access_token?: string | null
+          meta_dataset_id?: string | null
           repo?: string
           root_dir?: string
         }
