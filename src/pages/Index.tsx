@@ -36,17 +36,6 @@ const STATUS_TEXT: Record<string, string> = {
   danger: "text-danger",
 };
 
-// Deltas: more leads / appts is good, a higher cost per result is bad.
-const deltaTone = (d: { up: boolean; flat: boolean }, upIsGood: boolean) =>
-  d.flat ? "text-muted-foreground" : d.up === upIsGood ? "text-success" : "text-danger";
-
-function pctDelta(curr: number, prev: number): { pct: string; up: boolean; flat: boolean } | null {
-  if (prev <= 0 || curr < 0) return null;
-  const pct = ((curr - prev) / prev) * 100;
-  if (Math.abs(pct) < 0.5) return { pct: "0%", up: false, flat: true };
-  return { pct: Math.abs(pct).toFixed(0) + "%", up: pct > 0, flat: false };
-}
-
 // ─── Component ───────────────────────────────────────────────────────────────
 const Index = () => {
   const navigate = useNavigate();
@@ -107,13 +96,11 @@ const Index = () => {
     return map;
   }, [portfolio]);
 
-  // GHL conversions — fetch a window covering current + previous period so deltas work.
+  // GHL conversions for the selected period.
   // Date range is in the query key so this refetches when the picker changes.
   const ghlFetchFrom = useMemo(() => {
     if (!dateRange?.from) return startOfDay(subDays(new Date(), 180));
-    const periodMs =
-      ((dateRange.to ?? dateRange.from).getTime() - dateRange.from.getTime()) + 86400000;
-    return new Date(dateRange.from.getTime() - periodMs);
+    return startOfDay(dateRange.from);
   }, [dateRange]);
 
   const { data: allGhlConversions = [] } = useQuery({
@@ -138,34 +125,6 @@ const Index = () => {
       return rowDate >= from && rowDate <= to;
     });
   }, [data, dateRange]);
-
-  const prevDateRange = useMemo(() => {
-    if (!dateRange?.from || !dateRange?.to) return undefined;
-    const periodMs = dateRange.to.getTime() - dateRange.from.getTime() + 86400000;
-    return {
-      from: new Date(dateRange.from.getTime() - periodMs),
-      to: new Date(dateRange.from.getTime() - 86400000),
-    };
-  }, [dateRange]);
-
-  const prevGroupMap = useMemo(() => {
-    if (!data || !prevDateRange?.from) return {} as Record<string, AdRow[]>;
-    const from = startOfDay(prevDateRange.from);
-    const to = startOfDay(prevDateRange.to!);
-    const map: Record<string, AdRow[]> = {};
-    data
-      .filter((row) => {
-        const [y, m, d] = row["Report: Date"].split("-").map(Number);
-        const rowDate = new Date(y, m - 1, d);
-        return rowDate >= from && rowDate <= to;
-      })
-      .forEach((row) => {
-        const name = row["Account: Account name"];
-        if (!map[name]) map[name] = [];
-        map[name].push(row);
-      });
-    return map;
-  }, [data, prevDateRange]);
 
   const accountGroups = useMemo(() => {
     const map: Record<string, AdRow[]> = {};
@@ -212,12 +171,8 @@ const Index = () => {
         });
 
       const ghl = filterGhl(dateRange?.from, dateRange?.to);
-      const prevGhl = prevDateRange?.from
-        ? filterGhl(prevDateRange.from, prevDateRange.to)
-        : [];
 
       const totalSpend = rows.reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
-      const prevSpend = (prevGroupMap[name] ?? []).reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
 
       const ghlLeads = ghl.filter((c) =>
         c.type?.toLowerCase() === "lead" || c.type?.toLowerCase() === "water test"
@@ -227,27 +182,19 @@ const Index = () => {
       ).length;
       const ghlCostPerLead = ghlLeads > 0 ? totalSpend / ghlLeads : 0;
       const ghlCostPerAppt = ghlAppointments > 0 ? totalSpend / ghlAppointments : 0;
-      const prevGhlLeads = prevGhl.filter((c) =>
-        c.type?.toLowerCase() === "lead" || c.type?.toLowerCase() === "water test"
-      ).length;
-      const prevGhlAppointments = prevGhl.filter((c) =>
-        c.type?.toLowerCase() === "appointment" || c.type?.toLowerCase() === "water test"
-      ).length;
-      const prevGhlCostPerLead = prevGhlLeads > 0 ? prevSpend / prevGhlLeads : 0;
-      const prevGhlCostPerAppt = prevGhlAppointments > 0 ? prevSpend / prevGhlAppointments : 0;
 
       return {
         name,
-        totalSpend, prevSpend,
-        ghlLeads, prevGhlLeads,
-        ghlCostPerLead, prevGhlCostPerLead,
-        ghlAppointments, prevGhlAppointments,
-        ghlCostPerAppt, prevGhlCostPerAppt,
+        totalSpend,
+        ghlLeads,
+        ghlCostPerLead,
+        ghlAppointments,
+        ghlCostPerAppt,
         targetCpl: targetsByName[name]?.cpl ?? null,
         targetCpa: targetsByName[name]?.cpa ?? null,
       };
     });
-  }, [accountGroups, accountIdMap, targetsByName, allGhlConversions, dateRange, prevDateRange, prevGroupMap]);
+  }, [accountGroups, accountIdMap, targetsByName, allGhlConversions, dateRange]);
 
   const gapNames = tableRows.filter((r) => metaGaps.has(r.name)).map((r) => r.name);
 
@@ -348,14 +295,7 @@ const Index = () => {
         {tableRows.length > 0 && (
           <div className="rounded-xl border border-border/60 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 bg-muted/40 border-b border-border/60">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Account Performance</h2>
-                {prevDateRange && (
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    vs {format(prevDateRange.from, "MMM d")} – {format(prevDateRange.to, "MMM d, yyyy")}
-                  </p>
-                )}
-              </div>
+              <h2 className="text-sm font-semibold text-foreground">Account Performance</h2>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[680px]">
@@ -392,11 +332,6 @@ const Index = () => {
                   {tableRows.map((row, i) => {
                     const cplStatus = getCostStatus(row.ghlCostPerLead, row.targetCpl);
                     const cpaStatus = getCostStatus(row.ghlCostPerAppt, row.targetCpa);
-                    const spendDelta = pctDelta(row.totalSpend, row.prevSpend);
-                    const leadsDelta = pctDelta(row.ghlLeads, row.prevGhlLeads);
-                    const apptsDelta = pctDelta(row.ghlAppointments, row.prevGhlAppointments);
-                    const cplDelta = pctDelta(row.ghlCostPerLead, row.prevGhlCostPerLead);
-                    const cpaDelta = pctDelta(row.ghlCostPerAppt, row.prevGhlCostPerAppt);
                     const isLast = i === tableRows.length - 1;
                     return (
                       <tr
@@ -420,23 +355,13 @@ const Index = () => {
                               {formatUsd(row.totalSpend)}
                             </span>
                           )}
-                          {!metaGaps.has(row.name) && spendDelta && (
-                            <span className={`ml-1.5 text-[11px] ${spendDelta.flat ? "text-muted-foreground" : "text-muted-foreground"}`}>
-                              {spendDelta.flat ? "→" : spendDelta.up ? "↑" : "↓"}{spendDelta.pct}
-                            </span>
-                          )}
                         </td>
 
                         {/* Leads */}
                         <td className="py-3.5 px-4 text-right tabular-nums">
-                          {(row.ghlLeads > 0 || row.prevGhlLeads > 0) ? (
+                          {row.ghlLeads > 0 ? (
                             <>
                               <span className="font-medium text-foreground">{row.ghlLeads}</span>
-                              {leadsDelta && (
-                                <span className={`ml-1.5 text-[11px] ${deltaTone(leadsDelta, true)}`}>
-                                  {leadsDelta.flat ? "→" : leadsDelta.up ? "↑" : "↓"}{leadsDelta.pct}
-                                </span>
-                              )}
                             </>
                           ) : (
                             <span className="text-muted-foreground">–</span>
@@ -450,11 +375,6 @@ const Index = () => {
                               <span className={`font-semibold ${cplStatus ? STATUS_TEXT[cplStatus] : "text-foreground"}`}>
                                 ${row.ghlCostPerLead.toFixed(0)}
                               </span>
-                              {cplDelta && (
-                                <span className={`ml-1.5 text-[11px] ${deltaTone(cplDelta, false)}`}>
-                                  {cplDelta.flat ? "→" : cplDelta.up ? "↑" : "↓"}{cplDelta.pct}
-                                </span>
-                              )}
                             </>
                           ) : (
                             <span className="text-muted-foreground">–</span>
@@ -463,14 +383,9 @@ const Index = () => {
 
                         {/* Appts */}
                         <td className="py-3.5 px-4 text-right tabular-nums">
-                          {(row.ghlAppointments > 0 || row.prevGhlAppointments > 0) ? (
+                          {row.ghlAppointments > 0 ? (
                             <>
                               <span className="font-medium text-foreground">{row.ghlAppointments}</span>
-                              {apptsDelta && (
-                                <span className={`ml-1.5 text-[11px] ${deltaTone(apptsDelta, true)}`}>
-                                  {apptsDelta.flat ? "→" : apptsDelta.up ? "↑" : "↓"}{apptsDelta.pct}
-                                </span>
-                              )}
                             </>
                           ) : (
                             <span className="text-muted-foreground">–</span>
@@ -484,11 +399,6 @@ const Index = () => {
                               <span className={`font-semibold ${cpaStatus ? STATUS_TEXT[cpaStatus] : "text-foreground"}`}>
                                 ${row.ghlCostPerAppt.toFixed(0)}
                               </span>
-                              {cpaDelta && (
-                                <span className={`ml-1.5 text-[11px] ${deltaTone(cpaDelta, false)}`}>
-                                  {cpaDelta.flat ? "→" : cpaDelta.up ? "↑" : "↓"}{cpaDelta.pct}
-                                </span>
-                              )}
                             </>
                           ) : (
                             <span className="text-muted-foreground">–</span>
