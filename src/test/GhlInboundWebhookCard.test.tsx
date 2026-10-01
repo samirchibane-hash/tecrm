@@ -24,7 +24,14 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 const DORANGE = "https://services.leadconnectorhq.com/hooks/GJvA4example/webhook-trigger/abc123";
 
-function mockSites(rows: { id: string; root_dir: string; domain: string; ghl_inbound_webhook_url: string | null }[]) {
+function mockSites(rows: {
+  id: string;
+  root_dir: string;
+  domain: string;
+  ghl_inbound_webhook_url: string | null;
+  meta_dataset_id?: string | null;
+  meta_access_token?: string | null;
+}[]) {
   const order = vi.fn().mockResolvedValue({ data: rows, error: null });
   const eq = vi.fn().mockReturnValue({ order });
   select.mockReturnValue({ eq });
@@ -66,7 +73,9 @@ describe("GhlInboundWebhookCard", () => {
     const input = await screen.findByLabelText("Inbound webhook URL");
     expect(input).toHaveValue(DORANGE);
     expect(screen.getByText(/test\.purifywithdorange\.com/)).toBeInTheDocument();
-    expect(select).toHaveBeenCalledWith("id, root_dir, domain, ghl_inbound_webhook_url");
+    expect(select).toHaveBeenCalledWith(
+      "id, root_dir, domain, ghl_inbound_webhook_url, meta_dataset_id, meta_access_token",
+    );
 
     const next = "https://services.leadconnectorhq.com/hooks/replaced";
     fireEvent.change(input, { target: { value: `  ${next}  ` } });
@@ -120,5 +129,111 @@ describe("GhlInboundWebhookCard", () => {
     renderCard();
     expect(await screen.findByText(/nowhere to be stored/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save webhook URL" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save Meta Dataset ID" })).not.toBeInTheDocument();
+  });
+
+  it("loads and saves the Meta dataset id on the same funnel site row", async () => {
+    mockSites([{
+      id: "site-1",
+      root_dir: "dist/dorange",
+      domain: "test.purifywithdorange.com",
+      ghl_inbound_webhook_url: DORANGE,
+      meta_dataset_id: "111222333",
+      meta_access_token: "EAAB-secret",
+    }]);
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    update.mockReturnValue({ eq });
+
+    renderCard();
+
+    const dataset = await screen.findByLabelText("Meta Dataset ID");
+    expect(dataset).toHaveValue("111222333");
+    expect(dataset).toHaveAttribute("type", "text");
+
+    fireEvent.change(dataset, { target: { value: "  999888777  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Meta Dataset ID" }));
+
+    await waitFor(() => expect(update).toHaveBeenCalledWith({ meta_dataset_id: "999888777" }));
+    expect(eq).toHaveBeenCalledWith("id", "site-1");
+    expect(update).not.toHaveBeenCalledWith(expect.objectContaining({ meta_access_token: expect.anything() }));
+    expect(toast.success).toHaveBeenCalledWith("Meta Dataset ID saved");
+  });
+
+  it("masks the Meta access token, reveals it, and saves a replacement", async () => {
+    mockSites([{
+      id: "site-1",
+      root_dir: "dist/dorange",
+      domain: "test.purifywithdorange.com",
+      ghl_inbound_webhook_url: null,
+      meta_dataset_id: null,
+      meta_access_token: "EAAB-secret",
+    }]);
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    update.mockReturnValue({ eq });
+
+    renderCard();
+
+    const token = await screen.findByLabelText("Meta Access Token");
+    expect(token).toHaveAttribute("type", "password");
+    expect(token).toHaveValue("EAAB-secret");
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Meta Access Token" }));
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("EAAB-secret");
+
+    fireEvent.click(screen.getByRole("button", { name: "Show Meta Access Token" }));
+    expect(token).toHaveAttribute("type", "text");
+    fireEvent.click(screen.getByRole("button", { name: "Hide Meta Access Token" }));
+    expect(token).toHaveAttribute("type", "password");
+
+    fireEvent.change(token, { target: { value: "  EAAB-replaced  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Meta Access Token" }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith({ meta_access_token: "EAAB-replaced" }));
+    expect(eq).toHaveBeenCalledWith("id", "site-1");
+    expect(toast.success).toHaveBeenCalledWith("Meta access token saved");
+  });
+
+  it("clears the Meta access token when the field is emptied", async () => {
+    mockSites([{
+      id: "site-1",
+      root_dir: "dist/dorange",
+      domain: "test.purifywithdorange.com",
+      ghl_inbound_webhook_url: null,
+      meta_dataset_id: "111",
+      meta_access_token: "EAAB-secret",
+    }]);
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    update.mockReturnValue({ eq });
+
+    renderCard();
+    const token = await screen.findByLabelText("Meta Access Token");
+    fireEvent.change(token, { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Meta Access Token" }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith({ meta_access_token: null }));
+  });
+
+  it("labels Meta fields by domain when the account has more than one funnel site", async () => {
+    mockSites([
+      {
+        id: "site-a",
+        root_dir: "dist/a",
+        domain: "a.example.com",
+        ghl_inbound_webhook_url: null,
+        meta_dataset_id: "111",
+        meta_access_token: null,
+      },
+      {
+        id: "site-b",
+        root_dir: "dist/b",
+        domain: "b.example.com",
+        ghl_inbound_webhook_url: null,
+        meta_dataset_id: null,
+        meta_access_token: "tok-b",
+      },
+    ]);
+
+    renderCard();
+    expect(await screen.findByLabelText("Meta Dataset ID · a.example.com")).toHaveValue("111");
+    expect(screen.getByLabelText("Meta Access Token · b.example.com")).toHaveValue("tok-b");
+    expect(screen.getByLabelText("Meta Access Token · b.example.com")).toHaveAttribute("type", "password");
   });
 });
