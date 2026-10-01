@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Copy, ExternalLink, Link2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAccountLinks } from "./useAccountLinks";
+import { useFunnelSites } from "./useFunnelSites";
 
 type AccountLink = Tables<"account_links">;
 
@@ -34,16 +35,7 @@ export function FunnelPagesCard({ accountId, accountName }: { accountId: string;
   const [url, setUrl] = useState("");
 
   const { data: links = [], isLoading, isError } = useAccountLinks(accountName);
-
-  const { data: sites } = useQuery({
-    queryKey: ["funnel-sites", accountId],
-    enabled: !!accountId,
-    queryFn: async () => {
-      const { data, error } = await supabase.from("funnel_sites").select("root_dir, domain").eq("account_id", accountId);
-      if (error) throw error;
-      return data;
-    },
-  });
+  const { data: sites } = useFunnelSites(accountId);
 
   const addLink = useMutation({
     mutationFn: async () => {

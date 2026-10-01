@@ -872,6 +872,7 @@ export type Database = {
           account_id: string
           created_at: string
           domain: string
+          ghl_inbound_webhook_url: string | null
           id: string
           repo: string
           root_dir: string
@@ -880,6 +881,7 @@ export type Database = {
           account_id: string
           created_at?: string
           domain: string
+          ghl_inbound_webhook_url?: string | null
           id?: string
           repo?: string
           root_dir: string
@@ -888,6 +890,7 @@ export type Database = {
           account_id?: string
           created_at?: string
           domain?: string
+          ghl_inbound_webhook_url?: string | null
           id?: string
           repo?: string
           root_dir?: string

@@ -3,6 +3,7 @@ import { formatDistanceToNowStrict } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
 import { FunnelPagesCard } from "@/components/funnel-pages/FunnelPagesCard";
+import { GhlInboundWebhookCard } from "@/components/funnel-pages/GhlInboundWebhookCard";
 import { useAccountLinks } from "@/components/funnel-pages/useAccountLinks";
 import { useCreativePerformance } from "@/components/creative-performance/useCreativePerformance";
 import { adNameKey, matchGhlByAdName } from "@/components/creative-performance/ghl";
@@ -96,6 +97,7 @@ export function FunnelTab({ accountId, accountName, preset }: { accountId: strin
         )}
       </section>
 
+      <GhlInboundWebhookCard accountId={accountId} />
       <FunnelPagesCard accountId={accountId} accountName={accountName} />
     </div>
   );
