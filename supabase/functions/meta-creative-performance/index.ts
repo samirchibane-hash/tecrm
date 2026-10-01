@@ -183,8 +183,8 @@ function extractCopy(creative: Graph | undefined) {
 
 const AD_FIELDS = [
   "id,name,effective_status,created_time",
-  "campaign{name}",
-  "adset{id,name,optimization_goal}",
+  "campaign{id,name,daily_budget,lifetime_budget}",
+  "adset{id,name,optimization_goal,daily_budget,lifetime_budget}",
   "creative.thumbnail_width(320).thumbnail_height(320){id,object_type,video_id,thumbnail_url,title,body,call_to_action_type,object_story_spec,asset_feed_spec}",
 ].join(",");
 
@@ -194,6 +194,28 @@ const INSIGHT_FIELDS = [
   "actions,conversions,results,cost_per_result,video_thruplay_watched_actions",
   "date_start,date_stop",
 ].join(",");
+
+/**
+ * What the account is set to spend per day right now, from its live ads. A
+ * campaign budget (CBO) is counted once for the campaign; otherwise each ad
+ * set's own daily budget counts once. Budgets set as a lifetime total have no
+ * daily figure, so they're flagged rather than guessed at. Meta sends budgets
+ * in the currency's minor unit (cents for USD, the only currency in use).
+ */
+function liveDailyBudget(liveAds: Graph[]) {
+  const campaigns = new Map<string, number>();
+  const adsets = new Map<string, number>();
+  let lifetime = false;
+  for (const ad of liveAds) {
+    const campaignDaily = num(ad.campaign?.daily_budget);
+    const adsetDaily = num(ad.adset?.daily_budget);
+    if (campaignDaily && ad.campaign?.id) campaigns.set(ad.campaign.id, campaignDaily);
+    else if (adsetDaily && ad.adset?.id) adsets.set(ad.adset.id, adsetDaily);
+    else if (num(ad.campaign?.lifetime_budget) || num(ad.adset?.lifetime_budget)) lifetime = true;
+  }
+  const cents = [...campaigns.values(), ...adsets.values()].reduce((s, v) => s + v, 0);
+  return { daily: cents / 100, hasLifetimeBudget: lifetime };
+}
 
 const DELIVERED = JSON.stringify([{ field: "impressions", operator: "GREATER_THAN", value: 0 }]);
 
@@ -349,6 +371,7 @@ async function loadAccount(actId: string, range: Range, detail: boolean, token: 
     period,
     accountSpend: num(accountInsights?.spend) ?? 0,
     appointmentsTracked,
+    liveBudget: liveDailyBudget(liveAds),
     ads,
     assets: detail
       ? { headlines: assetRows(titleRows, "title_asset", appointmentsTracked), bodies: assetRows(bodyRows, "body_asset", appointmentsTracked) }
@@ -431,7 +454,7 @@ serve(async (req) => {
     // Not an error: the account simply isn't linked to Meta yet.
     const actId = account.fb_ad_account_id as string | null;
     if (!actId) {
-      return json({ adAccount: null, period: null, accountSpend: null, appointmentsTracked: false, ads: [], assets: null, daily: null, fetchedAt: new Date().toISOString() });
+      return json({ adAccount: null, period: null, accountSpend: null, appointmentsTracked: false, liveBudget: null, ads: [], assets: null, daily: null, fetchedAt: new Date().toISOString() });
     }
 
     const result = await loadAccount(actId, range, body.detail !== false, token);

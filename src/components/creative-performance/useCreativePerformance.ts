@@ -93,6 +93,12 @@ export interface AccountCreatives {
   accountSpend: number | null;
   /** Meta saw a Schedule event in the last 90 days; otherwise appointments aren't reported. */
   appointmentsTracked: boolean;
+  /**
+   * Daily budget across live campaigns (CBO) and ad sets, in dollars. Lifetime
+   * budgets have no daily figure and are flagged instead of counted.
+   * Absent from responses before this field existed.
+   */
+  liveBudget?: { daily: number; hasLifetimeBudget: boolean } | null;
   ads: CreativeAd[];
   /** Null when not requested; each list is null when Meta refused that breakdown. */
   assets: { headlines: AssetRow[] | null; bodies: AssetRow[] | null } | null;

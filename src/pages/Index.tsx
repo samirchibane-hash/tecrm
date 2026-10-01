@@ -95,6 +95,15 @@ const Index = () => {
     });
     return map;
   }, [portfolio]);
+  // Daily budget of what's live now, from the same response. Null = Meta
+  // couldn't read the account (or the function predates the field).
+  const dailyBudgetByName = useMemo(() => {
+    const map = new Map<string, { daily: number; hasLifetimeBudget: boolean } | null>();
+    portfolio?.accounts.forEach((a) => {
+      map.set(a.accountName, a.error || !a.liveBudget ? null : a.liveBudget);
+    });
+    return map;
+  }, [portfolio]);
 
   // GHL conversions for the selected period.
   // Date range is in the query key so this refetches when the picker changes.
@@ -298,7 +307,7 @@ const Index = () => {
               <h2 className="text-sm font-semibold text-foreground">Account Performance</h2>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[680px]">
+              <table className="w-full text-sm min-w-[780px]">
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/20">
                     <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
@@ -324,6 +333,12 @@ const Index = () => {
                       title="Ads delivering in Meta right now (not tied to the selected period)"
                     >
                       Active Ads
+                    </th>
+                    <th
+                      className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                      title="Daily budget of live campaigns and ad sets in Meta right now (not tied to the selected period)"
+                    >
+                      Daily Budget
                     </th>
                     <th className="py-3 px-4 w-8" />
                   </tr>
@@ -425,6 +440,42 @@ const Index = () => {
                               —
                             </span>
                           )}
+                        </td>
+
+                        {/* Daily Budget */}
+                        <td className="py-3.5 px-4 text-right tabular-nums">
+                          {(() => {
+                            if (activeAdsLoading) return <Skeleton className="h-4 w-10 ml-auto" />;
+                            const budget = dailyBudgetByName.get(row.name);
+                            if (!budget) {
+                              return (
+                                <span
+                                  className="text-muted-foreground"
+                                  title={
+                                    !portfolio
+                                      ? "Meta ad data unavailable"
+                                      : dailyBudgetByName.has(row.name)
+                                        ? "Meta can't read this ad account"
+                                        : "No Meta ad account linked"
+                                  }
+                                >
+                                  —
+                                </span>
+                              );
+                            }
+                            if (budget.daily === 0 && !budget.hasLifetimeBudget) {
+                              return <span className="text-muted-foreground" title="Nothing live in Meta">–</span>;
+                            }
+                            return (
+                              <span
+                                className="font-medium text-foreground"
+                                title={budget.hasLifetimeBudget ? "Some live ad sets use a lifetime budget, which isn't included" : undefined}
+                              >
+                                {budget.daily > 0 ? formatUsd(budget.daily) : "Lifetime"}
+                                {budget.hasLifetimeBudget && budget.daily > 0 && <span className="text-muted-foreground">*</span>}
+                              </span>
+                            );
+                          })()}
                         </td>
 
                         {/* Arrow */}
