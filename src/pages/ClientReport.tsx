@@ -9,6 +9,16 @@ import { KpiStatCard } from "@/components/dashboard/KpiStatCard";
 import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
 import { useSettings } from "@/hooks/useSettings";
 import { resolveChartKpi, untrackedKpis } from "@/lib/kpis";
+import {
+  adRowsInRange,
+  buildKpiSeries,
+  comparisonLabel,
+  computeAccountKpis,
+  ghlRowsInRange,
+  kpiChange,
+  previousPeriod,
+  priorCoverage,
+} from "@/lib/accountKpis";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -344,21 +354,14 @@ function ClientReportView({ accountId, decodedName }: { accountId: string; decod
     isFetching: adFetching,
   } = useCouplerData();
 
-  const filteredAdData = useMemo(() => {
-    if (!allData) return [];
-    const rows = allData.filter((r) => r["Account: Account name"] === decodedName);
-    if (!dateRange?.from) return rows;
-    const from = startOfDay(dateRange.from);
-    const to = dateRange.to ? startOfDay(dateRange.to) : from;
-    return rows.filter((r) => {
-      const [y, m, d] = r["Report: Date"].split("-").map(Number);
-      const rowDate = new Date(y, m - 1, d);
-      return rowDate >= from && rowDate <= to;
-    });
-  }, [allData, decodedName, dateRange]);
+  const accountAdRows = useMemo(
+    () => (allData ?? []).filter((r) => r["Account: Account name"] === decodedName),
+    [allData, decodedName],
+  );
+  const filteredAdData = useMemo(() => adRowsInRange(accountAdRows, dateRange), [accountAdRows, dateRange]);
 
   // ── GHL conversions ───────────────────────────────────────────────────────
-  const { data: ghlRaw = [] } = useQuery({
+  const { data: ghlRaw = [], isLoading: ghlLoading } = useQuery({
     queryKey: ["ghl-conversions", accountId],
     queryFn: async () => {
       if (!accountId) return [];
@@ -372,16 +375,7 @@ function ClientReportView({ accountId, decodedName }: { accountId: string; decod
     enabled: !!accountId,
   });
 
-  const ghlConversions = useMemo(() => {
-    if (!dateRange?.from) return ghlRaw;
-    return ghlRaw.filter((c) => {
-      const [y, m, d] = c.created_on.split("-").map(Number);
-      const dateVal = new Date(y, m - 1, d);
-      if (dateRange.from && dateVal < dateRange.from) return false;
-      if (dateRange.to && dateVal > new Date(dateRange.to.getTime() + 86400000 - 1)) return false;
-      return true;
-    });
-  }, [ghlRaw, dateRange]);
+  const ghlConversions = useMemo(() => ghlRowsInRange(ghlRaw, dateRange), [ghlRaw, dateRange]);
 
   // ── Campaign updates ──────────────────────────────────────────────────────
   const { data: updates = [] } = useQuery({
@@ -573,115 +567,20 @@ function ClientReportView({ accountId, decodedName }: { accountId: string; decod
   const activeChart = resolveChartKpi(selectedChart, enabledKpis.map((k) => k.key), isChartable);
   const selectedKpi = ALL_KPIS.find((k) => k.key === activeChart);
 
-  // ── KPI calculations (full set matching AccountCard) ──────────────────────
-  const kpis = useMemo((): Record<KpiKey, number> => {
-    const totalSpend = filteredAdData.reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
-    const totalClicks = filteredAdData.reduce((s, r) => s + (r["Performance: Clicks"] ?? 0), 0);
-    const totalImpressions = filteredAdData.reduce((s, r) => s + (r["Performance: Impressions"] ?? 0), 0);
-    const totalReach = filteredAdData.reduce((s, r) => s + (r["Performance: Reach"] ?? 0), 0);
-    const avgCTR = filteredAdData.length > 0 ? filteredAdData.reduce((s, r) => s + (r["Clicks: CTR"] ?? 0), 0) / filteredAdData.length : 0;
-    const avgCPC = filteredAdData.length > 0 ? filteredAdData.reduce((s, r) => s + (r["Cost: CPC"] ?? 0), 0) / filteredAdData.length : 0;
-    const avgCPM = filteredAdData.length > 0 ? filteredAdData.reduce((s, r) => s + (r["Cost: CPM"] ?? 0), 0) / filteredAdData.length : 0;
+  // ── KPIs: one definition, shared with the account page (lib/accountKpis) ──
+  const kpis = useMemo(() => computeAccountKpis(filteredAdData, ghlConversions), [filteredAdData, ghlConversions]);
+  const chartSeriesData = useMemo(() => buildKpiSeries(filteredAdData, ghlConversions), [filteredAdData, ghlConversions]);
 
-    const webApptTotal = filteredAdData.reduce((s, r) => s + (r["Conversions: Website Appointments Scheduled - Total"] ?? 0), 0);
-    const webApptCostRaw = filteredAdData.reduce((s, r) => s + (r["Conversions: Website Appointments Scheduled - Cost"] ?? 0), 0);
-    const apptTotal = filteredAdData.reduce((s, r) => s + (r["Conversions: Appointments Scheduled - Total"] ?? 0), 0);
-    const apptCostRaw = filteredAdData.reduce((s, r) => s + (r["Conversions: Appointments Scheduled - Cost"] ?? 0), 0);
-
-    const ghlLeads = ghlConversions.filter((c) => c.type?.toLowerCase() === "lead" || c.type?.toLowerCase() === "water test").length;
-    const ghlAppointments = ghlConversions.filter((c) => c.type?.toLowerCase() === "appointment" || c.type?.toLowerCase() === "water test").length;
-
-    const soldCount = ghlConversions.filter((c) => c.appointment_status === "sold").length;
-    const totalRevenue = ghlConversions
-      .filter((c) => c.appointment_status === "sold")
-      .reduce((sum, c) => sum + (c.deal_value ?? 0), 0);
-
-    return {
-      totalSpend, totalClicks, totalImpressions, totalReach, avgCTR, avgCPC, avgCPM,
-      webApptTotal, webApptCost: webApptTotal > 0 ? webApptCostRaw / webApptTotal : 0,
-      apptTotal, apptCost: apptTotal > 0 ? apptCostRaw / apptTotal : 0,
-      ghlLeads, ghlAppointments,
-      ghlCostPerLead: ghlLeads > 0 ? totalSpend / ghlLeads : 0,
-      ghlCostPerAppt: ghlAppointments > 0 ? totalSpend / ghlAppointments : 0,
-      soldCount, totalRevenue,
-      adRoi: totalSpend > 0 ? totalRevenue / totalSpend : 0,
-    };
-  }, [filteredAdData, ghlConversions]);
-
-  // ── Chart series data (one series per chartable KPI) ─────────────────────
-  const chartSeriesData = useMemo(() => {
-    // Aggregate ad data by date
-    const adByDate: Record<string, {
-      spend: number; clicks: number; impressions: number; reach: number;
-      ctr_sum: number; cpc_sum: number; cpm_sum: number; count: number;
-      webApptTotal: number; apptTotal: number;
-    }> = {};
-    filteredAdData.forEach((r) => {
-      const date = r["Report: Date"];
-      if (!date) return;
-      if (!adByDate[date]) adByDate[date] = { spend: 0, clicks: 0, impressions: 0, reach: 0, ctr_sum: 0, cpc_sum: 0, cpm_sum: 0, count: 0, webApptTotal: 0, apptTotal: 0 };
-      const d = adByDate[date];
-      d.spend += r["Cost: Amount spend"] ?? 0;
-      d.clicks += r["Performance: Clicks"] ?? 0;
-      d.impressions += r["Performance: Impressions"] ?? 0;
-      d.reach += r["Performance: Reach"] ?? 0;
-      d.ctr_sum += r["Clicks: CTR"] ?? 0;
-      d.cpc_sum += r["Cost: CPC"] ?? 0;
-      d.cpm_sum += r["Cost: CPM"] ?? 0;
-      d.count += 1;
-      d.webApptTotal += r["Conversions: Website Appointments Scheduled - Total"] ?? 0;
-      d.apptTotal += r["Conversions: Appointments Scheduled - Total"] ?? 0;
-    });
-
-    // Aggregate GHL data by date
-    const ghlByDate: Record<string, { leads: number; appts: number }> = {};
-    ghlConversions.forEach((c) => {
-      const date = c.created_on;
-      if (!date) return;
-      if (!ghlByDate[date]) ghlByDate[date] = { leads: 0, appts: 0 };
-      if (c.type?.toLowerCase() === "lead" || c.type?.toLowerCase() === "water test") ghlByDate[date].leads += 1;
-      if (c.type?.toLowerCase() === "appointment" || c.type?.toLowerCase() === "water test") ghlByDate[date].appts += 1;
-    });
-
-    const adDates = Object.keys(adByDate).sort();
-    const ghlDates = Object.keys(ghlByDate).sort();
-
-    const adSeries = (key: KpiKey) => adDates.map((date) => {
-      const d = adByDate[date];
-      let value = 0;
-      switch (key) {
-        case "totalSpend":      value = d.spend; break;
-        case "totalClicks":     value = d.clicks; break;
-        case "totalImpressions":value = d.impressions; break;
-        case "totalReach":      value = d.reach; break;
-        case "avgCTR":          value = d.count > 0 ? d.ctr_sum / d.count : 0; break;
-        case "avgCPC":          value = d.count > 0 ? d.cpc_sum / d.count : 0; break;
-        case "avgCPM":          value = d.count > 0 ? d.cpm_sum / d.count : 0; break;
-        case "webApptTotal":    value = d.webApptTotal; break;
-        case "apptTotal":       value = d.apptTotal; break;
-      }
-      return { date, value: +value.toFixed(3) };
-    });
-
-    return {
-      totalSpend: adSeries("totalSpend"), totalClicks: adSeries("totalClicks"),
-      totalImpressions: adSeries("totalImpressions"), totalReach: adSeries("totalReach"),
-      avgCTR: adSeries("avgCTR"), avgCPC: adSeries("avgCPC"), avgCPM: adSeries("avgCPM"),
-      webApptTotal: adSeries("webApptTotal"), apptTotal: adSeries("apptTotal"),
-      ghlLeads: ghlDates.map((date) => ({ date, value: ghlByDate[date].leads })),
-      ghlAppointments: ghlDates.map((date) => ({ date, value: ghlByDate[date].appts })),
-      ghlCostPerLead: [...new Set([...adDates, ...ghlDates])].sort().map((date) => {
-        const spend = adByDate[date]?.spend ?? 0;
-        const leads = ghlByDate[date]?.leads ?? 0;
-        return { date, value: leads > 0 ? +(spend / leads).toFixed(2) : 0 };
-      }),
-      ghlCostPerAppt: [...new Set([...adDates, ...ghlDates])].sort().map((date) => {
-        const spend = adByDate[date]?.spend ?? 0;
-        const appts = ghlByDate[date]?.appts ?? 0;
-        return { date, value: appts > 0 ? +(spend / appts).toFixed(2) : 0 };
-      }),
-    } as Partial<Record<KpiKey, { date: string; value: number }[]>>;
-  }, [filteredAdData, ghlConversions]);
+  // Change vs the same number of days just before. Withheld per source when that
+  // source doesn't hold those days, so a client never sees a jump "from 0" that
+  // is really "before we had data".
+  const prior = useMemo(() => previousPeriod(dateRange), [dateRange]);
+  const coverage = useMemo(() => priorCoverage(prior, ghlRaw), [prior, ghlRaw]);
+  const priorKpis = useMemo(
+    () => (prior ? computeAccountKpis(adRowsInRange(accountAdRows, prior), ghlRowsInRange(ghlRaw, prior)) : null),
+    [prior, accountAdRows, ghlRaw],
+  );
+  const compare = prior ? comparisonLabel(prior) : null;
 
   // ── Unified timeline ─────────────────────────────────────────────────────
   type TimelineItem =
@@ -980,6 +879,8 @@ function ClientReportView({ accountId, decodedName }: { accountId: string; decod
                   {enabledKpis.map(({ key, label, icon, format: fmt }) => {
                     const metaGap = metaDown && dependsOnMeta(key);
                     const unavailable = metaGap || untracked.has(key);
+                    const source = ALL_KPIS.find((k) => k.key === key)!.source;
+                    const change = priorKpis && coverage[source] ? kpiChange(key, kpis, priorKpis) : null;
                     return (
                       <KpiStatCard
                         key={key}
@@ -987,6 +888,10 @@ function ClientReportView({ accountId, decodedName }: { accountId: string; decod
                         value={fmt(kpis[key])}
                         icon={icon}
                         size="comfortable"
+                        loading={source !== "meta" && ghlLoading}
+                        change={change}
+                        changeLabel={compare?.short}
+                        changeTitle={compare?.dates}
                         unavailable={unavailable}
                         unavailableReason={metaGap ? "Meta Ads disconnected" : unavailable ? "Not tracked yet" : undefined}
                         isActive={activeChart === key}
