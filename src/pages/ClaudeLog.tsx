@@ -12,12 +12,28 @@ import { KpiStatCard } from "@/components/dashboard/KpiStatCard";
 import { SyncStatus } from "@/components/sync/SyncStatus";
 import { CommitRow } from "@/components/claude-log/CommitRow";
 import { groupByDay } from "@/components/claude-log/groupByDay";
-import { repoShortName, useClaudeLog, useGitHubTokenStatus } from "@/components/claude-log/useClaudeLog";
+import { repoShortName, useGitHubTokenStatus, useWorkStream } from "@/components/claude-log/useClaudeLog";
+import { filterWorkEvents } from "@/components/claude-log/workStream";
 import { useSettings } from "@/hooks/useSettings";
 import { formatCount } from "@/lib/format";
 
 const ALL = "all";
 const AGENCY = "agency"; // commits linked to no client
+
+function dayDigest(
+  day: { events: { source: string }[]; repos: string[] },
+  clientNames: (string | undefined)[],
+): string {
+  const names = clientNames.filter((name): name is string => !!name);
+  const commits = day.events.filter((event) => event.source === "github").length;
+  const ops = day.events.length - commits;
+  return [
+    commits ? `${commits} commit${commits === 1 ? "" : "s"}` : null,
+    ops ? `${ops} ops outcome${ops === 1 ? "" : "s"}` : null,
+    day.repos.length ? day.repos.join(", ") : null,
+    names.length ? names.join(", ") : null,
+  ].filter((bit): bit is string => !!bit).join(" · ");
+}
 
 export default function ClaudeLog() {
   const [params, setParams] = useSearchParams();
@@ -32,7 +48,7 @@ export default function ClaudeLog() {
     setParams(next, { replace: true });
   };
 
-  const { data: commits = [], isLoading, isError, error, refetch } = useClaudeLog();
+  const { data: events = [], isLoading, isError, error, refetch } = useWorkStream();
   const { data: token } = useGitHubTokenStatus();
   const { settings } = useSettings();
   const { data: accounts = [] } = useQuery({
@@ -48,34 +64,29 @@ export default function ClaudeLog() {
     .filter((a) => !settings.hidden_accounts.includes(a.account_name))
     .sort((a, b) => a.account_name.localeCompare(b.account_name));
   const inactiveWithWork = accounts.filter(
-    (a) => settings.hidden_accounts.includes(a.account_name) && commits.some((c) => c.links.some((l) => l.account_id === a.id)),
+    (a) => settings.hidden_accounts.includes(a.account_name) && events.some((e) => e.accountIds.includes(a.id)),
   );
-  const repos = [...new Set(commits.map((c) => c.repo))].sort((a, b) => repoShortName(a).localeCompare(repoShortName(b)));
-  const countFor = (accountId: string) => commits.filter((c) => c.links.some((l) => l.account_id === accountId)).length;
+  const repos = [...new Set(events.flatMap((e) => (e.repo ? [e.repo] : [])))].sort((a, b) => repoShortName(a).localeCompare(repoShortName(b)));
+  const countFor = (accountId: string) => events.filter((e) => e.accountIds.includes(accountId)).length;
 
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return commits.filter((c) => {
-      if (repo !== ALL && c.repo !== repo) return false;
-      if (client === AGENCY && c.links.length > 0) return false;
-      if (client !== ALL && client !== AGENCY && !c.links.some((l) => l.account_id === client)) return false;
-      if (needle && !`${c.subject}\n${c.body ?? ""}`.toLowerCase().includes(needle)) return false;
-      return true;
-    });
-  }, [commits, client, repo, q]);
+  const filtered = useMemo(
+    () => filterWorkEvents(events, { client, repo, query: q }),
+    [events, client, repo, q],
+  );
+  const github = filtered.filter((e) => e.source === "github");
 
   const days = useMemo(() => groupByDay(filtered), [filtered]);
-  const linked = filtered.filter((c) => c.links.length > 0).length;
-  const lines = filtered.reduce((s, c) => s + (c.additions ?? 0) + (c.deletions ?? 0), 0);
-  const hasLineStats = filtered.some((c) => c.additions != null);
-  const claudeShare = filtered.length ? Math.round((filtered.filter((c) => c.claude_coauthored).length / filtered.length) * 100) : 0;
+  const linked = github.filter((e) => e.accountIds.length > 0).length;
+  const lines = github.reduce((s, e) => s + (e.additions ?? 0) + (e.deletions ?? 0), 0);
+  const hasLineStats = github.some((e) => e.additions != null);
+  const claudeShare = github.length ? Math.round((github.filter((e) => e.claudeCoauthored).length / github.length) * 100) : 0;
   const filtersOn = client !== ALL || repo !== ALL || !!q;
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
       <PageHeader
         title="Claude Log"
-        description="Everything shipped across Treat Engine's GitHub repos since Sep 1, 2026, linked to the clients it touched."
+        description="Shipped work since Sep 1, 2026 — GitHub pushes and ops outcomes — each tagged with its source and client."
         actions={token?.configured ? <SyncStatus source="github" invalidate={[["claude-log"]]} /> : undefined}
       />
 
@@ -168,25 +179,25 @@ export default function ClaudeLog() {
       ) : (
         <>
           <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <KpiStatCard icon={GitCommitHorizontal} label="Commits" value={formatCount(filtered.length)} />
-            <KpiStatCard icon={FolderGit2} label="Repos" value={formatCount(new Set(filtered.map((c) => c.repo)).size)} />
+            <KpiStatCard icon={GitCommitHorizontal} label="Commits" value={formatCount(github.length)} />
+            <KpiStatCard icon={FolderGit2} label="Repos" value={formatCount(new Set(github.flatMap((e) => (e.repo ? [e.repo] : []))).size)} />
             <KpiStatCard
               icon={Users}
               label="Client-linked"
               value={formatCount(linked)}
-              detail={`${formatCount(filtered.length - linked)} agency-wide`}
+              detail={`${formatCount(github.length - linked)} agency-wide`}
             />
             <KpiStatCard
               icon={Sparkles}
               label="Claude co-authored"
-              value={filtered.length ? `${claudeShare}%` : "—"}
+              value={github.length ? `${claudeShare}%` : "—"}
               detail={hasLineStats ? `${formatCount(lines)} lines changed` : undefined}
             />
           </div>
 
           {days.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border px-6 py-12 text-center">
-              <p className="text-sm font-medium text-foreground">{filtersOn ? "No commits match these filters" : "No commits since Sep 1"}</p>
+              <p className="text-sm font-medium text-foreground">{filtersOn ? "No work matches these filters" : "No work since Sep 1"}</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {filtersOn
                   ? "Try another client or repo, or clear the search."
@@ -208,13 +219,12 @@ export default function ClaudeLog() {
                       <h2 id={`day-${day.key}`} className="text-sm font-semibold text-foreground">{day.label}</h2>
                       {/* The day's digest: how much, where, and for whom. */}
                       <p className="text-xs text-muted-foreground">
-                        {day.commits.length} commit{day.commits.length === 1 ? "" : "s"} · {day.repos.join(", ")}
-                        {clientNames.length > 0 && ` · ${clientNames.join(", ")}`}
+                        {dayDigest(day, clientNames)}
                       </p>
                     </div>
                     <ul className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border bg-card">
-                      {day.commits.map((c) => (
-                        <CommitRow key={`${c.repo}@${c.sha}`} commit={c} accountName={accountName} />
+                      {day.events.map((event) => (
+                        <CommitRow key={event.id} event={event} accountName={accountName} />
                       ))}
                     </ul>
                   </section>

@@ -399,6 +399,50 @@ export type Database = {
           },
         ]
       }
+      client_activity: {
+        Row: {
+          account_id: string
+          created_at: string
+          dedupe_key: string | null
+          detail: string | null
+          id: string
+          occurred_at: string
+          outcome: string
+          summary: string
+          writer: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          dedupe_key?: string | null
+          detail?: string | null
+          id?: string
+          occurred_at?: string
+          outcome: string
+          summary: string
+          writer: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          dedupe_key?: string | null
+          detail?: string | null
+          id?: string
+          occurred_at?: string
+          outcome?: string
+          summary?: string
+          writer?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_activity_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           account_id: string | null
@@ -1688,6 +1732,27 @@ export type Database = {
       }
     }
     Views: {
+      client_work_events: {
+        Row: {
+          account_ids: string[] | null
+          additions: number | null
+          claude_coauthored: boolean | null
+          deletions: number | null
+          detail: string | null
+          files: string[] | null
+          href: string | null
+          id: string | null
+          links: Json | null
+          occurred_at: string | null
+          outcome: string | null
+          repo: string | null
+          sha: string | null
+          source: string | null
+          title: string | null
+          writer: string | null
+        }
+        Relationships: []
+      }
       ghl_conversion_variant_daily: {
         Row: {
           booked: number | null
@@ -1724,6 +1789,18 @@ export type Database = {
       link_github_commits: { Args: never; Returns: number }
       link_stripe_customers: { Args: never; Returns: number }
       normalize_link_url: { Args: { u: string }; Returns: string }
+      record_ops_outcome: {
+        Args: {
+          p_account_id: string
+          p_dedupe_key?: string
+          p_detail?: string
+          p_occurred_at?: string
+          p_outcome: string
+          p_summary: string
+          p_writer: string
+        }
+        Returns: string
+      }
       record_funnel_page_copy: {
         Args: {
           p_account_link_id: string

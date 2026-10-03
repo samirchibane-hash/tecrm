@@ -135,7 +135,7 @@ const AccountDetail = () => {
 
           <TabsContent value="operations" className="space-y-6">
             <AccountTasksCard accountName={decodedName} tasks={tasks} onChange={() => refetchTasks()} />
-            <AccountWorkLog accountId={accountId} />
+            <AccountWorkLog accountId={accountId} accountName={decodedName} />
             <div className="grid gap-6 lg:grid-cols-2">
               <PointsOfContactCard accountId={accountId} />
               <DriveFolderCard accountId={accountId} accountName={decodedName} url={account?.gdrive_folder_url ?? null} />

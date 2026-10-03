@@ -1,33 +1,38 @@
 import { format } from "date-fns";
-import { repoShortName, type LogCommit } from "./useClaudeLog";
+import { repoShortName } from "./useClaudeLog";
+import type { WorkEvent } from "./workStream";
 
 export type LogDay = {
   key: string; // yyyy-MM-dd, local time
   label: string; // "Wed, Sep 10"
-  commits: LogCommit[];
-  repos: string[]; // short names, by commit count
+  events: WorkEvent[];
+  repos: string[]; // short names, by github-event count
   accountIds: string[];
 };
 
-/** Commits → one group per local calendar day, newest first, with a digest. */
-export function groupByDay(commits: LogCommit[]): LogDay[] {
+/** Work events → one group per local calendar day, newest first, with a digest. */
+export function groupByDay(events: WorkEvent[]): LogDay[] {
   const days = new Map<string, LogDay>();
-  const sorted = [...commits].sort((a, b) => b.committed_at.localeCompare(a.committed_at));
-  for (const c of sorted) {
-    const d = new Date(c.committed_at);
+  const sorted = [...events].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+  for (const event of sorted) {
+    const d = new Date(event.occurredAt);
     const key = format(d, "yyyy-MM-dd");
     let day = days.get(key);
     if (!day) {
-      day = { key, label: format(d, "EEE, MMM d"), commits: [], repos: [], accountIds: [] };
+      day = { key, label: format(d, "EEE, MMM d"), events: [], repos: [], accountIds: [] };
       days.set(key, day);
     }
-    day.commits.push(c);
+    day.events.push(event);
   }
   for (const day of days.values()) {
     const repoCounts = new Map<string, number>();
-    for (const c of day.commits) repoCounts.set(repoShortName(c.repo), (repoCounts.get(repoShortName(c.repo)) ?? 0) + 1);
+    for (const event of day.events) {
+      if (!event.repo) continue;
+      const name = repoShortName(event.repo);
+      repoCounts.set(name, (repoCounts.get(name) ?? 0) + 1);
+    }
     day.repos = [...repoCounts.entries()].sort((a, b) => b[1] - a[1]).map(([r]) => r);
-    day.accountIds = [...new Set(day.commits.flatMap((c) => c.links.map((l) => l.account_id)))];
+    day.accountIds = [...new Set(day.events.flatMap((event) => event.accountIds))];
   }
   return [...days.values()];
 }
