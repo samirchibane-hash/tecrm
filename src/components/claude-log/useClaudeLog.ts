@@ -1,53 +1,34 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { rowToWorkEvent, sliceForClient, type WorkEvent } from "./workStream";
 
 export const LOG_SINCE = "2026-09-01T00:00:00Z";
 
-export type LogCommit = {
-  repo: string;
-  sha: string;
-  committed_at: string;
-  author_name: string | null;
-  subject: string;
-  body: string | null;
-  claude_coauthored: boolean;
-  files: string[];
-  additions: number | null;
-  deletions: number | null;
-  html_url: string | null;
-  source: string;
-  links: { account_id: string; matched_by: string }[];
-};
-
-const COMMIT_COLUMNS =
-  "repo, sha, committed_at, author_name, subject, body, claude_coauthored, files, additions, deletions, html_url, source";
-
 /**
- * Commits since LOG_SINCE with the CRM accounts each one is linked to, newest
- * first. With `accountId`, only that account's commits (an inner join on the
- * link table), for per-client views.
+ * The shared work stream since LOG_SINCE, newest first. With `accountId`,
+ * only that client's events — the Recent work slice. /claude-log omits it
+ * and filters in the page.
  */
-export function useClaudeLog(accountId?: string) {
+export function useWorkStream(accountId?: string, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["claude-log", accountId ?? "all"],
-    queryFn: async () => {
-      const embed = accountId
-        ? "github_commit_accounts!inner(account_id, matched_by)"
-        : "github_commit_accounts(account_id, matched_by)";
+    enabled: opts?.enabled ?? true,
+    queryFn: async (): Promise<WorkEvent[]> => {
       let query = supabase
-        .from("github_commits")
-        .select(`${COMMIT_COLUMNS}, ${embed}`)
-        .gte("committed_at", LOG_SINCE)
-        .order("committed_at", { ascending: false })
+        .from("client_work_events")
+        .select("*")
+        .gte("occurred_at", LOG_SINCE)
+        .order("occurred_at", { ascending: false })
         .limit(2000);
-      if (accountId) query = query.eq("github_commit_accounts.account_id", accountId);
+      if (accountId) query = query.contains("account_ids", [accountId]);
 
       const { data, error } = await query;
       if (error) throw error;
-      return (data ?? []).map(({ github_commit_accounts, ...c }) => ({
-        ...c,
-        links: github_commit_accounts ?? [],
-      })) as LogCommit[];
+      const events = (data ?? []).flatMap((row) => {
+        const event = rowToWorkEvent(row);
+        return event ? [event] : [];
+      });
+      return accountId ? sliceForClient(events, accountId) : events;
     },
     staleTime: 60_000,
   });
