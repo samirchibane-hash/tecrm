@@ -15,9 +15,9 @@ export function AppShell() {
     <SidebarProvider defaultOpen={initialSidebarOpen()}>
       <AppSidebar />
       {/* min-w-0: wide tables scroll inside their cards instead of widening the page. */}
-      <SidebarInset className="min-w-0">
+      <SidebarInset className="min-w-0 bg-canvas">
         {/* Phones: the sidebar is a sheet, so the page needs its own way in. */}
-        <header className="sticky top-0 z-20 flex h-12 items-center gap-2 border-b border-border bg-background/95 px-3 backdrop-blur md:hidden">
+        <header className="sticky top-0 z-20 flex h-12 items-center gap-2 border-b border-border bg-card/90 px-3 backdrop-blur md:hidden">
           <SidebarTrigger aria-label="Open menu" />
           <Link to="/" aria-label="Treat Engine — Performance" className="flex items-center">
             <img src="/Treat Engine Logo .png" alt="Treat Engine" className="h-6 w-auto dark:brightness-0 dark:invert" />

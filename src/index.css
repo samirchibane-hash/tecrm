@@ -7,25 +7,31 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 0 0% 0%;
+    /* Page ground behind cards: the grouped grey, so white cards read as
+       surfaces without heavy borders or shadows. */
+    --canvas: 240 11% 96%;
+    --foreground: 240 3% 12%;
 
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 0%;
+    --card-foreground: 240 3% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 0%;
+    --popover-foreground: 240 3% 12%;
 
-    --primary: 0 0% 0%;
+    /* One accent in both themes: blue (was black here, blue in dark). 40%
+       lightness keeps white button text above 4.5:1. */
+    --primary: 210 100% 40%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 0%;
+    --secondary: 240 11% 94%;
+    --secondary-foreground: 240 3% 12%;
 
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
+    --muted: 240 11% 94%;
+    /* 44%: still 4.5:1 on the grey canvas, which 45% missed. */
+    --muted-foreground: 240 2% 44%;
 
-    --accent: 0 0% 96%;
-    --accent-foreground: 0 0% 0%;
+    --accent: 240 11% 94%;
+    --accent-foreground: 240 3% 12%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
@@ -40,32 +46,36 @@
     --danger: 0 72% 45%;
     --danger-foreground: 0 0% 100%;
 
-    --border: 0 0% 91%;
-    --input: 0 0% 91%;
-    --ring: 0 0% 0%;
+    --border: 240 6% 90%;
+    --input: 240 5% 84%;
+    --ring: 210 100% 40%;
 
     --radius: 1rem;
 
-    --chart-1: 211 100% 50%;
-    --chart-2: 160 84% 39%;
-    --chart-3: 280 65% 60%;
-    --chart-4: 35 92% 55%;
-    --chart-5: 350 80% 55%;
+    /* Validated (dataviz validate_palette.js, light): lightness band, CVD
+       separation and 3:1 against the card all pass. The old amber and green
+       sat under 3:1 on white. */
+    --chart-1: 210 100% 40%;
+    --chart-2: 160 84% 30%;
+    --chart-3: 280 65% 55%;
+    --chart-4: 38 95% 40%;
+    --chart-5: 345 70% 45%;
 
     --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 0 0% 0%;
-    --sidebar-primary: 0 0% 0%;
+    --sidebar-foreground: 240 3% 12%;
+    --sidebar-primary: 210 100% 40%;
     --sidebar-primary-foreground: 0 0% 100%;
     /* One step darker than --muted: on the 98% rail, 96% was too faint to
        show which page you're on. */
-    --sidebar-accent: 0 0% 92%;
-    --sidebar-accent-foreground: 0 0% 0%;
-    --sidebar-border: 0 0% 91%;
-    --sidebar-ring: 0 0% 0%;
+    --sidebar-accent: 240 6% 91%;
+    --sidebar-accent-foreground: 240 3% 12%;
+    --sidebar-border: 240 6% 90%;
+    --sidebar-ring: 210 100% 40%;
   }
 
   .dark {
     --background: 224 30% 7%;
+    --canvas: 224 30% 5%;
     --foreground: 210 20% 92%;
 
     --card: 224 25% 10%;

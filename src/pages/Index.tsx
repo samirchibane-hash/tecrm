@@ -7,6 +7,7 @@ import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailabl
 import { StatusPill } from "@/components/StatusPill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { CostLegend, CostVsTarget, type CostStatus } from "@/components/dashboard/CostVsTarget";
 import { DashboardPeriodPicker } from "@/components/dashboard/DashboardPeriodPicker";
 import { useDashboardPeriod } from "@/hooks/useDashboardPeriod";
 import { PortfolioCreativeBoard } from "@/components/creative-performance/PortfolioCreativeBoard";
@@ -23,18 +24,12 @@ import type { AdRow } from "@/hooks/useCouplerData";
 // ─── KPI helpers ─────────────────────────────────────────────────────────────
 // Cost coloring reads each account's own targets (accounts.target_cpl /
 // target_cpa, set on the account page); no target, no coloring.
-function getCostStatus(value: number, target: number | null): "success" | "warning" | "danger" | null {
+function getCostStatus(value: number, target: number | null): CostStatus | null {
   if (value <= 0 || !target) return null;
   if (value <= target) return "success";
   if (value <= target * 1.25) return "warning";
   return "danger";
 }
-
-const STATUS_TEXT: Record<string, string> = {
-  success: "text-success",
-  warning: "text-warning",
-  danger: "text-danger",
-};
 
 // ─── Component ───────────────────────────────────────────────────────────────
 const Index = () => {
@@ -208,7 +203,7 @@ const Index = () => {
   const gapNames = tableRows.filter((r) => metaGaps.has(r.name)).map((r) => r.name);
 
   return (
-    <div className="bg-background">
+    <div>
       <div className="mx-auto max-w-5xl px-4 py-6 sm:py-10 sm:px-6 lg:px-8">
 
         {/* ── Header ───────────────────────────────────────────────────────── */}
@@ -302,40 +297,41 @@ const Index = () => {
 
         {/* ── Accounts Table ────────────────────────────────────────────────── */}
         {tableRows.length > 0 && (
-          <div className="rounded-xl border border-border/60 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 bg-muted/40 border-b border-border/60">
-              <h2 className="text-sm font-semibold text-foreground">Account Performance</h2>
+          <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border px-5 py-3.5">
+              <h2 className="text-[15px] font-semibold text-foreground">Clients</h2>
+              <CostLegend />
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[780px]">
                 <thead>
-                  <tr className="border-b border-border/60 bg-muted/20">
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  <tr className="border-b border-border">
+                    <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground">
                       Account
                     </th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground">
                       Spend
                     </th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground">
                       GHL Leads
                     </th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground">
                       CPL
                     </th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground">
                       GHL Appts
                     </th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground">
                       CPA
                     </th>
                     <th
-                      className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                      className="text-right py-3 px-4 text-xs font-medium text-muted-foreground"
                       title="Ads delivering in Meta right now (not tied to the selected period)"
                     >
                       Active Ads
                     </th>
                     <th
-                      className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                      className="text-right py-3 px-4 text-xs font-medium text-muted-foreground"
                       title="Daily budget of live campaigns and ad sets in Meta right now (not tied to the selected period)"
                     >
                       Daily Budget
@@ -386,11 +382,7 @@ const Index = () => {
                         {/* CPL */}
                         <td className="py-3.5 px-4 text-right tabular-nums">
                           {row.ghlCostPerLead > 0 ? (
-                            <>
-                              <span className={`font-semibold ${cplStatus ? STATUS_TEXT[cplStatus] : "text-foreground"}`}>
-                                ${row.ghlCostPerLead.toFixed(0)}
-                              </span>
-                            </>
+                            <CostVsTarget value={row.ghlCostPerLead} target={row.targetCpl} status={cplStatus} />
                           ) : (
                             <span className="text-muted-foreground">–</span>
                           )}
@@ -410,11 +402,7 @@ const Index = () => {
                         {/* CPA */}
                         <td className="py-3.5 px-4 text-right tabular-nums">
                           {row.ghlCostPerAppt > 0 ? (
-                            <>
-                              <span className={`font-semibold ${cpaStatus ? STATUS_TEXT[cpaStatus] : "text-foreground"}`}>
-                                ${row.ghlCostPerAppt.toFixed(0)}
-                              </span>
-                            </>
+                            <CostVsTarget value={row.ghlCostPerAppt} target={row.targetCpa} status={cpaStatus} />
                           ) : (
                             <span className="text-muted-foreground">–</span>
                           )}

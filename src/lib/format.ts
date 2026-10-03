@@ -30,3 +30,12 @@ export function formatCount(n: number): string {
 export function formatPercent(n: number, decimals = 2): string {
   return `${n.toFixed(decimals)}%`;
 }
+
+/** US numbers as (602) 555-0143; anything else is shown as stored. */
+export function formatPhone(raw: number | string | null | undefined): string {
+  if (raw == null || raw === "") return "";
+  const digits = String(raw).replace(/\D/g, "");
+  const local = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  if (local.length !== 10) return String(raw);
+  return `(${local.slice(0, 3)}) ${local.slice(3, 6)}-${local.slice(6)}`;
+}

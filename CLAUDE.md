@@ -33,8 +33,9 @@ in `index.css`, then use it. Do not inline a `dark:` variant pair as a workaroun
 
 Every token added to `:root` gets a deliberate `.dark` counterpart with the same *meaning*
 and comparable contrast — not a different hue. Check both themes before calling UI work
-done. Today `--primary` is black in light and blue in dark; treat that as a known defect
-to converge, and never widen the gap.
+done. `--primary` is blue in both themes (converged 2026-10-03); keep it that way. Nothing
+in the app sets `.dark` today, so light is what everyone sees — it gets the polish first.
+Page ground behind cards is `bg-canvas` (the grouped grey); cards stay `bg-card`.
 
 ### 3. One vocabulary — reuse before you build
 

@@ -11,13 +11,16 @@ export default function CallCenterReport() {
     <ReportClientProvider token={token}>
       <ReportAccountGate>
         {(account) => (
-          <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-            {/* Header */}
-            <header className="border-b border-border bg-white dark:bg-slate-900 px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Phone className="h-4 w-4 text-sky-600 dark:text-sky-400" />
-                <h1 className="text-sm font-semibold text-foreground">{account.account_name}</h1>
-                <span className="text-xs text-muted-foreground">— Call Center Report</span>
+          <div className="min-h-screen bg-canvas">
+            <header className="border-b border-border bg-card">
+              <div className="mx-auto max-w-2xl space-y-1.5 px-4 pb-5 pt-6">
+                <p className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
+                  <img src="/Treat Engine Logo .png" alt="Treat Engine" className="h-4 w-auto" />
+                  <span aria-hidden>·</span>
+                  <Phone className="h-3.5 w-3.5" aria-hidden />
+                  Call center report
+                </p>
+                <h1 className="text-[28px] font-bold leading-tight tracking-tight text-foreground">{account.account_name}</h1>
               </div>
             </header>
 

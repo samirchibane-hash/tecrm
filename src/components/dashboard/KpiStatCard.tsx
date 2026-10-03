@@ -55,87 +55,65 @@ export function KpiStatCard({
   const ChangeIcon = change ? CHANGE_ICON[change.direction] : Minus;
   const comfortable = size === "comfortable";
 
+  // Label first, then the number, then what it is measured against — the order
+  // a reader asks the questions in. The icon is a quiet marker, not a badge.
   const body = (
-    <CardContent className={cn(comfortable ? "p-3 sm:p-5" : "p-3")}>
-      <div className={cn("flex items-center gap-2.5", comfortable && "sm:block")}>
-        <div
+    <CardContent className={cn("flex h-full flex-col gap-1 text-left", comfortable ? "p-4 sm:p-5" : "p-3.5")}>
+      <div className="flex items-start justify-between gap-2">
+        <p className={cn("min-w-0 truncate font-medium text-foreground", comfortable ? "text-[13px] sm:text-sm" : "text-[13px]")}>
+          {label}
+        </p>
+        <Icon
+          aria-hidden
+          className={cn("h-4 w-4 shrink-0", isActive && !unavailable ? "text-primary" : "text-muted-foreground/70")}
+        />
+      </div>
+      {loading ? (
+        <Skeleton
+          className={cn("my-1 h-6 w-20 bg-foreground/10", comfortable && "sm:h-8 sm:w-28")}
+          aria-hidden
+        />
+      ) : (
+        <p
           className={cn(
-            "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
-            comfortable && "sm:h-10 sm:w-10",
-            unavailable ? "bg-muted" : isActive ? "bg-primary" : "bg-primary/10",
+            "font-semibold leading-tight tracking-tight tabular-nums",
+            comfortable ? "text-xl sm:text-[28px] sm:leading-9" : "text-xl",
+            unavailable ? "text-muted-foreground" : "text-foreground",
           )}
         >
-          <Icon
-            className={cn(
-              "h-4 w-4",
-              comfortable && "sm:h-5 sm:w-5",
-              unavailable
-                ? "text-muted-foreground"
-                : isActive
-                  ? "text-primary-foreground"
-                  : "text-primary",
-            )}
-          />
-        </div>
-        <div className={cn("min-w-0 text-left", comfortable && "sm:mt-3")}>
-          {loading ? (
-            <Skeleton
-              className={cn("my-0.5 h-5 w-16 bg-foreground/10", comfortable && "sm:h-7 sm:w-24")}
-              aria-hidden
-            />
-          ) : (
-            <p
-              className={cn(
-                "font-bold tracking-tight leading-tight tabular-nums",
-                comfortable ? "text-base sm:text-2xl" : "text-base",
-                unavailable ? "text-muted-foreground/60" : "text-foreground",
-              )}
-            >
-              {unavailable ? "—" : value}
-            </p>
-          )}
-          <p
-            className={cn(
-              "font-medium uppercase tracking-wider text-muted-foreground truncate",
-              comfortable ? "text-[10px] sm:text-xs" : "text-[10px]",
-            )}
-          >
-            {label}
-          </p>
-          {loading && <span className="sr-only">Loading</span>}
-          {showChange && change && (
-            <p
-              className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground"
-              title={changeTitle ? `${change.spoken} vs ${changeTitle}` : change.spoken}
-            >
-              <StatusPill status={change.tone} className="gap-0.5 px-1.5 tabular-nums">
-                <ChangeIcon className="h-3 w-3" aria-hidden />
-                <span aria-hidden>{change.text}</span>
-                <span className="sr-only">{change.spoken}</span>
-              </StatusPill>
-              {changeLabel && <span className="whitespace-nowrap">{changeLabel}</span>}
-            </p>
-          )}
-          {!unavailable && !loading && detail && (
-            <p className="mt-0.5 truncate text-[11px] font-normal text-muted-foreground/80" title={detail}>
-              {detail}
-            </p>
-          )}
-          {unavailable && unavailableReason && (
-            <p className="mt-0.5 text-[10px] font-normal normal-case tracking-normal text-muted-foreground/80 truncate">
-              {unavailableReason}
-            </p>
-          )}
-        </div>
-      </div>
+          {unavailable ? "—" : value}
+        </p>
+      )}
+      {loading && <span className="sr-only">Loading</span>}
+      {showChange && change && (
+        <p
+          className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground"
+          title={changeTitle ? `${change.spoken} vs ${changeTitle}` : change.spoken}
+        >
+          <StatusPill status={change.tone} className="gap-0.5 px-1.5 tabular-nums">
+            <ChangeIcon className="h-3 w-3" aria-hidden />
+            <span aria-hidden>{change.text}</span>
+            <span className="sr-only">{change.spoken}</span>
+          </StatusPill>
+          {changeLabel && <span className="whitespace-nowrap">{changeLabel}</span>}
+        </p>
+      )}
+      {!unavailable && !loading && detail && (
+        <p className="mt-auto truncate pt-0.5 text-xs text-muted-foreground" title={detail}>
+          {detail}
+        </p>
+      )}
+      {unavailable && unavailableReason && (
+        <p className="truncate text-xs text-muted-foreground">{unavailableReason}</p>
+      )}
     </CardContent>
   );
 
   const cardClass = cn(
-    "shadow-sm transition-all",
-    unavailable ? "border-dashed border-border bg-muted/30" : "border-border/50 bg-card",
+    "rounded-xl transition-shadow",
+    unavailable ? "border-dashed border-border bg-muted/40 shadow-none" : "border-border/70 bg-card shadow-sm",
     interactive && "cursor-pointer hover:shadow-md",
-    isActive && !unavailable && "ring-2 ring-primary border-primary/30",
+    isActive && !unavailable && "border-primary/40 ring-2 ring-primary",
   );
 
   if (!interactive) {
@@ -159,7 +137,7 @@ export function KpiStatCard({
       onClick={onClick}
       aria-pressed={isActive}
       className={cn(
-        "w-full rounded-lg border text-card-foreground",
+        "w-full border text-card-foreground",
         cardClass,
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
       )}
