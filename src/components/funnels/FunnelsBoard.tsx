@@ -34,18 +34,33 @@ const FILTERS: { value: Filter; label: string }[] = [
  *
  * The list starts from the pages themselves rather than from Meta's data, so a
  * built-but-idle page is visible instead of silently missing.
+ *
+ * With `accountId` it is the same board for one client (the account page):
+ * client names and the search box drop away, and nothing else changes, so a
+ * page reads identically on both screens.
  */
 export function FunnelsBoard({
   range,
   periodCaption,
   accounts,
-  hiddenAccounts,
+  hiddenAccounts: hiddenSetting,
+  accountId,
 }: {
   range: CreativeRange;
   periodCaption: string;
   accounts: FunnelAccountInfo[];
   hiddenAccounts: string[];
+  /** Show one client only. Hidden-account settings don't apply to a client opened directly. */
+  accountId?: string;
 }) {
+  const scoped = !!accountId;
+  // Scoping is hiding every other client: the board's math already honours a
+  // hidden list end to end (pages, Meta rows, unattributed leads), so one
+  // client is the same computation with a longer list, not a second code path.
+  const hiddenAccounts = useMemo(
+    () => (accountId ? accounts.filter((a) => a.id !== accountId).map((a) => a.account_name) : hiddenSetting),
+    [accountId, accounts, hiddenSetting],
+  );
   const [filter, setFilter] = useState<Filter>("traffic");
   const [query, setQuery] = useState("");
 
@@ -112,9 +127,17 @@ export function FunnelsBoard({
     });
   }, [board.rows, filter, query]);
 
-  const unreadable = (data?.accounts ?? []).filter((a) => a.error).map((a) => a.accountName);
+  const unreadable = (data?.accounts ?? [])
+    .filter((a) => a.error && !hiddenAccounts.includes(a.accountName))
+    .map((a) => a.accountName);
 
-  if (isLoading || linksLoading) {
+  // Scoping waits for the account list: an empty list would hide no one and
+  // flash every client's pages on one client's screen.
+  const scopeLoading = scoped && !accounts.some((a) => a.id === accountId);
+  // One client's spend unknown is not $0: its money tiles say so instead.
+  const metaUnknown = scoped && unreadable.length > 0;
+
+  if (isLoading || linksLoading || scopeLoading) {
     return (
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -134,8 +157,8 @@ export function FunnelsBoard({
       {unreadable.length > 0 && (
         <SourceUnavailableNotice
           source="Meta Ads"
-          stillLive="Every other client's pages, and all copy history"
-          message={`${unreadable.join(", ")}: the Meta token can't read ${unreadable.length === 1 ? "this ad account" : "these ad accounts"}, so their pages show copy and versions but no performance. Assign them to the system user in Meta Business Settings.`}
+          stillLive={scoped ? "Copy history and split tests" : "Every other client's pages, and all copy history"}
+          message={`${unreadable.join(", ")}: the Meta token can't read ${unreadable.length === 1 ? "this ad account" : "these ad accounts"}, so ${unreadable.length === 1 ? "its" : "their"} pages show copy and versions but no performance. Assign ${unreadable.length === 1 ? "it" : "them"} to the system user in Meta Business Settings.`}
         />
       )}
 
@@ -144,18 +167,22 @@ export function FunnelsBoard({
           label="Landing pages"
           value={formatCount(board.rows.length)}
           icon={Globe}
-          detail={`${board.clients} ${board.clients === 1 ? "client" : "clients"} · ${board.idle} idle`}
+          detail={scoped ? `${board.idle} idle` : `${board.clients} ${board.clients === 1 ? "client" : "clients"} · ${board.idle} idle`}
         />
         <KpiStatCard
           label="Ad spend"
           value={formatUsd(board.spend)}
           icon={Users}
+          unavailable={metaUnknown}
+          unavailableReason="Meta can't read this ad account"
           detail={`${board.withTraffic} ${board.withTraffic === 1 ? "page" : "pages"} with traffic`}
         />
         <KpiStatCard
           label="Page views → leads"
           value={board.cvr !== null ? `${(board.cvr * 100).toFixed(1)}%` : "—"}
           icon={MousePointerClick}
+          unavailable={metaUnknown}
+          unavailableReason="Meta can't read this ad account"
           detail={
             `${formatCount(board.measuredLpv)} views · ${formatCount(board.leads)} attributed ${board.leads === 1 ? "lead" : "leads"}` +
             (board.unattributedLeads > 0 ? ` · ${formatCount(board.unattributedLeads)} unattributed` : "")
@@ -177,13 +204,15 @@ export function FunnelsBoard({
           label="Filter landing pages"
         />
         <div className="flex items-center gap-2">
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search pages, clients, headlines"
-            aria-label="Search landing pages"
-            className="h-8 w-56 text-xs"
-          />
+          {!scoped && (
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search pages, clients, headlines"
+              aria-label="Search landing pages"
+              className="h-8 w-56 text-xs"
+            />
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -217,11 +246,13 @@ export function FunnelsBoard({
         <p className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
           {board.rows.length === 0
             ? "No funnel page is registered yet. Add the client's site to funnel_sites and the hourly sync will list its pages."
-            : "No page matches this filter."}
+            : filter === "traffic"
+              ? "No page had ad traffic in this period."
+              : "No page matches this filter."}
         </p>
       ) : (
         <div className="space-y-2">
-          {rows.map((row) => <FunnelPageCard key={row.key} row={row} />)}
+          {rows.map((row) => <FunnelPageCard key={row.key} row={row} showAccount={!scoped} />)}
         </div>
       )}
     </div>

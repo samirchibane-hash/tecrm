@@ -15,7 +15,6 @@ import { deliveryStatusText } from "./adStatus";
 import { CountFilter } from "./CountFilter";
 import { NO_COUNT_FILTER, describeCount, passesCount, type CountFilterValue } from "./countThreshold";
 import { CreativeName, CreativeThumbnail, Dash, VerdictPill } from "./CreativeBits";
-import type { PortfolioAccountInfo } from "./PortfolioCreativeBoard";
 import { usePortfolioCreatives, type CreativeRange, type LeadChannel } from "./useCreativePerformance";
 import { FATIGUE_FREQUENCY, benchmarkText, hookRate, scoreAds, targetFor, type Benchmark, type ScoredAd } from "./verdicts";
 
@@ -23,6 +22,13 @@ const CHANNEL_LABEL: Record<LeadChannel, string> = { website: "Website leads", f
 const LEAD_NOUN: Record<LeadChannel, string> = { website: "Website leads", form: "Form leads" };
 
 const ALL = "all";
+
+/** What the gallery needs to know about each CRM account to judge its ads. */
+export interface PortfolioAccountInfo {
+  id: string;
+  account_name: string;
+  target_cpl: number | null;
+}
 
 type Row = ScoredAd & {
   accountId: string;
@@ -42,7 +48,7 @@ function Metric({ label, value, title }: { label: string; value: React.ReactNode
 }
 
 /** One ad, big enough to judge the creative itself rather than just its name. */
-function AdCard({ row, rank, shareOfSpend }: { row: Row; rank: number; shareOfSpend: number | null }) {
+function AdCard({ row, rank, shareOfSpend, showAccount }: { row: Row; rank: number; shareOfSpend: number | null; showAccount: boolean }) {
   const { ad } = row;
   const hook = hookRate(ad);
   const headline = ad.copy.headlines[0] ?? null;
@@ -68,13 +74,17 @@ function AdCard({ row, rank, shareOfSpend }: { row: Row; rank: number; shareOfSp
             ad={ad}
             sub={
               <>
-                <Link
-                  to={`/account/${encodeURIComponent(row.accountName)}?tab=performance`}
-                  className="rounded-sm font-medium text-foreground/80 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {row.accountName}
-                </Link>
-                {" · "}
+                {showAccount && (
+                  <>
+                    <Link
+                      to={`/account/${encodeURIComponent(row.accountName)}?tab=performance`}
+                      className="rounded-sm font-medium text-foreground/80 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {row.accountName}
+                    </Link>
+                    {" · "}
+                  </>
+                )}
                 {ad.live ? (ad.format === "video" ? "Video" : "Image") : deliveryStatusText(ad.status)}
                 {ad.adset && <> · {ad.adset}</>}
               </>
@@ -149,20 +159,31 @@ function AdCard({ row, rank, shareOfSpend }: { row: Row; rank: number; shareOfSp
  * they differ too much in price and quality to rank in one column. Each ad is
  * judged against its own client's benchmark, so a $40 lead in an expensive
  * market isn't beaten by a $12 one somewhere else on price alone.
+ *
+ * With `accountId` it is the same gallery for one client (the account page):
+ * the client picker and per-ad client names drop away, and nothing else
+ * changes, so an ad reads identically on both screens.
  */
 export function PortfolioCreativeGallery({
   range,
   periodCaption,
   accounts,
   hiddenAccounts,
+  accountId,
 }: {
   range: CreativeRange;
   periodCaption: string;
   accounts: PortfolioAccountInfo[];
   hiddenAccounts: string[];
+  /** Show one client only. Hidden-account settings don't apply to a client opened directly. */
+  accountId?: string;
 }) {
+  // One portfolio query for every screen and every client: the account page
+  // reuses the cache /creatives, /funnels and the dashboard already filled.
   const { data, isLoading, isError, error, refetch, isFetching } = usePortfolioCreatives(range);
-  const [account, setAccount] = useState<string>(ALL);
+  const scoped = !!accountId;
+  const [accountPick, setAccount] = useState<string>(ALL);
+  const account = accountId ?? accountPick;
   const [channelPick, setChannelPick] = useState<LeadChannel | null>(null);
   // Leads count the source on screen (website or form), so one control serves both.
   const [leadFilter, setLeadFilter] = useState<CountFilterValue>(NO_COUNT_FILTER);
@@ -175,7 +196,7 @@ export function PortfolioCreativeGallery({
     const spendByAccount = new Map<string, { name: string; spend: number }>();
 
     for (const acct of data?.accounts ?? []) {
-      if (hiddenAccounts.includes(acct.accountName)) continue;
+      if (accountId ? acct.accountId !== accountId : hiddenAccounts.includes(acct.accountName)) continue;
       if (acct.error) {
         unreadable.push(acct.accountName);
         continue;
@@ -208,7 +229,7 @@ export function PortfolioCreativeGallery({
       .sort((a, b) => b[1].spend - a[1].spend)
       .map(([id, v]) => ({ id, name: v.name }));
     return { rows, unreadable, gaps, accountOptions };
-  }, [data, accounts, hiddenAccounts]);
+  }, [data, accounts, hiddenAccounts, accountId]);
 
   // The account picked decides which lead source opens: a client that only runs
   // instant forms shouldn't land on an empty "website leads" list.
@@ -279,13 +300,36 @@ export function PortfolioCreativeGallery({
     return <SourceUnavailableNotice source="Meta Ads" message={(error as Error).message} onRetry={() => refetch()} retrying={isFetching} />;
   }
 
+  // A client with no Meta ad account linked is absent from the response: its
+  // creatives are unknown, which must not read as "no ads ran".
+  const scopedAccount = scoped ? data?.accounts.find((a) => a.accountId === accountId) : undefined;
+  if (scoped && data && !scopedAccount) {
+    return (
+      <p className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+        No Meta ad account is linked to this client, so there are no creatives to show.
+      </p>
+    );
+  }
+  // Meta refused this one account: its creatives are unknown, so no tiles at all
+  // rather than tiles reading $0 and "no ads".
+  if (scopedAccount?.error) {
+    return (
+      <SourceUnavailableNotice
+        source="Meta Ads"
+        message={`The Meta token can't read ${scopedAccount.accountName}'s ad account. Assign it to the system user in Meta Business Settings.`}
+        onRetry={() => refetch()}
+        retrying={isFetching}
+      />
+    );
+  }
+
   return (
     <div className="space-y-4">
       {unreadable.length > 0 && (
         <SourceUnavailableNotice
           source="Meta Ads"
-          stillLive="Every other client's creatives"
-          message={`${unreadable.join(", ")}: the Meta token can't read ${unreadable.length === 1 ? "this ad account" : "these ad accounts"}. Assign them to the system user in Meta Business Settings.`}
+          stillLive={scoped ? undefined : "Every other client's creatives"}
+          message={`${unreadable.join(", ")}: the Meta token can't read ${unreadable.length === 1 ? "this ad account" : "these ad accounts"}. Assign ${unreadable.length === 1 ? "it" : "them"} to the system user in Meta Business Settings.`}
         />
       )}
 
@@ -305,7 +349,10 @@ export function PortfolioCreativeGallery({
           label="Spend"
           value={formatUsd(totals.spend)}
           icon={DollarSign}
-          detail={`${totals.delivered} ${totals.delivered === 1 ? "ad" : "ads"} · ${totals.clients} ${totals.clients === 1 ? "client" : "clients"}`}
+          detail={
+            `${totals.delivered} ${totals.delivered === 1 ? "ad" : "ads"}` +
+            (scoped ? "" : ` · ${totals.clients} ${totals.clients === 1 ? "client" : "clients"}`)
+          }
         />
         <KpiStatCard
           label={LEAD_NOUN[channel]}
@@ -339,17 +386,19 @@ export function PortfolioCreativeGallery({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={account} onValueChange={setAccount}>
-            <SelectTrigger className="h-8 w-[200px] text-xs" aria-label="Filter by ad account">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL} className="text-xs">All ad accounts</SelectItem>
-              {accountOptions.map((o) => (
-                <SelectItem key={o.id} value={o.id} className="text-xs">{o.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {!scoped && (
+            <Select value={account} onValueChange={setAccount}>
+              <SelectTrigger className="h-8 w-[200px] text-xs" aria-label="Filter by ad account">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL} className="text-xs">All ad accounts</SelectItem>
+                {accountOptions.map((o) => (
+                  <SelectItem key={o.id} value={o.id} className="text-xs">{o.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <SegmentedControl
             value={channel}
             onChange={setChannelPick}
@@ -394,9 +443,9 @@ export function PortfolioCreativeGallery({
         Meta Ads · {periodCaption}
         {data && <> · updated {formatDistanceToNowStrict(new Date(data.fetchedAt), { addSuffix: true })}</>}
         {" · "}sorted by spend. {CHANNEL_LABEL[channel]} only: website and instant-form leads cost too
-        differently to rank together, so one source shows at a time. Each ad is judged against its own
-        client's CPL target (or that client's average when none is set), instant forms against that
-        client's own form-lead average. Paused ads that spent in the period are listed and greyed.
+        differently to rank together, so one source shows at a time. {scoped ? "Ads are judged against this" : "Each ad is judged against its own"}{" "}
+        client's CPL target (or {scoped ? "its" : "that client's"} average when none is set), instant forms against{" "}
+        {scoped ? "its" : "that client's"} own form-lead average. Paused ads that spent in the period are listed and greyed.
       </p>
 
       {listed.length === 0 ? (
@@ -417,6 +466,7 @@ export function PortfolioCreativeGallery({
               row={r}
               rank={i + 1}
               shareOfSpend={totals.spend > 0 && r.ad.delivered ? r.ad.spend / totals.spend : null}
+              showAccount={!scoped}
             />
           ))}
         </ul>

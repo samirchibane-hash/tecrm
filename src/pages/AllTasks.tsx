@@ -1,20 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { TaskList } from "@/components/dashboard/TaskList";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useSettings } from "@/hooks/useSettings";
+import { useAllAccounts } from "@/hooks/useAllAccounts";
 
 export default function AllTasks() {
   const { settings } = useSettings();
 
   // Account names feed the "Account" pickers inside the new/detail task sheets.
-  const { data: dbAccounts = [] } = useQuery({
-    queryKey: ["all-accounts"],
-    queryFn: async () => {
-      const { data } = await supabase.from("accounts").select("id, account_name");
-      return data ?? [];
-    },
-  });
+  const { data: dbAccounts = [] } = useAllAccounts();
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-10 lg:px-8">

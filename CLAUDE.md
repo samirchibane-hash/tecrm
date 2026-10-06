@@ -113,14 +113,18 @@ The anon key ships in the bundle, so RLS is the only boundary. Keep it that way:
 
 ## Creative intelligence (since 2026-09-11)
 
-The account page's **Performance** tab (KPIs, then scale / cut / fatigue board, breakdowns by
-offer · angle · headline · primary text · format · ad set · landing page, and the full
-leaderboard) and **Funnel** tab (step conversion + landing page split test), plus the
-Performance dashboard's two cross-client scorecards — **creative** (`PortfolioCreativeBoard`)
-and **funnel** (`PortfolioFunnelBoard`) — all read `meta-creative-performance` live, through
-one shared query so the page makes a single Meta call. Pure logic lives in
-`components/creative-performance/` and `components/funnel/` and is tested in
-`src/test/creativeIntelligence.test.ts`. Keep it that way:
+**One view of creatives, one view of funnels (since 2026-10-05).** Creatives are analysed in
+`PortfolioCreativeGallery` (the Creative Performance tab of `/creatives`) and funnels in
+`FunnelsBoard` (`/funnels`). The account page's **Performance** tab shows those same two
+components with `accountId` set, under the account's KPIs; scoping only hides the client
+picker / client names, never changes a number. The dashboard is the account table only: the
+cross-client creative and funnel scorecards, the account page's scale/cut board, breakdowns,
+leaderboard and separate Funnel tab were removed as duplicate views. Don't build a second view
+of either; improve the one component so every screen gets it. All of them read
+`meta-creative-performance` through one shared portfolio query (`usePortfolioCreatives`), so
+moving between screens on the same period costs no extra Meta call. Pure logic lives in
+`components/creative-performance/`, `components/funnel/` and `components/funnels/` and is
+tested in `src/test/`. Keep it that way:
 
 - **Verdicts are statistical claims** (`verdicts.ts`): one-sided Poisson test at 90% against the
   benchmark, plus a material gap, plus a spend floor for winners. Never label an ad or group a
@@ -133,7 +137,8 @@ one shared query so the page makes a single Meta call. Pure logic lives in
 - **Zero results on every ad after real spend = tracking gap**: verdicts are withheld and the UI
   asks for a tracking check instead of listing every ad as a money waster.
 - **Offer / angle** are detected from copy (`labels.ts`, one taxonomy for all dealers) and
-  corrected per ad name in `creative_labels`. Add an offer or angle by extending that taxonomy.
+  per-ad corrections were stored in `creative_labels` (its editor went with the breakdowns on
+  2026-10-05; the table is kept). Add an offer or angle by extending that taxonomy.
   The taxonomy reads ads *and* landing pages, so a pattern gap mislabels both: "0 payments,
   0 interest" was falling through to Free water test until 2026-09-17.
 - **CRM leads per ad** match `ghl_conversions."Ad Name"` (utm_content). The column only shows
@@ -161,7 +166,8 @@ one shared query so the page makes a single Meta call. Pure logic lives in
   `labels.ts` taxonomy the ads use (`detectPageCopy` in `funnelMath.ts` — one definition,
   shared by both funnel surfaces). A page whose site isn't registered in `funnel_sites` has
   no copy, and the UI says "not synced" rather than showing a blank headline.
-- The cross-client board pools pages by headline and by offer to rank what converts. That
+- `portfolioFunnel.ts` can pool pages by headline and by offer (no screen shows it since
+  2026-10-05). If it comes back, that
   pooling mixes markets and audiences, so it is presented as the next test to run, never a
   verdict, and a pooled row under `MIN_GROUP_VIEWS` reads "Needs traffic" instead of ranking.
 - **A page's numbers belong to the copy version that earned them** (`funnel_page_copy_versions`,

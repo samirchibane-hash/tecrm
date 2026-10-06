@@ -1,8 +1,6 @@
 import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, FolderGit2, GitCommitHorizontal, Search, Sparkles, Users } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,6 +14,7 @@ import { repoShortName, useGitHubTokenStatus, useWorkStream } from "@/components
 import { filterWorkEvents } from "@/components/claude-log/workStream";
 import { useSettings } from "@/hooks/useSettings";
 import { formatCount } from "@/lib/format";
+import { useAllAccounts } from "@/hooks/useAllAccounts";
 
 const ALL = "all";
 const AGENCY = "agency"; // commits linked to no client
@@ -51,13 +50,7 @@ export default function ClaudeLog() {
   const { data: events = [], isLoading, isError, error, refetch } = useWorkStream();
   const { data: token } = useGitHubTokenStatus();
   const { settings } = useSettings();
-  const { data: accounts = [] } = useQuery({
-    queryKey: ["all-accounts"],
-    queryFn: async () => {
-      const { data } = await supabase.from("accounts").select("id, account_name");
-      return data ?? [];
-    },
-  });
+  const { data: accounts = [] } = useAllAccounts();
 
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.account_name;
   const active = accounts

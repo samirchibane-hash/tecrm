@@ -221,7 +221,8 @@ function VersionsPanel({ row }: { row: FunnelRow }) {
  * decide what to do about it. Collapsed it is a single scannable line; expanded
  * it carries the ads, the copy history and any split test.
  */
-export function FunnelPageCard({ row }: { row: FunnelRow }) {
+/** `showAccount` is off on a client's own page, where every card is that client. */
+export function FunnelPageCard({ row, showAccount = true }: { row: FunnelRow; showAccount?: boolean }) {
   const [open, setOpen] = useState(false);
   const perf = row.perf;
   const panelId = `funnel-${row.key.replace(/[^a-z0-9]+/gi, "-")}`;
@@ -240,7 +241,7 @@ export function FunnelPageCard({ row }: { row: FunnelRow }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="truncate text-sm font-semibold text-foreground">{row.label}</span>
-            <span className="truncate text-xs text-muted-foreground">{row.accountName}</span>
+            {showAccount && <span className="truncate text-xs text-muted-foreground">{row.accountName}</span>}
             {row.liveVersion !== null && (
               <StatusPill status="neutral">v{row.liveVersion}</StatusPill>
             )}
@@ -295,12 +296,14 @@ export function FunnelPageCard({ row }: { row: FunnelRow }) {
               {row.url.replace(/^https?:\/\//, "")}
               <ExternalLink className="h-3 w-3 text-muted-foreground" aria-hidden />
             </a>
-            <Link
-              to={`/account/${encodeURIComponent(row.accountName)}?tab=funnel`}
-              className="rounded-sm text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              Open client
-            </Link>
+            {showAccount && (
+              <Link
+                to={`/account/${encodeURIComponent(row.accountName)}?tab=performance`}
+                className="rounded-sm text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Open client
+              </Link>
+            )}
             {row.copySyncedAt && (
               <span className="text-muted-foreground">Copy read {shortDate(row.copySyncedAt)}</span>
             )}

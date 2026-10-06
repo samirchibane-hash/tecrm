@@ -10,9 +10,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { CostLegend, CostVsTarget, type CostStatus } from "@/components/dashboard/CostVsTarget";
 import { DashboardPeriodPicker } from "@/components/dashboard/DashboardPeriodPicker";
 import { useDashboardPeriod } from "@/hooks/useDashboardPeriod";
-import { PortfolioCreativeBoard } from "@/components/creative-performance/PortfolioCreativeBoard";
 import { usePortfolioCreatives } from "@/components/creative-performance/useCreativePerformance";
-import { PortfolioFunnelBoard } from "@/components/funnel/PortfolioFunnelBoard";
 import { formatUsd } from "@/lib/format";
 import { RefreshCw, Sparkles, ArrowRight, ChevronRight, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,6 +18,7 @@ import { formatDistanceToNow } from "date-fns";
 import { format, startOfDay, subDays } from "date-fns";
 import { useSettings } from "@/hooks/useSettings";
 import type { AdRow } from "@/hooks/useCouplerData";
+import { useAllAccounts } from "@/hooks/useAllAccounts";
 
 // ─── KPI helpers ─────────────────────────────────────────────────────────────
 // Cost coloring reads each account's own targets (accounts.target_cpl /
@@ -55,13 +54,7 @@ const Index = () => {
   });
 
   // All accounts (for UUID → name mapping used in GHL join)
-  const { data: dbAccounts = [] } = useQuery({
-    queryKey: ["all-accounts"],
-    queryFn: async () => {
-      const { data } = await supabase.from("accounts").select("id, account_name, target_cpl, target_cpa");
-      return data ?? [];
-    },
-  });
+  const { data: dbAccounts = [] } = useAllAccounts();
 
   const accountIdMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -78,8 +71,9 @@ const Index = () => {
   // Shared with the Funnels page so one control means one set of days.
   const { dateRange, label: dateLabel, creativeRange, onChange: onPeriodChange } = useDashboardPeriod();
 
-  // Ads delivering right now, per account. Same query (and cache entry) as the
-  // scorecards below, so this adds no Meta call. Accounts with no ad account
+  // Ads delivering right now, per account. Same query (and cache entry) as
+  // /creatives, /funnels and the account page, so moving between them costs no
+  // extra Meta call. Accounts with no ad account
   // linked are absent from the response; ones Meta refused carry an error. Both
   // read "—", never 0.
   const { data: portfolio, isLoading: activeAdsLoading } = usePortfolioCreatives(creativeRange);
@@ -209,7 +203,7 @@ const Index = () => {
         {/* ── Header ───────────────────────────────────────────────────────── */}
         <PageHeader
           title="Performance"
-          description="Every client's results, and the creatives and landing pages driving or draining them"
+          description="Every client's spend, leads and appointments at a glance"
           actions={
             <>
               <DashboardPeriodPicker dateRange={dateRange} label={dateLabel} onChange={onPeriodChange} />
@@ -478,22 +472,6 @@ const Index = () => {
             </div>
           </div>
         )}
-
-        {/* ── Creative scorecard across clients ────────────────────────────── */}
-        <PortfolioCreativeBoard
-          range={creativeRange}
-          periodCaption={dateLabel}
-          accounts={dbAccounts}
-          hiddenAccounts={settings.hidden_accounts ?? []}
-        />
-
-        {/* ── Funnel scorecard across clients ──────────────────────────────── */}
-        <PortfolioFunnelBoard
-          range={creativeRange}
-          periodCaption={dateLabel}
-          accounts={dbAccounts}
-          hiddenAccounts={settings.hidden_accounts ?? []}
-        />
       </div>
     </div>
   );
