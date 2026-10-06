@@ -47,8 +47,8 @@ function Section({ id, title, allHref, allLabel, children }: { id: string; title
 }
 
 /**
- * A client's account: Performance (results, then the same creative gallery as
- * /creatives and the same funnel board as /funnels, scoped to this client),
+ * A client's account: Performance (results, then the same funnel board as /funnels
+ * and the same creative gallery as /creatives, scoped to this client),
  * Briefs, Operations, and what they told us at onboarding. The period is the
  * control every screen shares, so a range here means the same days as there.
  * The page composes; every section is its own component.
@@ -125,8 +125,8 @@ const AccountDetail = () => {
             />
             {accountId && (
               <>
-                <Section id="creatives-heading" title="Creative performance" allHref="/creatives" allLabel="All clients">
-                  <PortfolioCreativeGallery
+                <Section id="funnels-heading" title="Funnels" allHref="/funnels" allLabel="All clients">
+                  <FunnelsBoard
                     range={creativeRange}
                     periodCaption={periodLabel}
                     accounts={accounts}
@@ -134,8 +134,8 @@ const AccountDetail = () => {
                     accountId={accountId}
                   />
                 </Section>
-                <Section id="funnels-heading" title="Funnels" allHref="/funnels" allLabel="All clients">
-                  <FunnelsBoard
+                <Section id="creatives-heading" title="Creative performance" allHref="/creatives" allLabel="All clients">
+                  <PortfolioCreativeGallery
                     range={creativeRange}
                     periodCaption={periodLabel}
                     accounts={accounts}

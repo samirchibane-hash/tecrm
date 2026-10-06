@@ -7,7 +7,8 @@ import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailabl
 import { StatusPill } from "@/components/StatusPill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { CostLegend, CostVsTarget, type CostStatus } from "@/components/dashboard/CostVsTarget";
+import { CostLegend, CostVsTarget } from "@/components/dashboard/CostVsTarget";
+import { costStatus, portfolioBenchmark } from "@/components/dashboard/portfolioBenchmark";
 import { DashboardPeriodPicker } from "@/components/dashboard/DashboardPeriodPicker";
 import { useDashboardPeriod } from "@/hooks/useDashboardPeriod";
 import { usePortfolioCreatives } from "@/components/creative-performance/useCreativePerformance";
@@ -19,16 +20,6 @@ import { format, startOfDay, subDays } from "date-fns";
 import { useSettings } from "@/hooks/useSettings";
 import type { AdRow } from "@/hooks/useCouplerData";
 import { useAllAccounts } from "@/hooks/useAllAccounts";
-
-// ─── KPI helpers ─────────────────────────────────────────────────────────────
-// Cost coloring reads each account's own targets (accounts.target_cpl /
-// target_cpa, set on the account page); no target, no coloring.
-function getCostStatus(value: number, target: number | null): CostStatus | null {
-  if (value <= 0 || !target) return null;
-  if (value <= target) return "success";
-  if (value <= target * 1.25) return "warning";
-  return "danger";
-}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 const Index = () => {
@@ -59,11 +50,6 @@ const Index = () => {
   const accountIdMap = useMemo(() => {
     const map: Record<string, string> = {};
     dbAccounts.forEach((a) => { map[a.account_name] = a.id; });
-    return map;
-  }, [dbAccounts]);
-  const targetsByName = useMemo(() => {
-    const map: Record<string, { cpl: number | null; cpa: number | null }> = {};
-    dbAccounts.forEach((a) => { map[a.account_name] = { cpl: a.target_cpl, cpa: a.target_cpa }; });
     return map;
   }, [dbAccounts]);
 
@@ -188,11 +174,26 @@ const Index = () => {
         ghlCostPerLead,
         ghlAppointments,
         ghlCostPerAppt,
-        targetCpl: targetsByName[name]?.cpl ?? null,
-        targetCpa: targetsByName[name]?.cpa ?? null,
       };
     });
-  }, [accountGroups, accountIdMap, targetsByName, allGhlConversions, dateRange]);
+  }, [accountGroups, accountIdMap, allGhlConversions, dateRange]);
+
+  // One bar for every client: the portfolio's own cost per GHL lead and per
+  // appointment in this period, not per-account targets. Hidden clients are
+  // already out of tableRows, so they don't move the bar either.
+  const benchmark = useMemo(
+    () =>
+      portfolioBenchmark(
+        tableRows.map((r) => ({
+          spend: r.totalSpend,
+          spendKnown: !isError && !metaGaps.has(r.name),
+          leads: r.ghlLeads,
+          appointments: r.ghlAppointments,
+        })),
+      ),
+    [tableRows, metaGaps, isError],
+  );
+  const clientsText = (n: number) => `${n} ${n === 1 ? "client" : "clients"}`;
 
   const gapNames = tableRows.filter((r) => metaGaps.has(r.name)).map((r) => r.name);
 
@@ -293,8 +294,29 @@ const Index = () => {
         {tableRows.length > 0 && (
           <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border px-5 py-3.5">
-              <h2 className="text-[15px] font-semibold text-foreground">Clients</h2>
-              <CostLegend />
+              <div className="min-w-0">
+                <h2 className="text-[15px] font-semibold text-foreground">Clients</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                  {benchmark.cpl === null && benchmark.cpa === null ? (
+                    "No portfolio average yet: no client has GHL leads in this period"
+                  ) : (
+                    <>
+                      Portfolio average
+                      {benchmark.cpl !== null && (
+                        <span title={`Total spend ÷ total GHL leads, across the ${clientsText(benchmark.cplClients)} with leads in this period`}>
+                          {" · "}CPL {formatUsd(benchmark.cpl)} <span className="text-muted-foreground/70">({clientsText(benchmark.cplClients)})</span>
+                        </span>
+                      )}
+                      {benchmark.cpa !== null && (
+                        <span title={`Total spend ÷ total GHL appointments, across the ${clientsText(benchmark.cpaClients)} with appointments in this period`}>
+                          {" · "}CPA {formatUsd(benchmark.cpa)} <span className="text-muted-foreground/70">({clientsText(benchmark.cpaClients)})</span>
+                        </span>
+                      )}
+                    </>
+                  )}
+                </p>
+              </div>
+              <CostLegend basis="average" />
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[780px]">
@@ -335,8 +357,11 @@ const Index = () => {
                 </thead>
                 <tbody>
                   {tableRows.map((row, i) => {
-                    const cplStatus = getCostStatus(row.ghlCostPerLead, row.targetCpl);
-                    const cpaStatus = getCostStatus(row.ghlCostPerAppt, row.targetCpa);
+                    // A client whose spend Meta couldn't read has no real cost per
+                    // result, so it gets no judgement either.
+                    const known = !isError && !metaGaps.has(row.name);
+                    const cplStatus = known ? costStatus(row.ghlCostPerLead, benchmark.cpl) : null;
+                    const cpaStatus = known ? costStatus(row.ghlCostPerAppt, benchmark.cpa) : null;
                     const isLast = i === tableRows.length - 1;
                     return (
                       <tr
@@ -376,7 +401,7 @@ const Index = () => {
                         {/* CPL */}
                         <td className="py-3.5 px-4 text-right tabular-nums">
                           {row.ghlCostPerLead > 0 ? (
-                            <CostVsTarget value={row.ghlCostPerLead} target={row.targetCpl} status={cplStatus} />
+                            <CostVsTarget value={row.ghlCostPerLead} target={benchmark.cpl} status={cplStatus} basis="average" />
                           ) : (
                             <span className="text-muted-foreground">–</span>
                           )}
@@ -396,7 +421,7 @@ const Index = () => {
                         {/* CPA */}
                         <td className="py-3.5 px-4 text-right tabular-nums">
                           {row.ghlCostPerAppt > 0 ? (
-                            <CostVsTarget value={row.ghlCostPerAppt} target={row.targetCpa} status={cpaStatus} />
+                            <CostVsTarget value={row.ghlCostPerAppt} target={benchmark.cpa} status={cpaStatus} basis="average" />
                           ) : (
                             <span className="text-muted-foreground">–</span>
                           )}

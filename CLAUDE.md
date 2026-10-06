@@ -81,6 +81,13 @@ different economics. Targets live in `accounts.target_cpl` / `target_cpa` (edite
 account page's Performance tab); the Performance dashboard and creative verdicts read them.
 `AccountCard.tsx`'s `CPL_TARGET`/`APPT_TARGET` are remaining debt to migrate, not a pattern to copy.
 
+**Exception, the dashboard account table (since 2026-10-05):** its CPL / CPA coloring reads
+against one portfolio average for the period (`portfolioBenchmark`: total spend ÷ total GHL
+leads or appointments across clients that spent, have known spend and recorded at least one
+result), not per-account targets, so every client is judged on the same bar and no target
+needs setting. The header states the average and how many clients it pools. Account targets
+still drive creative and landing-page verdicts.
+
 ### 7. Charts
 
 Use the `dataviz` skill before writing any chart, tile row, or picking series colors.
@@ -116,7 +123,7 @@ The anon key ships in the bundle, so RLS is the only boundary. Keep it that way:
 **One view of creatives, one view of funnels (since 2026-10-05).** Creatives are analysed in
 `PortfolioCreativeGallery` (the Creative Performance tab of `/creatives`) and funnels in
 `FunnelsBoard` (`/funnels`). The account page's **Performance** tab shows those same two
-components with `accountId` set, under the account's KPIs; scoping only hides the client
+components with `accountId` set, under the account's KPIs (funnels first, then creatives); scoping only hides the client
 picker / client names, never changes a number. The dashboard is the account table only: the
 cross-client creative and funnel scorecards, the account page's scale/cut board, breakdowns,
 leaderboard and separate Funnel tab were removed as duplicate views. Don't build a second view
