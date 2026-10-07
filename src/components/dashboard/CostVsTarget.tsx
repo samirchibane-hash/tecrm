@@ -76,3 +76,38 @@ export function CostLegend({ basis = "target", className }: { basis?: CostBasis;
     </ul>
   );
 }
+
+const pctText = (r: number) => `${(r * 100).toFixed(1)}%`;
+
+/**
+ * A rate (higher is better) read against the portfolio average, marked the same
+ * way costs are: circle at or above, square within 20% under, triangle further under.
+ */
+export function RateVsAverage({
+  value,
+  average,
+  status,
+  label,
+  className,
+}: {
+  value: number;
+  average: number | null;
+  status: CostStatus | null;
+  /** What the rate is, for the tooltip: "Conversion", "Lead → appt". */
+  label: string;
+  className?: string;
+}) {
+  const where = status
+    ? { success: "at or above", warning: "up to 20% under", danger: "more than 20% under" }[status]
+    : null;
+  const title = average
+    ? `${label} ${pctText(value)} vs ${pctText(average)} portfolio average`
+    : "Not enough data for a portfolio average";
+  return (
+    <span className={cn("inline-flex items-center justify-end gap-1.5", className)} title={title}>
+      {status && <span aria-hidden className={cn("shrink-0", MARK[status])} />}
+      <span className={cn("font-semibold tabular-nums", status ? TEXT[status] : "text-foreground")}>{pctText(value)}</span>
+      {where && <span className="sr-only">, {where} the portfolio average</span>}
+    </span>
+  );
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { costStatus, portfolioBenchmark } from "@/components/dashboard/portfolioBenchmark";
+import { costStatus, portfolioBenchmark, rateStatus } from "@/components/dashboard/portfolioBenchmark";
 
 const client = (spend: number, leads: number, appointments = 0, spendKnown = true) => ({ spend, spendKnown, leads, appointments });
 
@@ -36,5 +36,15 @@ describe("costStatus", () => {
     expect(costStatus(51, 40)).toBe("danger");
     expect(costStatus(40, null)).toBeNull();
     expect(costStatus(0, 40)).toBeNull();
+  });
+});
+
+describe("rateStatus", () => {
+  it("reads a rate against the portfolio average, higher is better", () => {
+    expect(rateStatus(0.054, 0.046)).toBe("success"); // Meridian 1: 6 leads on 111 views
+    expect(rateStatus(0.04, 0.046)).toBe("warning");
+    expect(rateStatus(0.015, 0.046)).toBe("danger"); // Naples 1: 1 lead on 67 views
+    expect(rateStatus(null, 0.046)).toBeNull();
+    expect(rateStatus(0.05, null)).toBeNull();
   });
 });

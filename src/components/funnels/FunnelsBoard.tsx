@@ -116,6 +116,8 @@ export function FunnelsBoard({
     });
   }, [data, accounts, links, hiddenAccounts, ghl, versions, tests, variantDays, variantBookings, unattributedLeads]);
 
+  const averages = useMemo(() => ({ cvr: board.cvr, bookedRate: board.bookedRate }), [board.cvr, board.bookedRate]);
+
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return board.rows.filter((r) => {
@@ -233,6 +235,15 @@ export function FunnelsBoard({
         </div>
       </div>
 
+      {board.measuredPages > 0 && (
+        <p className="text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Portfolio average</span>
+          {board.cvr !== null && <> · Conv. <span className="font-semibold tabular-nums text-foreground">{(board.cvr * 100).toFixed(1)}%</span></>}
+          {board.bookedRate !== null && <> · Lead → appt <span className="font-semibold tabular-nums text-foreground">{(board.bookedRate * 100).toFixed(1)}%</span></>}
+          {" "}across {board.measuredPages} measured {board.measuredPages === 1 ? "page" : "pages"}. Green is at or above it, amber
+          up to 20% under, red further under.
+        </p>
+      )}
       <p className="text-[11px] text-muted-foreground">
         Spend and views from Meta Ads · leads and appts from attributed GoHighLevel contacts · {periodCaption}
         {data && <> · updated {formatDistanceToNowStrict(new Date(data.fetchedAt), { addSuffix: true })}</>}
@@ -258,7 +269,7 @@ export function FunnelsBoard({
         </p>
       ) : (
         <div className="space-y-2">
-          {rows.map((row) => <FunnelPageCard key={row.key} row={row} showAccount={!scoped} periodCaption={periodCaption} />)}
+          {rows.map((row) => <FunnelPageCard key={row.key} row={row} showAccount={!scoped} periodCaption={periodCaption} averages={averages} />)}
         </div>
       )}
     </div>

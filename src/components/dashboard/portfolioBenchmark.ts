@@ -49,3 +49,15 @@ export function costStatus(value: number, benchmark: number | null): CostStatus 
   if (value <= benchmark * 1.25) return "warning";
   return "danger";
 }
+
+/**
+ * A rate where higher is better (conversion, lead → appt) read against the
+ * portfolio average: the mirror of `costStatus`. At or above the bar, within
+ * 20% under it (1 ÷ 1.25, the same band costs get), or further under.
+ */
+export function rateStatus(value: number | null, average: number | null): CostStatus | null {
+  if (value === null || average === null || average <= 0) return null;
+  if (value >= average) return "success";
+  if (value >= average * 0.8) return "warning";
+  return "danger";
+}

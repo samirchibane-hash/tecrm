@@ -4,12 +4,14 @@ import { ChevronRight, ExternalLink, History, Megaphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCount, formatUsd } from "@/lib/format";
 import { Button } from "@/components/ui/button";
+import { RateVsAverage } from "@/components/dashboard/CostVsTarget";
+import { rateStatus } from "@/components/dashboard/portfolioBenchmark";
 import { StatusPill } from "@/components/StatusPill";
 import { Dash } from "@/components/creative-performance/CreativeBits";
 import type { FunnelRow } from "./funnelRows";
 import { SplitTestPanel } from "./SplitTestPanel";
 import { AdsSheet, HistorySheet } from "./FunnelSheets";
-import { ATTRIBUTED, historyEvents, pct, shortDate, verdictLine } from "./funnelDisplay";
+import { ATTRIBUTED, historyEvents, shortDate, verdictLine } from "./funnelDisplay";
 
 const NOT_TRACKED =
   "Not tracked: this client's GHL sub-account hasn't sent an attributed lead, so its lead count is unknown rather than zero. Map the lp_page and lp_variant contact custom fields to start counting.";
@@ -39,10 +41,13 @@ export function FunnelPageCard({
   row,
   showAccount = true,
   periodCaption,
+  averages,
 }: {
   row: FunnelRow;
   showAccount?: boolean;
   periodCaption?: string;
+  /** Portfolio averages the rates are coloured against (the board's measured pages). */
+  averages?: { cvr: number | null; bookedRate: number | null };
 }) {
   const [open, setOpen] = useState(false);
   const [sheet, setSheet] = useState<"ads" | "history" | null>(null);
@@ -94,18 +99,20 @@ export function FunnelPageCard({
           <Stat label="Leads" value={leads} title={row.verifiedLeads === null ? undefined : ATTRIBUTED} />
           <Stat
             label="Conv."
-            value={row.verifiedCvr != null ? pct(row.verifiedCvr) : <Dash title="No conversion rate for this period" />}
-            title={
-              row.verifiedInterval
-                ? `Attributed leads ÷ page views · 95% range ${pct(row.verifiedInterval.low)}–${pct(row.verifiedInterval.high)}`
-                : undefined
+            value={
+              row.verifiedCvr != null
+                ? <RateVsAverage value={row.verifiedCvr} average={averages?.cvr ?? null} status={rateStatus(row.verifiedCvr, averages?.cvr ?? null)} label="Conversion" />
+                : <Dash title="No conversion rate for this period" />
             }
           />
           <Stat label="Appts" value={appts} title={row.verifiedBooked === null ? undefined : BOOKED} />
           <Stat
             label="Lead → appt"
-            value={row.bookedRate !== null ? pct(row.bookedRate) : <Dash title="No leads to book yet" />}
-            title={row.bookedRate !== null ? "Appts ÷ attributed leads, the same GoHighLevel contacts" : undefined}
+            value={
+              row.bookedRate !== null
+                ? <RateVsAverage value={row.bookedRate} average={averages?.bookedRate ?? null} status={rateStatus(row.bookedRate, averages?.bookedRate ?? null)} label="Lead → appt" />
+                : <Dash title="No leads to book yet" />
+            }
           />
         </dl>
       </button>

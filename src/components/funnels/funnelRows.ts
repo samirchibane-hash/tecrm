@@ -216,6 +216,8 @@ export interface FunnelsBoard {
   booked: number;
   /** Booked ÷ attributed leads, over the same measured pages. */
   bookedRate: number | null;
+  /** Pages with traffic whose leads are measured: what the portfolio averages pool. */
+  measuredPages: number;
 }
 
 function rate(leads: number, views: number) {
@@ -583,5 +585,6 @@ export function buildFunnelsBoard({
     cvr: rate(leads, measuredLpv).cvr,
     booked,
     bookedRate: leads > 0 ? booked / leads : null,
+    measuredPages: measured.length,
   };
 }
