@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { FlaskConical, Globe, MousePointerClick, RefreshCw, Users } from "lucide-react";
+import { CalendarCheck, FlaskConical, Globe, MousePointerClick, RefreshCw, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -140,8 +140,8 @@ export function FunnelsBoard({
   if (isLoading || linksLoading || scopeLoading) {
     return (
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-[62px] rounded-xl" />)}
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+          {Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-[62px] rounded-xl" />)}
         </div>
         {Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
       </div>
@@ -162,7 +162,7 @@ export function FunnelsBoard({
         />
       )}
 
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
         <KpiStatCard
           label="Landing pages"
           value={formatCount(board.rows.length)}
@@ -187,6 +187,12 @@ export function FunnelsBoard({
             `${formatCount(board.measuredLpv)} views · ${formatCount(board.leads)} attributed ${board.leads === 1 ? "lead" : "leads"}` +
             (board.unattributedLeads > 0 ? ` · ${formatCount(board.unattributedLeads)} unattributed` : "")
           }
+        />
+        <KpiStatCard
+          label="Leads → appts"
+          value={board.bookedRate !== null ? `${(board.bookedRate * 100).toFixed(1)}%` : "—"}
+          icon={CalendarCheck}
+          detail={`${formatCount(board.booked)} ${board.booked === 1 ? "appt" : "appts"} from ${formatCount(board.leads)} attributed ${board.leads === 1 ? "lead" : "leads"}`}
         />
         <KpiStatCard
           label="Split tests running"
@@ -228,7 +234,7 @@ export function FunnelsBoard({
       </div>
 
       <p className="text-[11px] text-muted-foreground">
-        Spend and views from Meta Ads · leads from attributed GoHighLevel contacts · {periodCaption}
+        Spend and views from Meta Ads · leads and appts from attributed GoHighLevel contacts · {periodCaption}
         {data && <> · updated {formatDistanceToNowStrict(new Date(data.fetchedAt), { addSuffix: true })}</>}
         {" · "}entry pages only; booking and thank-you pages are funnel steps, not destinations
       </p>
@@ -252,7 +258,7 @@ export function FunnelsBoard({
         </p>
       ) : (
         <div className="space-y-2">
-          {rows.map((row) => <FunnelPageCard key={row.key} row={row} showAccount={!scoped} />)}
+          {rows.map((row) => <FunnelPageCard key={row.key} row={row} showAccount={!scoped} periodCaption={periodCaption} />)}
         </div>
       )}
     </div>

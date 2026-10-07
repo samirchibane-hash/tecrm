@@ -126,6 +126,15 @@ export interface FunnelRow {
    */
   verifiedCvr: number | null;
   verifiedInterval: { low: number; high: number } | null;
+  /**
+   * Water tests booked by this page's attributed leads, from GHL (a contact
+   * whose type flipped to "water test"). Same contacts as `verifiedLeads`, so
+   * the two divide cleanly. Null whenever `verifiedLeads` is: an unmeasured
+   * page has an unknown booked count, not zero.
+   */
+  verifiedBooked: number | null;
+  /** Booked ÷ attributed leads. Null with no leads to divide by. */
+  bookedRate: number | null;
   ads: FunnelAd[];
   versions: VersionEntry[];
   liveVersion: number | null;
@@ -153,6 +162,10 @@ export interface FunnelsBoard {
   /** Views belonging to pages whose leads are measured; the denominator of `cvr`. */
   measuredLpv: number;
   cvr: number | null;
+  /** Water tests booked by attributed leads on measured pages. */
+  booked: number;
+  /** Booked ÷ attributed leads, over the same measured pages. */
+  bookedRate: number | null;
 }
 
 function rate(leads: number, views: number) {
@@ -342,6 +355,7 @@ export function buildFunnelsBoard({
 
     const perf = perfByKey.get(key) ?? null;
     const attributed = pageBookings.reduce((s, b) => s + b.leads, 0);
+    const booked = pageBookings.reduce((s, b) => s + b.booked, 0);
     rows.push({
       key,
       url: link.url,
@@ -359,6 +373,8 @@ export function buildFunnelsBoard({
       verifiedLeads: attributed,
       verifiedCvr: null,
       verifiedInterval: null,
+      verifiedBooked: booked,
+      bookedRate: null,
       ads: (adsByKey.get(key) ?? []).sort((a, b) => b.spend - a.spend),
       versions: [...pageVersions]
         .sort((a, b) => b.valid_from.localeCompare(a.valid_from))
@@ -386,11 +402,13 @@ export function buildFunnelsBoard({
   for (const r of rows) {
     if (!r.perf || !attributedClients.has(r.accountName)) {
       r.verifiedLeads = null;
+      r.verifiedBooked = null;
       continue;
     }
     const { cvr, interval } = rate(r.verifiedLeads!, r.perf.lpv);
     r.verifiedCvr = cvr;
     r.verifiedInterval = interval;
+    r.bookedRate = r.verifiedLeads! > 0 ? r.verifiedBooked! / r.verifiedLeads! : null;
   }
 
   // Clients together, then biggest spender first, then idle pages by name — so
@@ -412,6 +430,7 @@ export function buildFunnelsBoard({
   const measured = withTraffic.filter((r) => r.verifiedLeads !== null);
   const leads = measured.reduce((s, r) => s + (r.verifiedLeads ?? 0), 0);
   const measuredLpv = measured.reduce((s, r) => s + (r.perf?.lpv ?? 0), 0);
+  const booked = measured.reduce((s, r) => s + (r.verifiedBooked ?? 0), 0);
 
   return {
     rows,
@@ -426,5 +445,7 @@ export function buildFunnelsBoard({
     /** Over the views of pages whose leads are actually measured, not all views. */
     measuredLpv,
     cvr: rate(leads, measuredLpv).cvr,
+    booked,
+    bookedRate: leads > 0 ? booked / leads : null,
   };
 }

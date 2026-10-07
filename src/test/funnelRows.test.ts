@@ -335,3 +335,37 @@ describe("split test arms", () => {
     expect(decided).toBe(false);
   });
 });
+
+describe("appointments per page", () => {
+  it("counts the water tests booked by the page's attributed leads, with lead → appt", () => {
+    const b = board({
+      links: [link("Kinetico", "https://k.co/lp-1", "LP 1")],
+      portfolio: [account("a1", "Kinetico", [adTo("one", "https://k.co/lp-1", 900, 20, 450)])],
+      variantBookings: [attributed("https://k.co/lp-1", "a", 6, 2), attributed("https://k.co/lp-1", "b", 4, 1)],
+    });
+    expect(b.rows[0].verifiedBooked).toBe(3);
+    expect(b.rows[0].bookedRate).toBeCloseTo(3 / 10);
+    expect(b.booked).toBe(3);
+    expect(b.bookedRate).toBeCloseTo(3 / 10);
+  });
+
+  it("keeps a real zero as zero for a client that sends attribution", () => {
+    const b = board({
+      links: [link("Kinetico", "https://k.co/lp-1", "LP 1")],
+      portfolio: [account("a1", "Kinetico", [adTo("one", "https://k.co/lp-1", 900, 20, 450)])],
+      variantBookings: [attributed("https://k.co/lp-1", "a", 5, 0)],
+    });
+    expect(b.rows[0].verifiedBooked).toBe(0);
+    expect(b.rows[0].bookedRate).toBe(0);
+  });
+
+  it("reads appointments as not tracked when the client sends no attribution", () => {
+    const b = board({
+      links: [link("Kinetico", "https://k.co/lp-1", "LP 1")],
+      portfolio: [account("a1", "Kinetico", [adTo("one", "https://k.co/lp-1", 900, 20, 450)])],
+    });
+    expect(b.rows[0].verifiedBooked).toBeNull();
+    expect(b.rows[0].bookedRate).toBeNull();
+    expect(b.bookedRate).toBeNull();
+  });
+});
