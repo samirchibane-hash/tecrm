@@ -339,8 +339,16 @@ export function buildFunnelsBoard({
     if (entryOnly && !isEntryPage(link.url)) continue;
 
     const key = normalizePageUrl(link.url);
-    const copy = detectPageCopy(link);
     const pageVersions = versionsByKey.get(key) ?? [];
+    // A split-test router is a redirect with no <h1>, so the sync reads no copy
+    // off it. Its copy is its arms': fall back to the live control arm (A, else
+    // the lowest letter) recorded on this page, rather than "not synced".
+    const control = pageVersions
+      .filter((v) => v.valid_to === null && v.page_headline)
+      .sort((a, b) => (a.variant ?? "a").localeCompare(b.variant ?? "a"))[0];
+    const copy = detectPageCopy(
+      link.page_headline || !control ? link : { ...link, page_headline: control.page_headline },
+    );
     const pageDays = daysByKey.get(key) ?? [];
     const pageBookings = bookingsByKey.get(key) ?? [];
     const within = (t: SplitTestRecord) => (day: string) =>

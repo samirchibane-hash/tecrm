@@ -369,3 +369,16 @@ describe("appointments per page", () => {
     expect(b.bookedRate).toBeNull();
   });
 });
+
+describe("split-test router copy", () => {
+  it("shows the live control arm's headline when the router itself has none", () => {
+    const b = board({
+      links: [link("Kinetico", "https://k.co/lp-1", "LP 1")],
+      versions: [
+        { url: "https://k.co/lp-1", version: 2, variant: "b", page_headline: "Authority", valid_from: "2026-09-24", valid_to: null },
+        { url: "https://k.co/lp-1", version: 1, variant: "a", page_headline: "Problem", valid_from: "2026-09-24", valid_to: null },
+      ],
+    });
+    expect(b.rows[0].headline).toBe("Problem");
+  });
+});
