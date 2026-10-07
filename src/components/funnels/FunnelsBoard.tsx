@@ -102,25 +102,33 @@ export function FunnelsBoard({
     return { byAccount, since: period?.since, until: period?.until };
   }, [ghlRows, period]);
 
-  const board = useMemo(() => {
+  const { board, portfolioBoard } = useMemo(() => {
     // Pages are judged against the whole visible portfolio's cost per website
     // lead, not the scoped client alone and not a manual target.
     const bar = portfolioCostPer(data?.accounts ?? [], "website", "leads", hiddenSetting);
-    const funnel = analyzePortfolioFunnel(data?.accounts ?? [], accounts, links, hiddenAccounts, ghl, versions, bar);
-    return buildFunnelsBoard({
-      links,
-      pages: funnel.pages,
-      portfolio: data?.accounts ?? [],
-      versions,
-      tests,
-      variantDays,
-      variantBookings,
-      unattributedLeads,
-      hidden: hiddenAccounts,
-    });
-  }, [data, accounts, links, hiddenAccounts, hiddenSetting, ghl, versions, tests, variantDays, variantBookings, unattributedLeads]);
+    const build = (hidden: string[]) =>
+      buildFunnelsBoard({
+        links,
+        pages: analyzePortfolioFunnel(data?.accounts ?? [], accounts, links, hidden, ghl, versions, bar).pages,
+        portfolio: data?.accounts ?? [],
+        versions,
+        tests,
+        variantDays,
+        variantBookings,
+        unattributedLeads,
+        hidden,
+      });
+    const board = build(hiddenAccounts);
+    // On a client's own page the board holds only that client, so its average
+    // would be the client itself and every page would read green. The bar is
+    // always the whole visible portfolio's, the same one /funnels shows.
+    return { board, portfolioBoard: scoped ? build(hiddenSetting) : board };
+  }, [data, accounts, links, hiddenAccounts, hiddenSetting, scoped, ghl, versions, tests, variantDays, variantBookings, unattributedLeads]);
 
-  const averages = useMemo(() => ({ cvr: board.cvr, bookedRate: board.bookedRate }), [board.cvr, board.bookedRate]);
+  const averages = useMemo(
+    () => ({ cvr: portfolioBoard.cvr, bookedRate: portfolioBoard.bookedRate }),
+    [portfolioBoard.cvr, portfolioBoard.bookedRate],
+  );
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -239,12 +247,12 @@ export function FunnelsBoard({
         </div>
       </div>
 
-      {board.measuredPages > 0 && (
+      {portfolioBoard.measuredPages > 0 && (
         <p className="text-xs text-muted-foreground">
           <span className="font-medium text-foreground">Portfolio average</span>
-          {board.cvr !== null && <> · Conv. <span className="font-semibold tabular-nums text-foreground">{(board.cvr * 100).toFixed(1)}%</span></>}
-          {board.bookedRate !== null && <> · Lead → appt <span className="font-semibold tabular-nums text-foreground">{(board.bookedRate * 100).toFixed(1)}%</span></>}
-          {" "}across {board.measuredPages} measured {board.measuredPages === 1 ? "page" : "pages"}. Green is at or above it, amber
+          {portfolioBoard.cvr !== null && <> · Conv. <span className="font-semibold tabular-nums text-foreground">{(portfolioBoard.cvr * 100).toFixed(1)}%</span></>}
+          {portfolioBoard.bookedRate !== null && <> · Lead → appt <span className="font-semibold tabular-nums text-foreground">{(portfolioBoard.bookedRate * 100).toFixed(1)}%</span></>}
+          {" "}across {portfolioBoard.measuredPages} measured {portfolioBoard.measuredPages === 1 ? "page" : "pages"}{scoped ? " across every client" : ""}. Green is at or above it, amber
           up to 20% under, red further under.
         </p>
       )}

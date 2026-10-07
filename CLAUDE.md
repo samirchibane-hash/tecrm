@@ -211,7 +211,9 @@ tested in `src/test/`. Keep it that way:
 - **Funnel rows are coloured against one portfolio average instead** (same idea as the dashboard's account table):
   Conv. and Lead → appt use `rateStatus` against the board's pooled measured-page rates (green at or above, amber
   up to 20% under, red further under, shape-marked via `RateVsAverage`), and the board states the average and how
-  many pages it pools. It's testing money: show how far off, never a verdict label.
+  many pages it pools. It's testing money: show how far off, never a verdict label. On a client's own page (scoped board) the bar is still
+  the whole visible portfolio's, never the client's own pages, which with one test per client would always
+  read green.
 - The function returns paused ads that spent in the period only to callers that send `v: 2`.
 - The Performance dashboard is performance only: creative requests live on `/creatives` and
   tasks on `/tasks`, and neither is duplicated back onto the dashboard.
