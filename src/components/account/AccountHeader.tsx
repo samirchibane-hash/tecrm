@@ -1,6 +1,7 @@
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { ArrowLeft, Copy, Phone, SquareArrowOutUpRight } from "lucide-react";
 import { toast } from "sonner";
+import { AccountSwitcher } from "./AccountSwitcher";
 import { DriveHeaderButton } from "./DriveFolder";
 import type { AccountRow } from "./queries";
 
@@ -24,7 +25,7 @@ export function AccountHeader({ accountName, account }: { accountName: string; a
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-bold text-foreground">{accountName}</h1>
+          <AccountSwitcher accountName={accountName} />
           <div className="mt-0.5 flex items-center gap-1.5">
             <p className="text-xs text-muted-foreground">Client account</p>
             {account?.id && (
