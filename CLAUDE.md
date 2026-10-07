@@ -188,6 +188,15 @@ tested in `src/test/`. Keep it that way:
   version *only when the headline, subhead or offer line actually differs*: a blob whose sha
   moved for a pixel id or a script is not a new version. Never backfill a `valid_from` to make
   a period look clean — an unknown version is `null`, not v1.
+- **Split tests are read on chance to be best (since 2026-10-07)** (`scoreArms` in `funnels/funnelRows.ts`,
+  `chanceToBeBest` in `lib/stats.ts`): Beta posteriors on views → attributed lead per arm, seeded Monte Carlo so the
+  number never flickers. **Winner** = ≥95% chance, every arm ≥100 views, 3+ leads; **Leading** = ≥75% (a lean, never
+  a call); **Losing** only once a winner is called. Lift is against the control (first declared letter). The panel
+  estimates views per arm and days to a call at the last 7 days' pace, and says "gap too small to wait for" past
+  2,000 more views an arm. Arms are the test's declared weights only: stray views on retired letters are not arms.
+- **A page's verdict (winner / money waster) counts the same leads its row shows** (attributed GHL contacts), never
+  Meta's pixel leads; a client with no attribution is "unscored", not judged on the pixel. It is a verdict on the
+  page's cost per lead vs the client's target, not on a split-test arm.
 - The function returns paused ads that spent in the period only to callers that send `v: 2`.
 - The Performance dashboard is performance only: creative requests live on `/creatives` and
   tasks on `/tasks`, and neither is duplicated back onto the dashboard.

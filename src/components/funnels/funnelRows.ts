@@ -10,9 +10,10 @@
 
 import type { CreativeAd, PortfolioAccount } from "@/components/creative-performance/useCreativePerformance";
 import { landingPageKey } from "@/components/creative-performance/breakdowns";
-import { twoProportionPValue, wilsonInterval } from "@/lib/stats";
+import { chanceToBeBest, viewsToCall, wilsonInterval } from "@/lib/stats";
 import { normalizePageUrl, pagePath } from "@/lib/urls";
 import { detectPageCopy } from "@/components/funnel/funnelMath";
+import { judge } from "@/components/creative-performance/verdicts";
 import type {
   FunnelPageCopy,
   FunnelPageVersion,
@@ -21,9 +22,16 @@ import type {
 import type { AngleKey, OfferKey } from "@/components/creative-performance/labels";
 import type { SplitTestRecord, VariantBookingRecord, VariantDayRecord } from "./useFunnelsData";
 
-/** Below this many views on an arm, a split test's rate is too noisy to read. */
+/** Below this many views on an arm, a split test can't be called, however lopsided. */
 export const MIN_ARM_VIEWS = 100;
-const SIGNIFICANCE = 0.05;
+/** Chance-to-be-best that calls a winner (with every arm over the view floor). */
+export const CALL_AT = 0.95;
+/** Chance-to-be-best that earns "Leading": a lean worth watching, never a call. */
+export const LEAN_AT = 0.75;
+/** A winner needs at least this many leads: two leads is an anecdote. */
+const MIN_WINNER_LEADS = 3;
+/** Past this many more views per arm, the gap is too small to be worth waiting for. */
+export const NOT_WORTH_WAITING = 2000;
 
 /** Booking, thank-you and confirmation pages are funnel steps, not entry pages. */
 export const isEntryPage = (url: string) => !/schedule|calendar|booking|thank|confirm/i.test(url);
@@ -64,9 +72,33 @@ export interface SplitArm {
   booked: number | null;
   /** Booked per lead, both counted by GHL so the ratio is from one source. */
   bookedRate: number | null;
-  /** "leader" once an arm is ahead with enough traffic; "behind" when beaten at 95%. */
-  status: "leader" | "behind" | "even" | "needs_traffic";
-  pValue: number | null;
+  /**
+   * Chance this arm has the best true lead rate (views → attributed lead),
+   * from Beta posteriors over every measured arm. Null when the arm isn't
+   * measured. The arms' chances sum to 1.
+   */
+  chanceBest: number | null;
+  /** Same, on views → booked appointment. Null unless 2+ arms have booking data. */
+  apptChanceBest: number | null;
+  /** Lead rate relative to the control arm (first letter): 0.25 = 25% better. */
+  lift: number | null;
+  /**
+   * winner: ≥95% chance to be best, every arm over the view floor, 3+ leads.
+   * leading: ≥75% chance, not callable yet. trailing: the other arms while one leads.
+   * losing: ≤5% chance once a winner is called. even: measured, nothing separates.
+   * needs_traffic: under the view floor with no lean. not_tracked: no attribution.
+   */
+  status: "winner" | "leading" | "trailing" | "losing" | "even" | "needs_traffic" | "not_tracked";
+}
+
+/** How far a running test is from a call, at the traffic it is getting now. */
+export interface CallEstimate {
+  /** More views each arm needs before the current gap would read at 95%. */
+  viewsPerArm: number;
+  /** At the last 7 days' pace. Null when the test had no views in that window. */
+  days: number | null;
+  /** The gap is so small that waiting isn't worth it: call it even, test something bolder. */
+  notWorthWaiting: boolean;
 }
 
 export interface SplitTest {
@@ -77,8 +109,15 @@ export interface SplitTest {
   stoppedAt: string | null;
   winnerVariant: string | null;
   arms: SplitArm[];
-  /** True once some arm is ahead at 95% with both arms over the view floor. */
+  /** True once an arm is a winner. */
   decided: boolean;
+  /** The arm most likely to be best, and how likely. Null with fewer than two measured arms. */
+  leader: string | null;
+  leaderChance: number | null;
+  /** The arm lift is measured against: the first letter (a, or c in a second era). */
+  control: string | null;
+  callIn: CallEstimate | null;
+  daysRunning: number;
 }
 
 /** One recorded copy version, newest first in the row. */
@@ -174,27 +213,75 @@ function rate(leads: number, views: number) {
 }
 
 /**
- * Score a test's arms against each other. The leader is only called once both
- * it and the arm it beat clear the view floor — an arm that is "ahead" on 30
- * views is ahead of nothing.
+ * Score a test's arms on chance to be best. A winner needs a 95% chance with
+ * every arm over the view floor and 3+ leads: 2 leads to 4 on 80 views is a
+ * lean ("Leading"), not a result, however good it looks.
  */
-export function scoreArms(arms: SplitArm[]): { arms: SplitArm[]; decided: boolean } {
-  const eligible = arms.filter((a) => a.views >= MIN_ARM_VIEWS && a.cvr !== null);
-  for (const a of arms) a.status = a.views >= MIN_ARM_VIEWS && a.cvr !== null ? "even" : "needs_traffic";
-  if (eligible.length < 2) return { arms, decided: false };
-
-  const leader = eligible.reduce((a, b) => (b.cvr! > a.cvr! ? b : a));
-  leader.status = "leader";
-  let decided = false;
-  for (const a of eligible) {
-    if (a === leader) continue;
-    a.pValue = twoProportionPValue(leader.leads!, leader.views, a.leads!, a.views);
-    if (a.pValue !== null && a.pValue < SIGNIFICANCE) {
-      a.status = "behind";
-      decided = true;
-    }
+export function scoreArms(arms: SplitArm[]): { arms: SplitArm[]; decided: boolean; leader: SplitArm | null } {
+  for (const a of arms) {
+    a.chanceBest = null;
+    a.apptChanceBest = null;
+    a.lift = null;
+    a.status = a.leads === null ? "not_tracked" : "needs_traffic";
   }
-  return { arms, decided };
+  const measured = arms.filter((a) => a.leads !== null && a.views > 0);
+  if (measured.length < 2) return { arms, decided: false, leader: null };
+
+  const chances = chanceToBeBest(measured.map((a) => ({ successes: Math.min(a.leads!, a.views), trials: a.views })));
+  measured.forEach((a, i) => (a.chanceBest = chances[i]));
+
+  const booking = measured.filter((a) => a.booked !== null);
+  if (booking.length >= 2) {
+    const appt = chanceToBeBest(booking.map((a) => ({ successes: Math.min(a.booked!, a.views), trials: a.views })));
+    booking.forEach((a, i) => (a.apptChanceBest = appt[i]));
+  }
+
+  const control = arms[0];
+  for (const a of measured) {
+    if (a !== control && control.cvr !== null && control.cvr > 0 && a.cvr !== null) a.lift = a.cvr / control.cvr - 1;
+  }
+
+  const overFloor = measured.every((a) => a.views >= MIN_ARM_VIEWS);
+  const leader = measured.reduce((x, y) => (y.chanceBest! > x.chanceBest! ? y : x));
+  const won = overFloor && leader.chanceBest! >= CALL_AT && leader.leads! >= MIN_WINNER_LEADS;
+  const leaning = !won && leader.chanceBest! >= LEAN_AT;
+
+  for (const a of measured) {
+    if (a === leader) a.status = won ? "winner" : leaning ? "leading" : overFloor ? "even" : "needs_traffic";
+    else if (won) a.status = a.chanceBest! <= 1 - CALL_AT ? "losing" : "trailing";
+    else if (leaning) a.status = "trailing";
+    else a.status = overFloor ? "even" : "needs_traffic";
+  }
+  return { arms, decided: won, leader };
+}
+
+/**
+ * Views each arm still needs for the leader's gap over the runner-up to read
+ * at 95%, and how many days that is at the last week's pace. Rates are
+ * smoothed (+1/+2) so a 0-lead arm still yields an estimate.
+ */
+function estimateCall(arms: SplitArm[], leader: SplitArm, days: VariantDayRecord[]): CallEstimate | null {
+  const rival = arms
+    .filter((a) => a !== leader && a.chanceBest !== null)
+    .reduce<SplitArm | null>((x, y) => (!x || y.chanceBest! > x.chanceBest! ? y : x), null);
+  if (!rival) return null;
+  const p = (a: SplitArm) => (a.leads! + 1) / (a.views + 2);
+  const need = viewsToCall(p(leader), p(rival));
+  const have = Math.min(leader.views, rival.views);
+  const viewsPerArm = need === null ? Infinity : Math.max(need - have, MIN_ARM_VIEWS - have, 0);
+
+  const latest = days.reduce((m, d) => (d.day > m ? d.day : m), "");
+  let days7: number | null = null;
+  if (latest) {
+    const from = new Date(new Date(latest).getTime() - 6 * 864e5).toISOString().slice(0, 10);
+    const views = days
+      .filter((d) => d.day >= from && (d.variant === leader.variant || d.variant === rival.variant))
+      .reduce((s, d) => s + d.views, 0);
+    const perArmPerDay = views / 7 / 2;
+    days7 = perArmPerDay > 0 && Number.isFinite(viewsPerArm) ? Math.ceil(viewsPerArm / perArmPerDay) : null;
+  }
+  const notWorthWaiting = !Number.isFinite(viewsPerArm) || viewsPerArm > NOT_WORTH_WAITING;
+  return { viewsPerArm: Number.isFinite(viewsPerArm) ? viewsPerArm : NOT_WORTH_WAITING + 1, days: notWorthWaiting ? null : days7, notWorthWaiting };
 }
 
 function buildTest(
@@ -218,8 +305,12 @@ function buildTest(
     e.booked += b.booked;
     bookedBy.set(b.variant, e);
   }
-  // Every arm the test declares weights for, plus any that reported events.
-  const keys = [...new Set([...Object.keys(record.weights ?? {}), ...viewsBy.keys()])].sort();
+  // The arms the test declares. Views on other letters in the window are old
+  // arm URLs still being visited (bookmarks, returning visitors) — not part of
+  // this test, and counting them would hand "control" to a retired arm. Only a
+  // test with no weights recorded falls back to whatever reported events.
+  const declared = Object.keys(record.weights ?? {});
+  const keys = (declared.length > 0 ? declared : [...viewsBy.keys()]).sort();
   const headlineFor = (variant: string) =>
     versions.filter((v) => v.variant === variant).sort((a, b) => b.valid_from.localeCompare(a.valid_from))[0]
       ?.page_headline ?? null;
@@ -234,7 +325,9 @@ function buildTest(
       views,
       leads: crm?.leads ?? null,
       status: "needs_traffic",
-      pValue: null,
+      chanceBest: null,
+      apptChanceBest: null,
+      lift: null,
       booked: crm?.booked ?? null,
       bookedRate: crm && crm.leads > 0 ? crm.booked / crm.leads : null,
       ...(crm ? rate(crm.leads, views) : { cvr: null, interval: null }),
@@ -242,15 +335,22 @@ function buildTest(
   });
 
   const scored = scoreArms(arms);
+  const running = record.status === "running";
+  const end = record.stopped_at ? new Date(record.stopped_at).getTime() : Date.now();
   return {
     id: record.id,
     name: record.name,
-    running: record.status === "running",
+    running,
     startedAt: record.started_at,
     stoppedAt: record.stopped_at,
     winnerVariant: record.winner_variant,
     arms: scored.arms,
     decided: scored.decided,
+    leader: scored.leader?.variant ?? null,
+    leaderChance: scored.leader?.chanceBest ?? null,
+    control: scored.arms[0]?.variant ?? null,
+    callIn: running && scored.leader && !scored.decided ? estimateCall(scored.arms, scored.leader, days) : null,
+    daysRunning: Math.max(0, Math.floor((end - new Date(record.started_at).getTime()) / 864e5)),
   };
 }
 
@@ -411,8 +511,30 @@ export function buildFunnelsBoard({
     if (!r.perf || !attributedClients.has(r.accountName)) {
       r.verifiedLeads = null;
       r.verifiedBooked = null;
+      // The page verdict counts the same leads as the row. With none measured,
+      // there is nothing to judge — Meta's pixel count is not a stand-in.
+      if (r.perf) {
+        r.perf = {
+          ...r.perf,
+          verdict: "unscored",
+          reason: "Leads not tracked yet: no attributed GoHighLevel lead for this client, so cost per lead is unknown",
+          costPer: null,
+          benchmarkIndex: null,
+        };
+      }
       continue;
     }
+    // Judge the page on the leads this row displays (attributed GHL contacts),
+    // not Meta's pixel leads, which count one opt-in several times: a verdict
+    // and the numbers beside it must come from one source.
+    const j = judge({ spend: r.perf.spend, results: r.verifiedLeads! }, r.perf.benchmark, "leads");
+    r.perf = {
+      ...r.perf,
+      verdict: j.verdict,
+      reason: j.reason,
+      costPer: j.costPer,
+      benchmarkIndex: j.costPer !== null && r.perf.benchmark ? j.costPer / r.perf.benchmark.costPer : null,
+    };
     const { cvr, interval } = rate(r.verifiedLeads!, r.perf.lpv);
     r.verifiedCvr = cvr;
     r.verifiedInterval = interval;

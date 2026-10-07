@@ -10,7 +10,7 @@ import { ANGLE_LABEL, OFFER_LABEL } from "@/components/creative-performance/labe
 import type { FunnelRow } from "./funnelRows";
 import { SplitTestPanel } from "./SplitTestPanel";
 import { AdsSheet, HistorySheet } from "./FunnelSheets";
-import { ATTRIBUTED, historyEvents, pct, shortDate } from "./funnelDisplay";
+import { ATTRIBUTED, historyEvents, pct, shortDate, verdictLine } from "./funnelDisplay";
 
 const NOT_TRACKED =
   "Not tracked: this client's GHL sub-account hasn't sent an attributed lead, so its lead count is unknown rather than zero. Map the lp_page and lp_variant contact custom fields to start counting.";
@@ -74,7 +74,10 @@ export function FunnelPageCard({
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="truncate text-sm font-semibold text-foreground">{row.label}</span>
             {showAccount && <span className="truncate text-xs text-muted-foreground">{row.accountName}</span>}
-            {row.runningTest && <StatusPill status="info">Split test running</StatusPill>}
+            {row.runningTest && (() => {
+              const v = verdictLine(row.runningTest);
+              return <span title={v.detail}><StatusPill status={v.tone}>{v.short}</StatusPill></span>;
+            })()}
             {!perf && <StatusPill status="neutral">No ad traffic</StatusPill>}
             {perf && <VerdictPill verdict={perf.verdict} reason={perf.reason} />}
           </div>

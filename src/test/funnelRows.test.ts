@@ -43,7 +43,9 @@ const arm = (variant: string, views: number, leads: number): SplitArm => ({
   booked: null,
   bookedRate: null,
   status: "needs_traffic",
-  pValue: null,
+  chanceBest: null,
+  apptChanceBest: null,
+  lift: null,
 });
 
 function board(opts: {
@@ -301,7 +303,7 @@ describe("booked appointments per arm", () => {
     expect(armA.views).toBe(300);
     expect(armA.leads).toBeNull();
     expect(armA.cvr).toBeNull();
-    expect(armA.status).toBe("needs_traffic");
+    expect(armA.status).toBe("not_tracked");
   });
 
   it("ignores bookings from outside the test's window", () => {
@@ -315,24 +317,70 @@ describe("booked appointments per arm", () => {
 });
 
 describe("split test arms", () => {
-  it("calls no leader until two arms clear the view floor", () => {
-    const { arms, decided } = scoreArms([arm("a", MIN_ARM_VIEWS - 1, 0), arm("b", MIN_ARM_VIEWS - 1, 20)]);
-    expect(arms.every((a) => a.status === "needs_traffic")).toBe(true);
+  it("Meridian 1: D 4 leads vs C 2 on ~80 views each is a lean, not a winner, and C is not a loser", () => {
+    const { arms, decided, leader } = scoreArms([arm("c", 79, 2), arm("d", 80, 4)]);
+    expect(leader!.variant).toBe("d");
     expect(decided).toBe(false);
+    const d = arms.find((a) => a.variant === "d")!;
+    const c = arms.find((a) => a.variant === "c")!;
+    expect(d.chanceBest!).toBeGreaterThan(0.7);
+    expect(d.chanceBest!).toBeLessThan(0.9);
+    expect(d.status).not.toBe("winner");
+    expect(c.status).not.toBe("losing");
+    expect(d.lift).toBeCloseTo(4 / 80 / (2 / 79) - 1);
   });
 
-  it("names the leader and marks a beaten arm behind at 95%", () => {
+  it("calls a winner and a loser once the gap is sure and both arms clear the floor", () => {
     const { arms, decided } = scoreArms([arm("a", 1000, 30), arm("b", 1000, 90)]);
-    expect(arms.find((a) => a.variant === "b")!.status).toBe("leader");
-    expect(arms.find((a) => a.variant === "a")!.status).toBe("behind");
+    expect(arms.find((a) => a.variant === "b")!.status).toBe("winner");
+    expect(arms.find((a) => a.variant === "a")!.status).toBe("losing");
     expect(decided).toBe(true);
   });
 
-  it("leaves two close arms undecided rather than crowning one", () => {
-    const { arms, decided } = scoreArms([arm("a", 500, 50), arm("b", 500, 54)]);
-    expect(arms.find((a) => a.variant === "b")!.status).toBe("leader");
-    expect(arms.find((a) => a.variant === "a")!.status).toBe("even");
+  it("never crowns an arm under the view floor, however lopsided", () => {
+    const { arms, decided } = scoreArms([arm("a", MIN_ARM_VIEWS - 1, 0), arm("b", MIN_ARM_VIEWS - 1, 20)]);
+    expect(arms.find((a) => a.variant === "b")!.status).toBe("leading");
     expect(decided).toBe(false);
+  });
+
+  it("leaves two close arms too close to call", () => {
+    const { arms, decided } = scoreArms([arm("a", 500, 50), arm("b", 500, 52)]);
+    expect(arms.every((a) => a.status === "even")).toBe(true);
+    expect(decided).toBe(false);
+  });
+
+  it("gives the same chance to win on every render", () => {
+    const one = scoreArms([arm("c", 79, 2), arm("d", 80, 4)]).arms.map((a) => a.chanceBest);
+    const two = scoreArms([arm("c", 79, 2), arm("d", 80, 4)]).arms.map((a) => a.chanceBest);
+    expect(one).toEqual(two);
+  });
+});
+
+describe("split test call estimate", () => {
+  const links = [link("Kinetico", "https://k.co/lp-1", "LP 1")];
+  const tests: SplitTestRecord[] = [{
+    id: "t1", url: "https://k.co/lp-1", name: "c vs d", status: "running",
+    weights: { c: 50, d: 50 }, started_at: "2026-10-01T00:00:00Z", stopped_at: null, winner_variant: null,
+  }];
+  const days = (variant: string, perDay: number): VariantDayRecord[] =>
+    Array.from({ length: 7 }, (_, i) => ({ url: "https://k.co/lp-1", variant, day: `2026-10-0${i + 1}`, views: perDay, leads: 0 }));
+
+  it("estimates views and days to a call from this week's pace, ignoring retired arms", () => {
+    const b = board({
+      links,
+      tests,
+      variantDays: [...days("c", 11), ...days("d", 11), ...days("a", 1)],
+      variantBookings: [
+        { ...attributed("https://k.co/lp-1", "c", 2), day: "2026-10-03" },
+        { ...attributed("https://k.co/lp-1", "d", 4, 1), day: "2026-10-03" },
+      ],
+    });
+    const t = b.rows[0].runningTest!;
+    expect(t.arms.map((a) => a.variant)).toEqual(["c", "d"]);
+    expect(t.control).toBe("c");
+    expect(t.leader).toBe("d");
+    expect(t.callIn!.viewsPerArm).toBeGreaterThan(0);
+    if (!t.callIn!.notWorthWaiting) expect(t.callIn!.days).toBe(Math.ceil(t.callIn!.viewsPerArm / 11));
   });
 });
 
