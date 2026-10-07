@@ -76,19 +76,18 @@ export function FunnelPageCard({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="truncate text-sm font-semibold text-foreground">{row.label}</span>
-            {showAccount && <span className="truncate text-xs text-muted-foreground">{row.accountName}</span>}
+            {/* The client is the title across the portfolio; on a client's own page every
+                card is that client, so the page name leads there instead. */}
+            <span className="truncate text-sm font-semibold text-foreground">{showAccount ? row.accountName : row.label}</span>
+            {showAccount && <span className="truncate text-xs text-muted-foreground">{row.label}</span>}
             {row.runningTest && (() => {
               const v = verdictLine(row.runningTest);
               return v.signal ? <span title={v.detail}><StatusPill status={v.tone}>{v.short}</StatusPill></span> : null;
             })()}
             {!perf && <StatusPill status="neutral">No ad traffic</StatusPill>}
           </div>
-          <p className="mt-1 line-clamp-1 text-xs text-foreground/80" title={row.headline ?? undefined}>
-            {row.headline ? `“${row.headline}”` : "Headline not synced"}
-          </p>
           {/* Phones get the two numbers that matter as one line instead of the grid. */}
-          <p className="mt-1 text-xs tabular-nums text-muted-foreground md:hidden">
+          <p className="mt-0.5 text-xs tabular-nums text-muted-foreground md:hidden">
             {perf ? formatUsd(perf.spend) : "No spend"} · {leads} leads · {appts} appts
           </p>
         </div>
