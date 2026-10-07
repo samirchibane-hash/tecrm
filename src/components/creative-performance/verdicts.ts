@@ -17,7 +17,7 @@
 
 import { formatCount, formatUsd } from "@/lib/format";
 import { poissonCdf, poissonSf } from "@/lib/stats";
-import type { CreativeAd, LeadChannel } from "./useCreativePerformance";
+import type { CreativeAd, LeadChannel, PortfolioAccount } from "./useCreativePerformance";
 
 export type Metric = "leads" | "appointments";
 export type Verdict = "winner" | "waster" | "on_par" | "learning" | "unscored" | "no_delivery";
@@ -42,8 +42,11 @@ export const METRIC_NOUN: Record<Metric, { one: string; many: string; costLabel:
 
 export interface Benchmark {
   costPer: number;
-  source: "target" | "average";
+  /** portfolio = pooled across every visible client (the default since 2026-10-07); average = this account's own. */
+  source: "target" | "average" | "portfolio";
 }
+
+const SOURCE_TEXT: Record<Benchmark["source"], string> = { target: "target", average: "account avg", portfolio: "portfolio avg" };
 
 export interface Judgement {
   verdict: Verdict;
@@ -55,7 +58,7 @@ export interface Judgement {
 }
 
 export const benchmarkText = (b: Benchmark, metric: Metric) =>
-  `${formatUsd(b.costPer)} ${b.source === "target" ? "target" : "account avg"} per ${METRIC_NOUN[metric].one}`;
+  `${formatUsd(b.costPer)} ${SOURCE_TEXT[b.source]} per ${METRIC_NOUN[metric].one}`;
 
 /** Results that count for this ad: its own lead source (never website + form summed), or appointments. */
 export function resultsFor(ad: Pick<CreativeAd, "leadChannel" | "webLeads" | "formLeads" | "appointments">, metric: Metric): number {
@@ -66,9 +69,10 @@ export function resultsFor(ad: Pick<CreativeAd, "leadChannel" | "webLeads" | "fo
 export function computeBenchmark(
   ads: CreativeAd[],
   metric: Metric,
-  target: number | null | undefined,
+  target: number | Benchmark | null | undefined,
 ): Benchmark | null {
-  if (target && target > 0) return { costPer: target, source: "target" };
+  if (target && typeof target === "object") return target;
+  if (typeof target === "number" && target > 0) return { costPer: target, source: "target" };
   const spend = ads.reduce((s, a) => s + a.spend, 0);
   const results = ads.reduce((s, a) => s + resultsFor(a, metric), 0);
   return results > 0 ? { costPer: spend / results, source: "average" } : null;
@@ -107,7 +111,7 @@ export function judge(
   const b = benchmark.costPer;
   const expected = spend / b;
   const cost = costPer !== null ? `${formatUsd(costPer)} per ${noun.one}` : `0 ${noun.many}`;
-  const vs = `${formatUsd(b)} ${benchmark.source === "target" ? "target" : "avg"}`;
+  const vs = `${formatUsd(b)} ${SOURCE_TEXT[benchmark.source]}`;
 
   // A winner has also spent at least one benchmark cost: 3 leads on $24 is a
   // promising early read, not a reason to move budget.
@@ -166,7 +170,7 @@ export interface Scorecard {
   excessSpend: number;
 }
 
-export function scoreAds(ads: CreativeAd[], metric: Metric, target: number | null | undefined): Scorecard {
+export function scoreAds(ads: CreativeAd[], metric: Metric, target: number | Benchmark | null | undefined): Scorecard {
   const delivered = ads.filter((a) => a.delivered && a.spend > 0);
   const benchmark = computeBenchmark(delivered, metric, target);
   const trackingGap = isTrackingGap(delivered, metric, benchmark);
@@ -215,4 +219,31 @@ export function targetFor(channel: LeadChannel, metric: Metric, targets: { cpl: 
 export function dominantChannel(ads: CreativeAd[]): LeadChannel {
   const spend = (c: LeadChannel) => ads.filter((a) => a.leadChannel === c).reduce((s, a) => s + a.spend, 0);
   return spend("form") > spend("website") ? "form" : "website";
+}
+
+/**
+ * The bar every client's ads are read against: total spend ÷ total results
+ * across every visible client's delivered ads on one channel, the way the
+ * dashboard pools its cost per lead (Samir, 2026-10-07: one index, no manual
+ * targets). A client joins only when it spent and recorded at least one result
+ * on that channel, so an unmapped account can't inflate everyone's bar. Website
+ * and form ads are pooled separately, never summed.
+ */
+export function portfolioCostPer(
+  accounts: Pick<PortfolioAccount, "accountName" | "error" | "ads">[],
+  channel: LeadChannel,
+  metric: Metric,
+  hidden: string[] = [],
+): Benchmark | null {
+  let spend = 0;
+  let results = 0;
+  for (const acct of accounts) {
+    if (acct.error || hidden.includes(acct.accountName)) continue;
+    const ads = (acct.ads ?? []).filter((a) => a.leadChannel === channel && a.spend > 0);
+    const r = ads.reduce((s, a) => s + resultsFor(a, metric), 0);
+    if (r === 0) continue;
+    spend += ads.reduce((s, a) => s + a.spend, 0);
+    results += r;
+  }
+  return results > 0 ? { costPer: spend / results, source: "portfolio" } : null;
 }

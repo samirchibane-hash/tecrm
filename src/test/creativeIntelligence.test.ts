@@ -604,7 +604,7 @@ describe("portfolio funnel", () => {
     expect(board.headlines.find((g) => g.label === FREE_TEST.page_headline)!.status).toBe("best");
   });
 
-  it("ranks every page best to worst against each client's own benchmark", () => {
+  it("ranks every page best to worst against one portfolio bar", () => {
     const board = analyzePortfolioFunnel(
       [
         // Cheap market, $20 target: 25/lead is over, 10/lead is under.
@@ -625,13 +625,17 @@ describe("portfolio funnel", () => {
       ],
       [],
       [],
+      undefined,
+      [],
+      // Since 2026-10-07 every client reads against the pooled portfolio cost per
+      // lead; manual targets on the account rows are ignored.
+      { costPer: 40, source: "portfolio" },
     );
-    expect(board.pages.map((p) => p.label)).toEqual(["/good", "/good", "/bad", "/dead"]);
-    expect(board.pages.map((p) => p.accountName)).toEqual(["Kinetico", "Tarheel", "Kinetico", "Tarheel"]);
-    // $10 vs a $20 target = half the benchmark; $50 vs $100 likewise.
-    expect(board.pages[0].benchmarkIndex).toBeCloseTo(0.5);
-    expect(board.pages[1].benchmarkIndex).toBeCloseTo(0.5);
-    expect(board.pages[2].benchmarkIndex).toBeCloseTo(1.25);
+    expect(board.pages.map((p) => p.label)).toEqual(["/good", "/bad", "/good", "/dead"]);
+    expect(board.pages.map((p) => p.accountName)).toEqual(["Kinetico", "Kinetico", "Tarheel", "Tarheel"]);
+    expect(board.pages[0].benchmarkIndex).toBeCloseTo(10 / 40);
+    expect(board.pages[1].benchmarkIndex).toBeCloseTo(25 / 40);
+    expect(board.pages[2].benchmarkIndex).toBeCloseTo(50 / 40);
     // Spent with nothing to show: no index, and last.
     expect(board.pages[3].benchmarkIndex).toBeNull();
   });
@@ -676,6 +680,9 @@ describe("portfolio funnel", () => {
       [{ id: "a1", account_name: "Kinetico", target_cpl: 50 }],
       [link("Kinetico", "https://k.co/lp-1", "K 1", FREE_TEST)],
       [],
+      undefined,
+      [],
+      { costPer: 50, source: "portfolio" },
     );
     expect(board.gaps).toEqual([{ accountName: "Kinetico", spend: 1000 }]);
     expect(board.wasters).toHaveLength(0);

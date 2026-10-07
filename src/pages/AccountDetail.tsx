@@ -5,7 +5,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccountHeader } from "@/components/account/AccountHeader";
 import { AccountKpiSection } from "@/components/account/AccountKpiSection";
-import { AccountTargetsPopover } from "@/components/account/AccountTargetsPopover";
 import { AccountTasksCard } from "@/components/account/AccountTasksCard";
 import { ClientProfileTab } from "@/components/account/ClientProfileTab";
 import { CreativeBriefsList, CreativeTemplatesGrid } from "@/components/account/CreativeProduction";
@@ -106,9 +105,6 @@ const AccountDetail = () => {
             {tab === "performance" && (
               <div className="flex flex-wrap items-center gap-2">
                 <DashboardPeriodPicker dateRange={dateRange} label={periodLabel} onChange={onPeriodChange} />
-                {account && (
-                  <AccountTargetsPopover accountId={account.id} accountName={decodedName} cpl={account.target_cpl} cpa={account.target_cpa} />
-                )}
               </div>
             )}
           </div>

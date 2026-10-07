@@ -16,7 +16,8 @@ import { CountFilter } from "./CountFilter";
 import { NO_COUNT_FILTER, describeCount, passesCount, type CountFilterValue } from "./countThreshold";
 import { CreativeName, CreativeThumbnail, Dash, VerdictPill } from "./CreativeBits";
 import { usePortfolioCreatives, type CreativeRange, type LeadChannel } from "./useCreativePerformance";
-import { FATIGUE_FREQUENCY, benchmarkText, hookRate, scoreAds, targetFor, type Benchmark, type ScoredAd } from "./verdicts";
+import { useSettings } from "@/hooks/useSettings";
+import { FATIGUE_FREQUENCY, benchmarkText, hookRate, portfolioCostPer, scoreAds, type Benchmark, type ScoredAd } from "./verdicts";
 
 const CHANNEL_LABEL: Record<LeadChannel, string> = { website: "Website leads", form: "Lead forms" };
 const LEAD_NOUN: Record<LeadChannel, string> = { website: "Website leads", form: "Form leads" };
@@ -189,6 +190,18 @@ export function PortfolioCreativeGallery({
   const [leadFilter, setLeadFilter] = useState<CountFilterValue>(NO_COUNT_FILTER);
   const [apptFilter, setApptFilter] = useState<CountFilterValue>(NO_COUNT_FILTER);
 
+  // One bar per channel for every client, pooled across the visible portfolio
+  // (not the scoped client alone), so an ad reads the same on every screen.
+  const { settings } = useSettings();
+  const portfolioBars = useMemo(() => {
+    const hidden = settings.hidden_accounts ?? [];
+    const all = data?.accounts ?? [];
+    return {
+      website: portfolioCostPer(all, "website", "leads", hidden),
+      form: portfolioCostPer(all, "form", "leads", hidden),
+    };
+  }, [data, settings.hidden_accounts]);
+
   const { rows, unreadable, gaps, accountOptions } = useMemo(() => {
     const rows: Row[] = [];
     const unreadable: string[] = [];
@@ -203,11 +216,10 @@ export function PortfolioCreativeGallery({
       }
       const ads = acct.ads ?? [];
       if (ads.length === 0) continue;
-      const cpl = accounts.find((a) => a.id === acct.accountId)?.target_cpl ?? null;
       for (const channel of ["website", "form"] as const) {
         const chAds = ads.filter((a) => a.leadChannel === channel);
         if (chAds.length === 0) continue;
-        const sc = scoreAds(chAds, "leads", targetFor(channel, "leads", { cpl, cpa: null }));
+        const sc = scoreAds(chAds, "leads", portfolioBars[channel]);
         if (sc.trackingGap) gaps.push({ accountId: acct.accountId, accountName: acct.accountName, channel, spend: sc.spend });
         for (const s of sc.scored) {
           if (!s.ad.delivered && !s.ad.live) continue;
@@ -229,7 +241,7 @@ export function PortfolioCreativeGallery({
       .sort((a, b) => b[1].spend - a[1].spend)
       .map(([id, v]) => ({ id, name: v.name }));
     return { rows, unreadable, gaps, accountOptions };
-  }, [data, accounts, hiddenAccounts, accountId]);
+  }, [data, hiddenAccounts, accountId, portfolioBars]);
 
   // The account picked decides which lead source opens: a client that only runs
   // instant forms shouldn't land on an empty "website leads" list.

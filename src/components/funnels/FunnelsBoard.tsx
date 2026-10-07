@@ -10,6 +10,7 @@ import { SegmentedControl } from "@/components/SegmentedControl";
 import { usePortfolioCreatives, type CreativeRange } from "@/components/creative-performance/useCreativePerformance";
 import { useFunnelPageVersions, useFunnelRepoLinks } from "@/components/funnel-pages/useAccountLinks";
 import { useAllGhlConversions } from "@/hooks/useAccountGhlConversions";
+import { portfolioCostPer } from "@/components/creative-performance/verdicts";
 import { analyzePortfolioFunnel, type FunnelAccountInfo, type PortfolioGhl } from "@/components/funnel/portfolioFunnel";
 import { formatCount, formatUsd } from "@/lib/format";
 import { buildFunnelsBoard } from "./funnelRows";
@@ -102,7 +103,10 @@ export function FunnelsBoard({
   }, [ghlRows, period]);
 
   const board = useMemo(() => {
-    const funnel = analyzePortfolioFunnel(data?.accounts ?? [], accounts, links, hiddenAccounts, ghl, versions);
+    // Pages are judged against the whole visible portfolio's cost per website
+    // lead, not the scoped client alone and not a manual target.
+    const bar = portfolioCostPer(data?.accounts ?? [], "website", "leads", hiddenSetting);
+    const funnel = analyzePortfolioFunnel(data?.accounts ?? [], accounts, links, hiddenAccounts, ghl, versions, bar);
     return buildFunnelsBoard({
       links,
       pages: funnel.pages,
@@ -114,7 +118,7 @@ export function FunnelsBoard({
       unattributedLeads,
       hidden: hiddenAccounts,
     });
-  }, [data, accounts, links, hiddenAccounts, ghl, versions, tests, variantDays, variantBookings, unattributedLeads]);
+  }, [data, accounts, links, hiddenAccounts, hiddenSetting, ghl, versions, tests, variantDays, variantBookings, unattributedLeads]);
 
   const averages = useMemo(() => ({ cvr: board.cvr, bookedRate: board.bookedRate }), [board.cvr, board.bookedRate]);
 

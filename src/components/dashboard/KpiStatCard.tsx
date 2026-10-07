@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusPill } from "@/components/StatusPill";
 import type { KpiChange } from "@/lib/accountKpis";
 import { cn } from "@/lib/utils";
+import { MARK, TEXT, type CostStatus } from "./CostVsTarget";
 
 const CHANGE_ICON = { up: ArrowUpRight, down: ArrowDownRight, flat: Minus } as const;
 
@@ -32,6 +33,7 @@ export function KpiStatCard({
   changeLabel,
   changeTitle,
   size = "compact",
+  benchmark,
 }: {
   label: string;
   value: string;
@@ -49,6 +51,8 @@ export function KpiStatCard({
   /** The prior period's exact dates, for the tooltip. */
   changeTitle?: string;
   size?: "compact" | "comfortable";
+  /** The value read against a shared bar (the portfolio average): colours the number, says how far off. */
+  benchmark?: { status: CostStatus; text: string; title?: string } | null;
 }) {
   const interactive = !!onClick && !unavailable && !loading;
   const showChange = !loading && !unavailable && !!change;
@@ -78,10 +82,16 @@ export function KpiStatCard({
           className={cn(
             "font-semibold leading-tight tracking-tight tabular-nums",
             comfortable ? "text-xl sm:text-[28px] sm:leading-9" : "text-xl",
-            unavailable ? "text-muted-foreground" : "text-foreground",
+            unavailable ? "text-muted-foreground" : benchmark ? TEXT[benchmark.status] : "text-foreground",
           )}
         >
           {unavailable ? "—" : value}
+        </p>
+      )}
+      {!loading && !unavailable && benchmark && (
+        <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={benchmark.title ?? benchmark.text}>
+          <span aria-hidden className={cn("shrink-0", MARK[benchmark.status])} />
+          <span className="truncate">{benchmark.text}</span>
         </p>
       )}
       {loading && <span className="sr-only">Loading</span>}

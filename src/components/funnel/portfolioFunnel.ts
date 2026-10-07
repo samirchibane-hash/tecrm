@@ -632,6 +632,8 @@ export function analyzePortfolioFunnel(
   hidden: string[],
   ghl: PortfolioGhl = { byAccount: new Map(), since: undefined, until: undefined },
   versions: FunnelPageVersion[] = [],
+  /** The portfolio's pooled cost per website lead (`portfolioCostPer`); else each client's own average. */
+  portfolioBar: Benchmark | null = null,
 ): PortfolioFunnel {
   const copyByAccount = new Map<string, Map<string, FunnelPageCopy>>();
   for (const l of links) {
@@ -672,8 +674,7 @@ export function analyzePortfolioFunnel(
     const websiteAds = (acct.ads ?? []).filter((a) => a.leadChannel === "website" && a.delivered && a.spend > 0);
     if (websiteAds.length === 0) continue;
 
-    const target = accounts.find((a) => a.id === acct.accountId)?.target_cpl ?? null;
-    const benchmark = computeBenchmark(websiteAds, "leads", target);
+    const benchmark = computeBenchmark(websiteAds, "leads", portfolioBar ?? null);
     const trackingGap = isTrackingGap(websiteAds, "leads", benchmark);
     if (trackingGap) gaps.push({ accountName: acct.accountName, spend: sum(websiteAds, (a) => a.spend) });
 

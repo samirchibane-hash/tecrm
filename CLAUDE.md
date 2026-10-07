@@ -73,20 +73,25 @@ This dashboard reports client performance. A wrong number costs the agency a cli
   "GHL Leads · Jun 1–27" is.
 - Never invent, interpolate, or round-trip a metric to make a chart look continuous.
 
-### 6. Thresholds are configuration, not constants
+### 6. One bar: the portfolio average, never manual targets (since 2026-10-07)
 
-Per-client targets (cost per lead, cost per appointment, etc.) belong in account settings
-and must be readable per account. Do not add module-level target constants — clients have
-different economics. Targets live in `accounts.target_cpl` / `target_cpa` (edited from the
-account page's Performance tab); the Performance dashboard and creative verdicts read them.
-`AccountCard.tsx`'s `CPL_TARGET`/`APPT_TARGET` are remaining debt to migrate, not a pattern to copy.
+Every judgement reads against the portfolio's own value for the same period, so every client is held
+to the same bar and nothing needs setting (Samir: "compare KPIs to the index or average across active
+clients"). Manual per-account targets are retired: the account page's targets editor is gone, and
+`accounts.target_cpl` / `target_cpa` are no longer read by any judgement (columns kept, unused).
+Never add module-level target constants either; `AccountCard.tsx`'s `CPL_TARGET`/`APPT_TARGET` are
+remaining debt.
 
-**Exception, the dashboard account table (since 2026-10-05):** its CPL / CPA coloring reads
-against one portfolio average for the period (`portfolioBenchmark`: total spend ÷ total GHL
-leads or appointments across clients that spent, have known spend and recorded at least one
-result), not per-account targets, so every client is judged on the same bar and no target
-needs setting. The header states the average and how many clients it pools. Account targets
-still drive creative and landing-page verdicts.
+- **Dashboard account table and account page KPI tiles:** cost per GHL lead / appt pool with
+  `portfolioBenchmark` (spend ÷ results across clients that spent, have known spend and recorded at
+  least one result). The account page also reads CPC, CPM, CTR and Meta appt cost against the pooled
+  Meta figure (`lib/portfolioAverages.ts`, `usePortfolioAverages`); counts (spend, leads, reach) are
+  not compared, since size isn't skill. Green at or better than average, amber up to 25% worse (20%
+  for rates), red further; the tile says how far off. Hidden accounts never move the bar.
+- **Creative and landing-page verdicts:** `portfolioCostPer` pools Meta's per-ad results across every
+  visible client's delivered ads, per channel (website and form pooled separately), because GHL can't
+  attribute every lead to an ad. A scoped (one-client) screen still uses the whole portfolio's bar.
+- **Client-facing reports never show other clients' averages.**
 
 ### 7. Charts
 
@@ -136,10 +141,10 @@ tested in `src/test/`. Keep it that way:
 - **Verdicts are statistical claims** (`verdicts.ts`): one-sided Poisson test at 90% against the
   benchmark, plus a material gap, plus a spend floor for winners. Never label an ad or group a
   winner / money waster from a raw ratio, and never lower the bar to make a board look fuller.
-- **Benchmark** = `accounts.target_cpl` / `target_cpa` (edited from the account page), else the
-  account's own average, and the UI says which. **Instant-form ads are always judged against the
-  account's form-lead average**, never the website CPL target (`targetFor`): form leads are
-  cheap by nature and would otherwise crown every form ad.
+- **Benchmark** = the portfolio's pooled cost per lead on that ad's channel (`portfolioCostPer`, source
+  "portfolio avg"), else the account's own average when no client qualifies, and the UI says which.
+  **Instant-form ads are always judged against the portfolio's form-lead average**, never the website
+  one: form leads are cheap by nature and would otherwise crown every form ad.
 - **Website and form leads are never summed** into one cost per lead. One lead source at a time.
 - **Zero results on every ad after real spend = tracking gap**: verdicts are withheld and the UI
   asks for a tracking check instead of listing every ad as a money waster.

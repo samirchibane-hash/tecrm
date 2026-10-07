@@ -16,6 +16,8 @@ import {
   priorCoverage,
 } from "@/lib/accountKpis";
 import { KpiStatCard } from "@/components/dashboard/KpiStatCard";
+import { usePortfolioAverages } from "@/hooks/usePortfolioAverages";
+import { kpiVsPortfolio } from "@/lib/portfolioAverages";
 import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
 import { NOT_TRACKED_REASON, resolveChartKpi, untrackedKpis } from "@/lib/kpis";
 import { KpiAreaChart, type ChartAnnotation, type ChartAnnotationItem } from "./KpiAreaChart";
@@ -61,6 +63,9 @@ export function AccountKpiSection({
   const { settings } = useSettings();
   const { data: ghlRaw = [], isLoading: ghlLoading } = useAccountGhlConversions(accountId);
   const [selectedChart, setSelectedChart] = useState<KpiKey>("totalSpend");
+  // Every comparable KPI reads against the portfolio's own value for the same
+  // period, the dashboard's bar, never a manual per-account target.
+  const averages = usePortfolioAverages(dateRange);
 
   // Meta can be down for everyone, or unable to read just this client's ad account
   // while the rest load; either way this account's Meta metrics are unknown, not $0.
@@ -140,10 +145,12 @@ export function AccountKpiSection({
               const source = KPI_SOURCE_OF[key];
               const loading = (dependsOnMeta(key) && metaLoading) || (source !== "meta" && ghlLoading);
               const change = priorKpis && coverage[source] ? kpiChange(key, kpis, priorKpis) : null;
+              const vsPortfolio = kpiVsPortfolio(key, kpis[key], averages);
               return (
                 <KpiStatCard key={key} label={label} value={fmt(kpis[key])} icon={icon}
                   loading={loading}
                   change={change}
+                  benchmark={vsPortfolio && { ...vsPortfolio, title: `${vsPortfolio.text}: ${fmt(averages!.values[key]!)} across ${averages!.clients} active ${averages!.clients === 1 ? "client" : "clients"}` }}
                   changeLabel={compare?.short}
                   changeTitle={compare?.dates}
                   unavailable={unavailable}
