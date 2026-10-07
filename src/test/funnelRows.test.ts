@@ -343,8 +343,18 @@ describe("split test arms", () => {
     expect(decided).toBe(false);
   });
 
-  it("leaves two close arms too close to call", () => {
-    const { arms, decided } = scoreArms([arm("a", 500, 50), arm("b", 500, 52)]);
+  it("Tarheel: D with 4 leads / 3 appts vs C's 2 / 1 is named ahead, not hidden", () => {
+    const a = (v: string, views: number, leads: number, booked: number) => ({ ...arm(v, views, leads), booked });
+    const { arms, decided } = scoreArms([a("c", 107, 2, 1), a("d", 134, 4, 3)]);
+    const d = arms.find((x) => x.variant === "d")!;
+    expect(d.status).toBe("leading");
+    expect(d.chanceBest!).toBeGreaterThan(0.6);
+    expect(d.apptChanceBest!).toBeGreaterThan(0.7);
+    expect(decided).toBe(false);
+  });
+
+  it("names no arm on a coin flip", () => {
+    const { arms, decided } = scoreArms([arm("a", 500, 50), arm("b", 500, 50)]);
     expect(arms.every((a) => a.status === "even")).toBe(true);
     expect(decided).toBe(false);
   });

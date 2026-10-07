@@ -190,8 +190,9 @@ tested in `src/test/`. Keep it that way:
   a period look clean — an unknown version is `null`, not v1.
 - **Split tests are read on chance to be best (since 2026-10-07)** (`scoreArms` in `funnels/funnelRows.ts`,
   `chanceToBeBest` in `lib/stats.ts`): Beta posteriors on views → attributed lead per arm, seeded Monte Carlo so the
-  number never flickers. **Winner** = ≥95% chance, every arm ≥100 views, 3+ leads; **Leading** = ≥75% (a lean, never
-  a call); **Losing** only once a winner is called. Lift is against the control (first declared letter). **Every test
+  number never flickers. **Winner** = ≥95% chance, every arm ≥100 views, 3+ leads; **Ahead** = the top arm once it has
+  65%+ odds, named with its odds and its appt odds (a lean, never a call; Samir, 2026-10-07: a 67% leader was hidden
+  behind a 75% cutoff and read as the board missing it); **Losing** only once a winner is called. Lift is against the control (first declared letter). **Every test
   runs to one fixed budget, `TEST_VIEWS_PER_ARM` = 500 views an arm** (enough to catch an arm that doubles leads at
   our ~4–6% rates), shown as a progress bar with days left at the last 7 days' pace; at the budget with no winner the
   test reads "Done: no big winner". Never show a "views to call" that scales with 1/gap² — it explodes on near-ties

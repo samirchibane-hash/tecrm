@@ -26,7 +26,9 @@ import type { SplitTestRecord, VariantBookingRecord, VariantDayRecord } from "./
 export const MIN_ARM_VIEWS = 100;
 /** Chance-to-be-best that calls a winner (with every arm over the view floor). */
 export const CALL_AT = 0.95;
-/** Chance-to-be-best that earns "Leading": a lean worth watching, never a call. */
+/** At 65%+ the top arm is named "ahead" with its odds (Samir, 2026-10-07); below it, no arm is named. */
+export const AHEAD_AT = 0.65;
+/** Odds at which "ahead" gets the stronger (info) tone: a lean worth acting on soon. */
 export const LEAN_AT = 0.75;
 /** A winner needs at least this many leads: two leads is an anecdote. */
 const MIN_WINNER_LEADS = 3;
@@ -91,7 +93,7 @@ export interface SplitArm {
   lift: number | null;
   /**
    * winner: ≥95% chance to be best, every arm over the view floor, 3+ leads.
-   * leading: ≥75% chance, not callable yet. trailing: the other arms while one leads.
+   * leading: the arm ahead (65%+ chance), named with its odds; not a call. trailing: the others.
    * losing: ≤5% chance once a winner is called. even: measured, nothing separates.
    * needs_traffic: under the view floor with no lean. not_tracked: no attribution.
    */
@@ -257,7 +259,9 @@ export function scoreArms(arms: SplitArm[]): { arms: SplitArm[]; decided: boolea
   const overFloor = measured.every((a) => a.views >= MIN_ARM_VIEWS);
   const leader = measured.reduce((x, y) => (y.chanceBest! > x.chanceBest! ? y : x));
   const won = overFloor && leader.chanceBest! >= CALL_AT && leader.leads! >= MIN_WINNER_LEADS;
-  const leaning = !won && leader.chanceBest! >= LEAN_AT;
+  // Name the arm that's ahead once it has 65%+ odds (Samir, 2026-10-07): hiding a 67%
+  // leader (Tarheel D, 4 leads/3 appts vs 2/1) reads as the board not seeing it.
+  const leaning = !won && leader.chanceBest! >= AHEAD_AT;
 
   for (const a of measured) {
     if (a === leader) a.status = won ? "winner" : leaning ? "leading" : overFloor ? "even" : "needs_traffic";

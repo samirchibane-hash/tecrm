@@ -1,4 +1,4 @@
-import { CALL_AT, LEAN_AT, MIN_ARM_VIEWS, type FunnelRow, type SplitArm, type SplitTest } from "./funnelRows";
+import { AHEAD_AT, CALL_AT, LEAN_AT, MIN_ARM_VIEWS, type FunnelRow, type SplitArm, type SplitTest } from "./funnelRows";
 
 export const pct = (r: number) => `${(r * 100).toFixed(1)}%`;
 export const shortDate = (iso: string) =>
@@ -26,7 +26,7 @@ export const signed = (r: number) => `${r >= 0 ? "+" : "−"}${Math.abs(r * 100)
 
 export const ARM_STATUS: Record<SplitArm["status"], { status: Pill; label: string; help: string }> = {
   winner: { status: "success", label: "Winner", help: `${pct(CALL_AT)}+ chance to convert best, every arm past ${MIN_ARM_VIEWS} views` },
-  leading: { status: "info", label: "Leading", help: `${pct(LEAN_AT)}+ chance to convert best: a lean, not a call yet` },
+  leading: { status: "info", label: "Ahead", help: `More likely than not to convert best (${pct(AHEAD_AT)}+): a lean, not a call yet` },
   trailing: { status: "neutral", label: "Trailing", help: "Another arm is more likely to convert best" },
   losing: { status: "danger", label: "Losing", help: `Under ${pct(1 - CALL_AT)} chance to convert best` },
   even: { status: "neutral", label: "Too close", help: "Nothing separates the arms yet" },
@@ -50,20 +50,27 @@ export function verdictLine(test: SplitTest): { title: string; short: string; de
   const chance = `${pctWin}% chance ${L} converts best`;
   const vs = test.control && test.control !== leader.variant ? ` vs ${test.control.toUpperCase()}` : "";
   const lift = leader.lift != null ? ` · ${signed(leader.lift)} lead rate${vs}` : "";
+  const appts = leader.apptChanceBest != null ? ` · ${Math.round(leader.apptChanceBest * 100)}% chance it books best` : "";
   if (leader.status === "winner") {
-    return { title: `${L} wins`, short: `${L} wins · ${pctWin}%`, detail: `${chance}${lift}. Roll it out and queue the next test.`, tone: "success", signal: true };
+    return { title: `${L} wins`, short: `${L} wins · ${pctWin}%`, detail: `${chance}${lift}${appts}. Roll it out and queue the next test.`, tone: "success", signal: true };
   }
   if (done) {
     return {
       title: "Done: no big winner",
       short: "Test done · no big winner",
-      detail: `${chance}${lift}. Neither arm doubled the other: keep ${L} and test something bolder.`,
+      detail: `${chance}${lift}${appts}. Neither arm doubled the other: keep ${L} and test something bolder.`,
       tone: "warning",
       signal: true,
     };
   }
   if (leader.status === "leading") {
-    return { title: `${L} is leading`, short: `${L} leading · ${pctWin}%`, detail: `${chance}${lift}.`, tone: "info", signal: true };
+    return {
+      title: `${L} is ahead`,
+      short: `${L} ahead · ${pctWin}%`,
+      detail: `${chance}${lift}${appts}. Not a call yet: a winner needs ${pct(CALL_AT)}.`,
+      tone: test.leaderChance >= LEAN_AT ? "info" : "neutral",
+      signal: true,
+    };
   }
-  return { title: "No leader yet", short: "", detail: `${chance}${lift}.`, tone: "neutral", signal: false };
+  return { title: "Dead even so far", short: "", detail: `${chance}${lift}${appts}.`, tone: "neutral", signal: false };
 }
