@@ -3,8 +3,11 @@ import { cn } from "@/lib/utils";
 import { formatCount } from "@/lib/format";
 import { StatusPill } from "@/components/StatusPill";
 import { Dash } from "@/components/creative-performance/CreativeBits";
-import { CALL_AT, MIN_ARM_VIEWS, type SplitArm, type SplitTest } from "./funnelRows";
+import { CALL_AT, MIN_ARM_VIEWS, TEST_VIEWS_PER_ARM, type SplitArm, type SplitTest } from "./funnelRows";
 import { ARM_STATUS, ATTRIBUTED, pct, shortDate, signed, verdictLine } from "./funnelDisplay";
+
+/** Only statuses that call for action get a pill; "needs traffic" is every young test. */
+const SIGNAL = new Set<SplitArm["status"]>(["winner", "leading", "losing"]);
 
 /** Dot = lead rate, bar = its 95% range, on one scale shared by every arm in the test. */
 function RangePlot({ arm, max, highlight }: { arm: SplitArm; max: number; highlight: boolean }) {
@@ -83,31 +86,35 @@ export function SplitTestPanel({ test, compact = false }: { test: SplitTest; com
           <div className="min-w-0">
             <p className="flex flex-wrap items-center gap-2 text-base font-semibold text-foreground">
               {line.title}
-              {lead && test.leaderChance !== null && (
+              {lead && test.leaderChance !== null && line.signal && (
                 <StatusPill status={line.tone}>{Math.round(test.leaderChance * 100)}% to win</StatusPill>
               )}
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">{line.detail}</p>
           </div>
           {test.callIn && (
-            <div className="text-xs sm:text-right">
-              {test.callIn.notWorthWaiting ? (
-                <p className="max-w-[260px] text-muted-foreground">
-                  <span className="font-medium text-foreground">Gap too small to wait for.</span> Over{" "}
-                  {formatCount(test.callIn.viewsPerArm)} more views an arm. Call it even and test something bolder.
+            <div className="w-full text-xs sm:w-56">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-[11px] text-muted-foreground">
+                  {test.callIn.done ? "Test budget reached" : `Test to ${formatCount(test.callIn.budget)} views an arm`}
+                </span>
+                <span className="font-semibold tabular-nums text-foreground">{Math.round(test.callIn.progress * 100)}%</span>
+              </div>
+              <div
+                className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted"
+                role="progressbar"
+                aria-valuenow={Math.round(test.callIn.progress * 100)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Test progress"
+              >
+                <div className="h-full rounded-full bg-primary" style={{ width: `${test.callIn.progress * 100}%` }} />
+              </div>
+              {!test.callIn.done && (
+                <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
+                  {formatCount(test.callIn.viewsLeft)} more views an arm
+                  {test.callIn.days !== null ? ` · ≈ ${test.callIn.days} ${test.callIn.days === 1 ? "day" : "days"} at this week's traffic` : " · no traffic this week"}
                 </p>
-              ) : (
-                <>
-                  <p className="text-[11px] text-muted-foreground">To call it</p>
-                  <p className="font-semibold tabular-nums text-foreground">
-                    {formatCount(test.callIn.viewsPerArm)} more views an arm
-                  </p>
-                  <p className="text-[11px] tabular-nums text-muted-foreground">
-                    {test.callIn.days !== null
-                      ? `≈ ${test.callIn.days} ${test.callIn.days === 1 ? "day" : "days"} at this week's traffic`
-                      : "No traffic this week"}
-                  </p>
-                </>
               )}
             </div>
           )}
@@ -180,7 +187,7 @@ export function SplitTestPanel({ test, compact = false }: { test: SplitTest; com
                       <ChanceBar value={arm.chanceBest} highlight={hi} />
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <span title={s.help}><StatusPill status={s.status}>{s.label}</StatusPill></span>
+                      {SIGNAL.has(arm.status) && <span title={s.help}><StatusPill status={s.status}>{s.label}</StatusPill></span>}
                     </td>
                   </tr>
                 );
@@ -192,7 +199,8 @@ export function SplitTestPanel({ test, compact = false }: { test: SplitTest; com
 
       {!compact && (
         <p className="border-t border-border/60 px-3 py-2 text-[11px] text-muted-foreground">
-          A winner needs a {pct(CALL_AT)} chance to convert best, {MIN_ARM_VIEWS}+ views on every arm and 3+ leads.
+          A winner needs a {pct(CALL_AT)} chance to convert best, {MIN_ARM_VIEWS}+ views on every arm and 3+ leads; every test
+          runs to {formatCount(TEST_VIEWS_PER_ARM)} views an arm, enough to catch an arm that doubles leads.
           Views come from the page; leads and appts are the attributed GoHighLevel contacts the row counts.
         </p>
       )}

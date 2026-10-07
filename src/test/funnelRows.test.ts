@@ -365,7 +365,7 @@ describe("split test call estimate", () => {
   const days = (variant: string, perDay: number): VariantDayRecord[] =>
     Array.from({ length: 7 }, (_, i) => ({ url: "https://k.co/lp-1", variant, day: `2026-10-0${i + 1}`, views: perDay, leads: 0 }));
 
-  it("estimates views and days to a call from this week's pace, ignoring retired arms", () => {
+  it("tracks every test against the same view budget, at this week's pace, ignoring retired arms", () => {
     const b = board({
       links,
       tests,
@@ -379,8 +379,10 @@ describe("split test call estimate", () => {
     expect(t.arms.map((a) => a.variant)).toEqual(["c", "d"]);
     expect(t.control).toBe("c");
     expect(t.leader).toBe("d");
-    expect(t.callIn!.viewsPerArm).toBeGreaterThan(0);
-    if (!t.callIn!.notWorthWaiting) expect(t.callIn!.days).toBe(Math.ceil(t.callIn!.viewsPerArm / 11));
+    // 77 views an arm against the 500 budget, at 11 a day.
+    expect(t.callIn!.viewsLeft).toBe(500 - 77);
+    expect(t.callIn!.days).toBe(Math.ceil((500 - 77) / 11));
+    expect(t.callIn!.done).toBe(false);
   });
 });
 

@@ -5,8 +5,7 @@ import { cn } from "@/lib/utils";
 import { formatCount, formatUsd } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/StatusPill";
-import { Dash, VerdictPill } from "@/components/creative-performance/CreativeBits";
-import { ANGLE_LABEL, OFFER_LABEL } from "@/components/creative-performance/labels";
+import { Dash } from "@/components/creative-performance/CreativeBits";
 import type { FunnelRow } from "./funnelRows";
 import { SplitTestPanel } from "./SplitTestPanel";
 import { AdsSheet, HistorySheet } from "./FunnelSheets";
@@ -76,20 +75,13 @@ export function FunnelPageCard({
             {showAccount && <span className="truncate text-xs text-muted-foreground">{row.accountName}</span>}
             {row.runningTest && (() => {
               const v = verdictLine(row.runningTest);
-              return <span title={v.detail}><StatusPill status={v.tone}>{v.short}</StatusPill></span>;
+              return v.signal ? <span title={v.detail}><StatusPill status={v.tone}>{v.short}</StatusPill></span> : null;
             })()}
             {!perf && <StatusPill status="neutral">No ad traffic</StatusPill>}
-            {perf && <VerdictPill verdict={perf.verdict} reason={perf.reason} />}
           </div>
           <p className="mt-1 line-clamp-1 text-xs text-foreground/80" title={row.headline ?? undefined}>
             {row.headline ? `“${row.headline}”` : "Headline not synced"}
           </p>
-          {row.offer && (
-            <div className="mt-1 flex flex-wrap items-center gap-1">
-              <StatusPill status="info">{OFFER_LABEL[row.offer]}</StatusPill>
-              {row.angle && row.angle !== "none" && <StatusPill status="neutral">{ANGLE_LABEL[row.angle]}</StatusPill>}
-            </div>
-          )}
           {/* Phones get the two numbers that matter as one line instead of the grid. */}
           <p className="mt-1 text-xs tabular-nums text-muted-foreground md:hidden">
             {perf ? formatUsd(perf.spend) : "No spend"} · {leads} leads · {appts} appts

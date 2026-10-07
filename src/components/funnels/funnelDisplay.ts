@@ -34,25 +34,36 @@ export const ARM_STATUS: Record<SplitArm["status"], { status: Pill; label: strin
   not_tracked: { status: "neutral", label: "Not tracked", help: "No lead on this arm carries an lp_page and lp_variant" },
 };
 
-/** What a test says, in one sentence: the headline of its panel and the pill on its row. */
-export function verdictLine(test: SplitTest): { title: string; short: string; detail: string; tone: Pill } {
+/**
+ * What a test says, in one sentence: the headline of its panel and, when there
+ * is something to act on (`signal`), the pill on its row. A young test with no
+ * lean gets no pill: every test starts out needing traffic.
+ */
+export function verdictLine(test: SplitTest): { title: string; short: string; detail: string; tone: Pill; signal: boolean } {
   const leader = test.arms.find((a) => a.variant === test.leader) ?? null;
+  const done = test.callIn?.done ?? false;
   if (!leader || test.leaderChance === null) {
-    return { title: "Waiting on data", short: "Test: waiting on data", detail: "Needs attributed leads on at least two arms before it can be read.", tone: "neutral" };
+    return { title: "No leader yet", short: "", detail: "Reads once two arms have attributed leads.", tone: "neutral", signal: false };
   }
   const L = leader.variant.toUpperCase();
   const pctWin = Math.round(test.leaderChance * 100);
   const chance = `${pctWin}% chance ${L} converts best`;
   const vs = test.control && test.control !== leader.variant ? ` vs ${test.control.toUpperCase()}` : "";
   const lift = leader.lift != null ? ` · ${signed(leader.lift)} lead rate${vs}` : "";
-  switch (leader.status) {
-    case "winner":
-      return { title: `${L} wins`, short: `${L} wins · ${pctWin}%`, detail: `${chance}${lift}. Roll it out and queue the next test.`, tone: "success" };
-    case "leading":
-      return { title: `${L} is leading`, short: `${L} leading · ${pctWin}%`, detail: `${chance}${lift}.`, tone: "info" };
-    case "needs_traffic":
-      return { title: "Needs traffic", short: "Test: needs traffic", detail: `${chance}${lift}, on too few views to lean on.`, tone: "neutral" };
-    default:
-      return { title: "Too close to call", short: "Test: too close", detail: `${chance}${lift}.`, tone: "neutral" };
+  if (leader.status === "winner") {
+    return { title: `${L} wins`, short: `${L} wins · ${pctWin}%`, detail: `${chance}${lift}. Roll it out and queue the next test.`, tone: "success", signal: true };
   }
+  if (done) {
+    return {
+      title: "Done: no big winner",
+      short: "Test done · no big winner",
+      detail: `${chance}${lift}. Neither arm doubled the other: keep ${L} and test something bolder.`,
+      tone: "warning",
+      signal: true,
+    };
+  }
+  if (leader.status === "leading") {
+    return { title: `${L} is leading`, short: `${L} leading · ${pctWin}%`, detail: `${chance}${lift}.`, tone: "info", signal: true };
+  }
+  return { title: "No leader yet", short: "", detail: `${chance}${lift}.`, tone: "neutral", signal: false };
 }

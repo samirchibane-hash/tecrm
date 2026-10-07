@@ -10,7 +10,7 @@
 
 import type { CreativeAd, PortfolioAccount } from "@/components/creative-performance/useCreativePerformance";
 import { landingPageKey } from "@/components/creative-performance/breakdowns";
-import { chanceToBeBest, viewsToCall, wilsonInterval } from "@/lib/stats";
+import { chanceToBeBest, wilsonInterval } from "@/lib/stats";
 import { normalizePageUrl, pagePath } from "@/lib/urls";
 import { detectPageCopy } from "@/components/funnel/funnelMath";
 import { judge } from "@/components/creative-performance/verdicts";
@@ -30,8 +30,15 @@ export const CALL_AT = 0.95;
 export const LEAN_AT = 0.75;
 /** A winner needs at least this many leads: two leads is an anecdote. */
 const MIN_WINNER_LEADS = 3;
-/** Past this many more views per arm, the gap is too small to be worth waiting for. */
-export const NOT_WORTH_WAITING = 2000;
+/**
+ * Every test runs to the same budget: this many views per arm. At our pages'
+ * ~4–6% lead rate that's enough to catch an arm that doubles leads (one-sided
+ * 95%, 80% power). A winner can be called earlier; at the budget with no
+ * winner, nothing broke out — keep the leader and test something bolder.
+ * One fixed bar means every funnel's test reads on the same clock, instead of
+ * a "views to call" that explodes as two arms get close.
+ */
+export const TEST_VIEWS_PER_ARM = 500;
 
 /** Booking, thank-you and confirmation pages are funnel steps, not entry pages. */
 export const isEntryPage = (url: string) => !/schedule|calendar|booking|thank|confirm/i.test(url);
@@ -91,14 +98,18 @@ export interface SplitArm {
   status: "winner" | "leading" | "trailing" | "losing" | "even" | "needs_traffic" | "not_tracked";
 }
 
-/** How far a running test is from a call, at the traffic it is getting now. */
+/** Where a running test is against its view budget, at the traffic it is getting now. */
 export interface CallEstimate {
-  /** More views each arm needs before the current gap would read at 95%. */
-  viewsPerArm: number;
+  /** Views per arm the test runs to. */
+  budget: number;
+  /** The slowest arm's views ÷ the budget, capped at 1. */
+  progress: number;
+  /** Views the slowest arm still needs. */
+  viewsLeft: number;
   /** At the last 7 days' pace. Null when the test had no views in that window. */
   days: number | null;
-  /** The gap is so small that waiting isn't worth it: call it even, test something bolder. */
-  notWorthWaiting: boolean;
+  /** Budget reached with no winner. */
+  done: boolean;
 }
 
 export interface SplitTest {
@@ -255,33 +266,28 @@ export function scoreArms(arms: SplitArm[]): { arms: SplitArm[]; decided: boolea
   return { arms, decided: won, leader };
 }
 
-/**
- * Views each arm still needs for the leader's gap over the runner-up to read
- * at 95%, and how many days that is at the last week's pace. Rates are
- * smoothed (+1/+2) so a 0-lead arm still yields an estimate.
- */
-function estimateCall(arms: SplitArm[], leader: SplitArm, days: VariantDayRecord[]): CallEstimate | null {
-  const rival = arms
-    .filter((a) => a !== leader && a.chanceBest !== null)
-    .reduce<SplitArm | null>((x, y) => (!x || y.chanceBest! > x.chanceBest! ? y : x), null);
-  if (!rival) return null;
-  const p = (a: SplitArm) => (a.leads! + 1) / (a.views + 2);
-  const need = viewsToCall(p(leader), p(rival));
-  const have = Math.min(leader.views, rival.views);
-  const viewsPerArm = need === null ? Infinity : Math.max(need - have, MIN_ARM_VIEWS - have, 0);
+/** Progress against the fixed view budget, and days left at the last week's pace. */
+function estimateCall(arms: SplitArm[], days: VariantDayRecord[]): CallEstimate | null {
+  if (arms.length < 2) return null;
+  const slowest = Math.min(...arms.map((a) => a.views));
+  const viewsLeft = Math.max(0, TEST_VIEWS_PER_ARM - slowest);
 
   const latest = days.reduce((m, d) => (d.day > m ? d.day : m), "");
-  let days7: number | null = null;
-  if (latest) {
+  let daysLeft: number | null = null;
+  if (latest && viewsLeft > 0) {
     const from = new Date(new Date(latest).getTime() - 6 * 864e5).toISOString().slice(0, 10);
-    const views = days
-      .filter((d) => d.day >= from && (d.variant === leader.variant || d.variant === rival.variant))
-      .reduce((s, d) => s + d.views, 0);
-    const perArmPerDay = views / 7 / 2;
-    days7 = perArmPerDay > 0 && Number.isFinite(viewsPerArm) ? Math.ceil(viewsPerArm / perArmPerDay) : null;
+    const names = new Set(arms.map((a) => a.variant));
+    const views = days.filter((d) => d.day >= from && names.has(d.variant)).reduce((s, d) => s + d.views, 0);
+    const perArmPerDay = views / 7 / arms.length;
+    daysLeft = perArmPerDay > 0 ? Math.ceil(viewsLeft / perArmPerDay) : null;
   }
-  const notWorthWaiting = !Number.isFinite(viewsPerArm) || viewsPerArm > NOT_WORTH_WAITING;
-  return { viewsPerArm: Number.isFinite(viewsPerArm) ? viewsPerArm : NOT_WORTH_WAITING + 1, days: notWorthWaiting ? null : days7, notWorthWaiting };
+  return {
+    budget: TEST_VIEWS_PER_ARM,
+    progress: Math.min(1, slowest / TEST_VIEWS_PER_ARM),
+    viewsLeft,
+    days: viewsLeft === 0 ? 0 : daysLeft,
+    done: viewsLeft === 0,
+  };
 }
 
 function buildTest(
@@ -349,7 +355,7 @@ function buildTest(
     leader: scored.leader?.variant ?? null,
     leaderChance: scored.leader?.chanceBest ?? null,
     control: scored.arms[0]?.variant ?? null,
-    callIn: running && scored.leader && !scored.decided ? estimateCall(scored.arms, scored.leader, days) : null,
+    callIn: running && !scored.decided ? estimateCall(scored.arms, days) : null,
     daysRunning: Math.max(0, Math.floor((end - new Date(record.started_at).getTime()) / 864e5)),
   };
 }

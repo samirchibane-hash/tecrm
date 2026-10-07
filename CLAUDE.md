@@ -191,12 +191,17 @@ tested in `src/test/`. Keep it that way:
 - **Split tests are read on chance to be best (since 2026-10-07)** (`scoreArms` in `funnels/funnelRows.ts`,
   `chanceToBeBest` in `lib/stats.ts`): Beta posteriors on views → attributed lead per arm, seeded Monte Carlo so the
   number never flickers. **Winner** = ≥95% chance, every arm ≥100 views, 3+ leads; **Leading** = ≥75% (a lean, never
-  a call); **Losing** only once a winner is called. Lift is against the control (first declared letter). The panel
-  estimates views per arm and days to a call at the last 7 days' pace, and says "gap too small to wait for" past
-  2,000 more views an arm. Arms are the test's declared weights only: stray views on retired letters are not arms.
-- **A page's verdict (winner / money waster) counts the same leads its row shows** (attributed GHL contacts), never
-  Meta's pixel leads; a client with no attribution is "unscored", not judged on the pixel. It is a verdict on the
-  page's cost per lead vs the client's target, not on a split-test arm.
+  a call); **Losing** only once a winner is called. Lift is against the control (first declared letter). **Every test
+  runs to one fixed budget, `TEST_VIEWS_PER_ARM` = 500 views an arm** (enough to catch an arm that doubles leads at
+  our ~4–6% rates), shown as a progress bar with days left at the last 7 days' pace; at the budget with no winner the
+  test reads "Done: no big winner". Never show a "views to call" that scales with 1/gap² — it explodes on near-ties
+  (Samir saw 40,000 vs 300 across funnels, 2026-10-07). Pills only for signal (winner, leading, losing, done): no
+  "needs traffic" / "too close" / "waiting" pills, every young test is all three. Arms are the test's declared
+  weights only: stray views on retired letters are not arms.
+- **The Funnels board shows no page verdict pill and no offer / angle pills (Samir, 2026-10-07).** A page's
+  "money waster" was its cost per lead vs the client target, which reads as a judgement on conversion (Meridian 1:
+  6 leads at 5.4% was flagged). Cost per lead is an ad question for /creatives. The verdict is still computed on
+  attributed GHL leads (never Meta's pixel) for ranking; don't put it back on the row.
 - The function returns paused ads that spent in the period only to callers that send `v: 2`.
 - The Performance dashboard is performance only: creative requests live on `/creatives` and
   tasks on `/tasks`, and neither is duplicated back onto the dashboard.
