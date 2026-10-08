@@ -9,6 +9,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { KpiStatCard } from "@/components/dashboard/KpiStatCard";
 import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
 import { SegmentedControl } from "@/components/SegmentedControl";
+import { KpiSortControl } from "@/components/KpiSortControl";
+import { sortByKpi, type SortDir } from "@/lib/kpiSort";
+import { SORT_OPTIONS, adSortValue, type SortKey } from "./adSort";
 import { formatCount, formatPercent, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { deliveryStatusText } from "./adStatus";
@@ -220,6 +223,7 @@ export function PortfolioCreativeGallery({
   // Leads count the source on screen (website or form), so one control serves both.
   const [leadFilter, setLeadFilter] = useState<CountFilterValue>(NO_COUNT_FILTER);
   const [apptFilter, setApptFilter] = useState<CountFilterValue>(NO_COUNT_FILTER);
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "spend", dir: "desc" });
 
   // One bar per channel for every client, pooled across the visible portfolio
   // (not the scoped client alone), so an ad reads the same on every screen.
@@ -285,18 +289,25 @@ export function PortfolioCreativeGallery({
   const channel = channelPick && hasChannel(channelPick) ? channelPick : derived;
 
   const listed = useMemo(
-    () =>
-      inAccount
+    () => {
+      const shown = inAccount
         .filter((r) => r.channel === channel)
         // An ad that didn't deliver has nothing to compare (not zero leads), and an
         // account that doesn't track appointments has unknown appts (not zero):
         // both drop out while a filter is on.
         .filter((r) => passesCount(r.ad.delivered ? r.results : null, leadFilter))
-        .filter((r) => passesCount(r.ad.delivered ? r.ad.appointments : null, apptFilter))
-        // Spent-most first; ads that are live but haven't delivered sit at the end,
-        // where they read as "nothing to judge yet" rather than as the worst ads.
-        .sort((a, b) => Number(b.ad.delivered) - Number(a.ad.delivered) || b.ad.spend - a.ad.spend),
-    [inAccount, channel, leadFilter, apptFilter],
+        .filter((r) => passesCount(r.ad.delivered ? r.ad.appointments : null, apptFilter));
+      // Ads that are live but haven't delivered always sit at the end, where they
+      // read as "nothing to judge yet" rather than as the best or worst ads. Ties
+      // (and unknowns) fall back to biggest spender first.
+      const delivered = shown.filter((r) => r.ad.delivered);
+      const idle = shown.filter((r) => !r.ad.delivered);
+      return [
+        ...sortByKpi(delivered, (r) => adSortValue(r, sort.key), sort.dir, (a, b) => b.ad.spend - a.ad.spend),
+        ...idle,
+      ];
+    },
+    [inAccount, channel, leadFilter, apptFilter, sort],
   );
 
   const totals = useMemo(() => {
@@ -469,6 +480,7 @@ export function PortfolioCreativeGallery({
             anyLabel="Any lead count"
           />
           <CountFilter value={apptFilter} onChange={setApptFilter} noun="appts" anyLabel="Any appt count" />
+          <KpiSortControl options={SORT_OPTIONS} value={sort.key} dir={sort.dir} onChange={(key, dir) => setSort({ key, dir })} />
         </div>
         <Button
           variant="outline"
@@ -525,7 +537,8 @@ export function PortfolioCreativeGallery({
         <p className="text-[11px] leading-relaxed text-muted-foreground">
           Meta Ads · {periodCaption}
           {data && <> · updated {formatDistanceToNowStrict(new Date(data.fetchedAt), { addSuffix: true })}</>}
-          {" · "}sorted by spend. {CHANNEL_LABEL[channel]} only: website and instant-form leads cost too
+          {" · "}sorted by {SORT_OPTIONS.find((o) => o.key === sort.key)!.label.toLowerCase()},{" "}
+          {sort.dir === "asc" ? "lowest" : "highest"} first; ads with no figure for it sit last. {CHANNEL_LABEL[channel]} only: website and instant-form leads cost too
           differently to rank together, so one source shows at a time. Cost / lead, Link CTR and Hook are graded
           against the whole portfolio&rsquo;s {CHANNEL_LABEL[channel].toLowerCase()} ads{scoped ? ", not this client's own" : ""}: green at or better, amber a
           little worse, red well off. Paused ads that spent in the period are listed and greyed.

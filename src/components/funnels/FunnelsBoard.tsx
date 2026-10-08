@@ -9,6 +9,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { KpiStatCard } from "@/components/dashboard/KpiStatCard";
 import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
 import { SegmentedControl } from "@/components/SegmentedControl";
+import { KpiSortControl } from "@/components/KpiSortControl";
+import { sortByKpi, type SortDir } from "@/lib/kpiSort";
 import { usePortfolioCreatives, type CreativeRange } from "@/components/creative-performance/useCreativePerformance";
 import { useFunnelPageVersions, useFunnelRepoLinks } from "@/components/funnel-pages/useAccountLinks";
 import { useAllGhlConversions } from "@/hooks/useAccountGhlConversions";
@@ -17,6 +19,7 @@ import { analyzePortfolioFunnel, type FunnelAccountInfo, type PortfolioGhl } fro
 import { formatCount, formatUsd } from "@/lib/format";
 import { buildFunnelsBoard } from "./funnelRows";
 import { FunnelPageCard } from "./FunnelPageCard";
+import { FUNNEL_SORT_OPTIONS, funnelSortValue, type FunnelSortKey } from "./funnelSort";
 import { useFunnelSplitTests, useVariantBookings, useVariantDaily } from "./useFunnelsData";
 
 type Filter = "all" | "traffic" | "tests" | "idle";
@@ -69,6 +72,11 @@ export function FunnelsBoard({
   const [leadFilter, setLeadFilter] = useState<CountFilterValue>(NO_COUNT_FILTER);
   const [apptFilter, setApptFilter] = useState<CountFilterValue>(NO_COUNT_FILTER);
   const [spendFilter, setSpendFilter] = useState<CountFilterValue>(NO_COUNT_FILTER);
+  const [sort, setSort] = useState<{ key: FunnelSortKey; dir: SortDir }>(
+    // One client's board has nothing to group, so it opens on biggest spender.
+    scoped ? { key: "spend", dir: "desc" } : { key: "client", dir: "asc" },
+  );
+  const sortOptions = useMemo(() => FUNNEL_SORT_OPTIONS.filter((o) => !scoped || o.key !== "client"), [scoped]);
 
   const { data, isLoading, isError, error, refetch, isFetching } = usePortfolioCreatives(range);
   const { data: links = [], isLoading: linksLoading } = useFunnelRepoLinks();
@@ -137,7 +145,7 @@ export function FunnelsBoard({
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return board.rows.filter((r) => {
+    const shown = board.rows.filter((r) => {
       if (filter === "traffic" && !r.perf) return false;
       if (filter === "tests" && !r.runningTest) return false;
       if (filter === "idle" && r.perf) return false;
@@ -149,7 +157,14 @@ export function FunnelsBoard({
       if (!q) return true;
       return [r.label, r.accountName, r.url, r.headline ?? ""].some((s) => s.toLowerCase().includes(q));
     });
-  }, [board.rows, filter, query, leadFilter, apptFilter, spendFilter]);
+    // "Client" is the board's own order (clients together, biggest spender
+    // first); reversed it's the clients Z–A, still biggest spender first.
+    if (sort.key === "client") {
+      return sort.dir === "asc" ? shown : sortByKpi(shown, () => 0, "asc", (a, b) => b.accountName.localeCompare(a.accountName));
+    }
+    const key = sort.key;
+    return sortByKpi(shown, (r) => funnelSortValue(r, key), sort.dir, (a, b) => (b.perf?.spend ?? -1) - (a.perf?.spend ?? -1) || a.label.localeCompare(b.label));
+  }, [board.rows, filter, query, leadFilter, apptFilter, spendFilter, sort]);
 
   const countText = [
     describeCount(leadFilter, "leads"),
@@ -243,6 +258,7 @@ export function FunnelsBoard({
           <CountFilter value={leadFilter} onChange={setLeadFilter} noun="leads" anyLabel="Any leads" />
           <CountFilter value={apptFilter} onChange={setApptFilter} noun="appts" anyLabel="Any appts" />
           <CountFilter value={spendFilter} onChange={setSpendFilter} noun="spend" anyLabel="Any spend" money />
+          <KpiSortControl options={sortOptions} value={sort.key} dir={sort.dir} onChange={(key, dir) => setSort({ key, dir })} />
         </div>
         <div className="flex items-center gap-2">
           {!scoped && (
