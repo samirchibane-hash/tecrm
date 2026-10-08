@@ -496,14 +496,6 @@ export function PortfolioCreativeGallery({
           </p>
         );
       })()}
-      <p className="text-[11px] leading-relaxed text-muted-foreground">
-        Meta Ads · {periodCaption}
-        {data && <> · updated {formatDistanceToNowStrict(new Date(data.fetchedAt), { addSuffix: true })}</>}
-        {" · "}sorted by spend. {CHANNEL_LABEL[channel]} only: website and instant-form leads cost too
-        differently to rank together, so one source shows at a time. Cost / lead, Link CTR and Hook are graded
-        against the whole portfolio&rsquo;s {CHANNEL_LABEL[channel].toLowerCase()} ads{scoped ? ", not this client's own" : ""}: green at or better, amber a
-        little worse, red well off. Paused ads that spent in the period are listed and greyed.
-      </p>
 
       {listed.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
@@ -529,6 +521,16 @@ export function PortfolioCreativeGallery({
           ))}
         </ul>
       )}
+      <footer className="space-y-1 border-t border-border/60 pt-3">
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          Meta Ads · {periodCaption}
+          {data && <> · updated {formatDistanceToNowStrict(new Date(data.fetchedAt), { addSuffix: true })}</>}
+          {" · "}sorted by spend. {CHANNEL_LABEL[channel]} only: website and instant-form leads cost too
+          differently to rank together, so one source shows at a time. Cost / lead, Link CTR and Hook are graded
+          against the whole portfolio&rsquo;s {CHANNEL_LABEL[channel].toLowerCase()} ads{scoped ? ", not this client's own" : ""}: green at or better, amber a
+          little worse, red well off. Paused ads that spent in the period are listed and greyed.
+        </p>
+      </footer>
     </div>
   );
 }

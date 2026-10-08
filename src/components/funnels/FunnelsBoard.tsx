@@ -277,20 +277,6 @@ export function FunnelsBoard({
           up to 20% under, red further under.
         </p>
       )}
-      <p className="text-[11px] text-muted-foreground">
-        Spend and views from Meta Ads · leads and appts from attributed GoHighLevel contacts · {periodCaption}
-        {data && <> · updated {formatDistanceToNowStrict(new Date(data.fetchedAt), { addSuffix: true })}</>}
-        {" · "}entry pages only; booking and thank-you pages are funnel steps, not destinations
-      </p>
-      <p className="text-[11px] text-muted-foreground">
-        A lead here is one the funnel proved this page produced: a GoHighLevel contact carrying
-        both <code className="font-mono">lp_page</code> and <code className="font-mono">lp_variant</code>{" "}
-        from the ad&rsquo;s UTM parameters. Nothing else is counted — not Meta&rsquo;s pixel lead,
-        which counts one opt-in several times, and not a CRM contact with no arm on it, which says
-        nothing about which page earned it. Attribution went live on 18 Sep 2026, so pages read from
-        there, and a client whose GHL custom fields aren&rsquo;t mapped yet shows
-        &ldquo;not tracked&rdquo; rather than zero.
-      </p>
 
       {rows.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
@@ -307,6 +293,22 @@ export function FunnelsBoard({
           {rows.map((row) => <FunnelPageCard key={row.key} row={row} showAccount={!scoped} periodCaption={periodCaption} averages={averages} />)}
         </div>
       )}
+      <footer className="space-y-1 border-t border-border/60 pt-3">
+        <p className="text-[11px] text-muted-foreground">
+          Spend and views from Meta Ads · leads and appts from attributed GoHighLevel contacts · {periodCaption}
+          {data && <> · updated {formatDistanceToNowStrict(new Date(data.fetchedAt), { addSuffix: true })}</>}
+          {" · "}entry pages only; booking and thank-you pages are funnel steps, not destinations
+        </p>
+        <p className="text-[11px] text-muted-foreground">
+          A lead here is one the funnel proved this page produced: a GoHighLevel contact carrying
+          both <code className="font-mono">lp_page</code> and <code className="font-mono">lp_variant</code>{" "}
+          from the ad&rsquo;s UTM parameters. Nothing else is counted — not Meta&rsquo;s pixel lead,
+          which counts one opt-in several times, and not a CRM contact with no arm on it, which says
+          nothing about which page earned it. Attribution went live on 18 Sep 2026, so pages read from
+          there, and a client whose GHL custom fields aren&rsquo;t mapped yet shows
+          &ldquo;not tracked&rdquo; rather than zero.
+        </p>
+      </footer>
     </div>
   );
 }
