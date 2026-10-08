@@ -247,3 +247,33 @@ export function portfolioCostPer(
   }
   return results > 0 ? { costPer: spend / results, source: "portfolio" } : null;
 }
+
+/**
+ * The portfolio's pooled engagement rates on one channel, the bars each ad's
+ * Link CTR and video hook rate are graded against: Σ link clicks ÷ Σ
+ * impressions, and Σ 3-second plays ÷ Σ video impressions, in percent like the
+ * ad's own figures. Same pool as `portfolioCostPer` (visible, readable clients).
+ */
+export function portfolioAdRates(
+  accounts: Pick<PortfolioAccount, "accountName" | "error" | "ads">[],
+  channel: LeadChannel,
+  hidden: string[] = [],
+): { linkCtr: number | null; hookRate: number | null } {
+  let impressions = 0, clicks = 0, videoImpressions = 0, plays = 0;
+  for (const acct of accounts) {
+    if (acct.error || hidden.includes(acct.accountName)) continue;
+    for (const a of acct.ads ?? []) {
+      if (a.leadChannel !== channel || a.impressions <= 0) continue;
+      impressions += a.impressions;
+      clicks += a.linkClicks;
+      if (a.videoPlays !== null) {
+        videoImpressions += a.impressions;
+        plays += a.videoPlays;
+      }
+    }
+  }
+  return {
+    linkCtr: impressions > 0 ? (clicks / impressions) * 100 : null,
+    hookRate: videoImpressions > 0 ? (plays / videoImpressions) * 100 : null,
+  };
+}

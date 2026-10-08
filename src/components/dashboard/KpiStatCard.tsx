@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusPill } from "@/components/StatusPill";
 import type { KpiChange } from "@/lib/accountKpis";
 import { cn } from "@/lib/utils";
-import { MARK, TEXT, type CostStatus } from "./CostVsTarget";
+import { MARK, TEXT, type CostStatus } from "./costMarks";
 
 const CHANGE_ICON = { up: ArrowUpRight, down: ArrowDownRight, flat: Minus } as const;
 

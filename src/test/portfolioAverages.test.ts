@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { kpiVsPortfolio, portfolioAverages } from "@/lib/portfolioAverages";
-import { portfolioCostPer } from "@/components/creative-performance/verdicts";
+import { portfolioAdRates, portfolioCostPer } from "@/components/creative-performance/verdicts";
 import type { AdRow } from "@/hooks/useCouplerData";
 import { makeAd } from "./fixtures";
 
@@ -41,11 +41,26 @@ describe("portfolio cost per lead for creative verdicts", () => {
   const acct = (name: string, ads: ReturnType<typeof makeAd>[], error = null) => ({ accountName: name, accountId: name, ads, error });
   it("pools website ads across clients and leaves out accounts with no result, errors and hidden ones", () => {
     const bar = portfolioCostPer([
-      acct("A", [makeAd({ spend: 400, webLeads: 4, leadChannel: "website" })]),
-      acct("B", [makeAd({ spend: 200, webLeads: 1, leadChannel: "website" }), makeAd({ spend: 50, formLeads: 10, leadChannel: "form" })]),
-      acct("C", [makeAd({ spend: 300, webLeads: 0, leadChannel: "website" })]),
-      acct("H", [makeAd({ spend: 999, webLeads: 1, leadChannel: "website" })]),
+      acct("A", [makeAd({ id: "ad1", spend: 400, webLeads: 4, leadChannel: "website" })]),
+      acct("B", [makeAd({ id: "ad2", spend: 200, webLeads: 1, leadChannel: "website" }), makeAd({ id: "ad3", spend: 50, formLeads: 10, leadChannel: "form" })]),
+      acct("C", [makeAd({ id: "ad4", spend: 300, webLeads: 0, leadChannel: "website" })]),
+      acct("H", [makeAd({ id: "ad5", spend: 999, webLeads: 1, leadChannel: "website" })]),
     ], "website", "leads", ["H"]);
     expect(bar).toEqual({ costPer: 600 / 5, source: "portfolio" });
+  });
+});
+
+describe("portfolio engagement rates for creative grading", () => {
+  it("pools link CTR over all ads and hook rate over video ads only, per channel", () => {
+    const acct = (name: string, ads: ReturnType<typeof makeAd>[]) => ({ accountName: name, accountId: name, ads, error: null });
+    const rates = portfolioAdRates([
+      acct("A", [makeAd({ id: "ad6", impressions: 1000, linkClicks: 10, videoPlays: 300, leadChannel: "website" })]),
+      acct("B", [
+        makeAd({ id: "ad7", impressions: 3000, linkClicks: 50, videoPlays: null, leadChannel: "website" }),
+        makeAd({ id: "ad8", impressions: 9000, linkClicks: 900, videoPlays: null, leadChannel: "form" }),
+      ]),
+    ], "website");
+    expect(rates.linkCtr).toBeCloseTo((60 / 4000) * 100);
+    expect(rates.hookRate).toBeCloseTo(30);
   });
 });

@@ -14,10 +14,12 @@ import { cn } from "@/lib/utils";
 import { deliveryStatusText } from "./adStatus";
 import { CountFilter } from "./CountFilter";
 import { NO_COUNT_FILTER, describeCount, passesCount, type CountFilterValue } from "./countThreshold";
-import { CreativeName, CreativeThumbnail, Dash, VerdictPill } from "./CreativeBits";
+import { CreativeName, CreativeThumbnail, Dash } from "./CreativeBits";
 import { usePortfolioCreatives, type CreativeRange, type LeadChannel } from "./useCreativePerformance";
 import { useSettings } from "@/hooks/useSettings";
-import { FATIGUE_FREQUENCY, benchmarkText, hookRate, portfolioCostPer, scoreAds, type Benchmark, type ScoredAd } from "./verdicts";
+import { FATIGUE_FREQUENCY, hookRate, portfolioAdRates, portfolioCostPer, scoreAds, type Benchmark, type ScoredAd } from "./verdicts";
+import { GradedValue } from "@/components/dashboard/CostVsTarget";
+import { costStatus, rateStatus } from "@/components/dashboard/portfolioBenchmark";
 
 const CHANNEL_LABEL: Record<LeadChannel, string> = { website: "Website leads", form: "Lead forms" };
 const LEAD_NOUN: Record<LeadChannel, string> = { website: "Website leads", form: "Form leads" };
@@ -49,7 +51,12 @@ function Metric({ label, value, title }: { label: string; value: React.ReactNode
 }
 
 /** One ad, big enough to judge the creative itself rather than just its name. */
-function AdCard({ row, rank, shareOfSpend, showAccount }: { row: Row; rank: number; shareOfSpend: number | null; showAccount: boolean }) {
+/** The portfolio's own figures on one lead source: what each ad's numbers are graded against. */
+type ChannelBars = { cpl: Benchmark | null; linkCtr: number | null; hookRate: number | null };
+
+const vsAvg = (value: string, avg: string) => `${value} vs ${avg} portfolio avg`;
+
+function AdCard({ row, rank, shareOfSpend, showAccount, bars }: { row: Row; rank: number; shareOfSpend: number | null; showAccount: boolean; bars: ChannelBars }) {
   const { ad } = row;
   const hook = hookRate(ad);
   const headline = ad.copy.headlines[0] ?? null;
@@ -107,27 +114,51 @@ function AdCard({ row, rank, shareOfSpend, showAccount }: { row: Row; rank: numb
 
         {ad.delivered ? (
           <>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <VerdictPill verdict={row.verdict} reason={row.reason} />
-              <p className="text-[11px] text-muted-foreground">{row.reason}</p>
-            </div>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
               <Metric label={LEAD_NOUN[row.channel]} value={formatCount(row.results)} />
               <Metric
                 label="Cost / lead"
-                value={row.costPer !== null ? formatUsd(row.costPer, { decimals: true }) : <Dash title="No leads in this period" />}
-                title={row.benchmark ? `Benchmark ${benchmarkText(row.benchmark, "leads")}` : "No benchmark for this client yet"}
+                value={
+                  row.costPer !== null ? (
+                    <GradedValue
+                      text={formatUsd(row.costPer, { decimals: true })}
+                      status={bars.cpl ? costStatus(row.costPer, bars.cpl.costPer) : null}
+                      title={bars.cpl ? vsAvg(formatUsd(row.costPer, { decimals: true }), formatUsd(bars.cpl.costPer, { decimals: true })) : undefined}
+                    />
+                  ) : (
+                    <Dash title="No leads in this period" />
+                  )
+                }
               />
               {ad.appointments !== null && <Metric label="Appts" value={formatCount(ad.appointments)} title="Meta Schedule events credited to this ad" />}
               <Metric
                 label="Link CTR"
-                value={ad.linkCtr !== null ? formatPercent(ad.linkCtr) : <Dash title="No link clicks" />}
+                value={
+                  ad.linkCtr !== null ? (
+                    <GradedValue
+                      text={formatPercent(ad.linkCtr)}
+                      status={rateStatus(ad.linkCtr, bars.linkCtr)}
+                      title={bars.linkCtr !== null ? vsAvg(formatPercent(ad.linkCtr), formatPercent(bars.linkCtr)) : undefined}
+                    />
+                  ) : (
+                    <Dash title="No link clicks" />
+                  )
+                }
               />
               {ad.format === "video" && (
                 <Metric
                   label="Hook"
-                  value={hook !== null ? formatPercent(hook, 1) : <Dash title="No impressions" />}
-                  title="3-second plays ÷ impressions"
+                  value={
+                    hook !== null ? (
+                      <GradedValue
+                        text={formatPercent(hook, 1)}
+                        status={rateStatus(hook, bars.hookRate)}
+                        title={`3-second plays ÷ impressions${bars.hookRate !== null ? ` · ${vsAvg(formatPercent(hook, 1), formatPercent(bars.hookRate, 1))}` : ""}`}
+                      />
+                    ) : (
+                      <Dash title="No impressions" />
+                    )
+                  }
                 />
               )}
               <Metric
@@ -196,10 +227,11 @@ export function PortfolioCreativeGallery({
   const portfolioBars = useMemo(() => {
     const hidden = settings.hidden_accounts ?? [];
     const all = data?.accounts ?? [];
-    return {
-      website: portfolioCostPer(all, "website", "leads", hidden),
-      form: portfolioCostPer(all, "form", "leads", hidden),
-    };
+    const bars = (channel: "website" | "form"): ChannelBars => ({
+      cpl: portfolioCostPer(all, channel, "leads", hidden),
+      ...portfolioAdRates(all, channel, hidden),
+    });
+    return { website: bars("website"), form: bars("form") };
   }, [data, settings.hidden_accounts]);
 
   const { rows, unreadable, gaps, accountOptions } = useMemo(() => {
@@ -219,7 +251,7 @@ export function PortfolioCreativeGallery({
       for (const channel of ["website", "form"] as const) {
         const chAds = ads.filter((a) => a.leadChannel === channel);
         if (chAds.length === 0) continue;
-        const sc = scoreAds(chAds, "leads", portfolioBars[channel]);
+        const sc = scoreAds(chAds, "leads", portfolioBars[channel].cpl);
         if (sc.trackingGap) gaps.push({ accountId: acct.accountId, accountName: acct.accountName, channel, spend: sc.spend });
         for (const s of sc.scored) {
           if (!s.ad.delivered && !s.ad.live) continue;
@@ -451,13 +483,26 @@ export function PortfolioCreativeGallery({
         </Button>
       </div>
 
+      {(() => {
+        const b = portfolioBars[channel];
+        if (!b.cpl && b.linkCtr === null) return null;
+        return (
+          <p className="text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Portfolio average</span>
+            {b.cpl && <> · Cost / lead <span className="font-semibold tabular-nums text-foreground">{formatUsd(b.cpl.costPer, { decimals: true })}</span></>}
+            {b.linkCtr !== null && <> · Link CTR <span className="font-semibold tabular-nums text-foreground">{formatPercent(b.linkCtr)}</span></>}
+            {b.hookRate !== null && <> · Hook <span className="font-semibold tabular-nums text-foreground">{formatPercent(b.hookRate, 1)}</span></>}
+            {" "}on {CHANNEL_LABEL[channel].toLowerCase()} ads{scoped ? " across every client" : ""}.
+          </p>
+        );
+      })()}
       <p className="text-[11px] leading-relaxed text-muted-foreground">
         Meta Ads · {periodCaption}
         {data && <> · updated {formatDistanceToNowStrict(new Date(data.fetchedAt), { addSuffix: true })}</>}
         {" · "}sorted by spend. {CHANNEL_LABEL[channel]} only: website and instant-form leads cost too
-        differently to rank together, so one source shows at a time. {scoped ? "Ads are judged against this" : "Each ad is judged against its own"}{" "}
-        client's CPL target (or {scoped ? "its" : "that client's"} average when none is set), instant forms against{" "}
-        {scoped ? "its" : "that client's"} own form-lead average. Paused ads that spent in the period are listed and greyed.
+        differently to rank together, so one source shows at a time. Cost / lead, Link CTR and Hook are graded
+        against the whole portfolio&rsquo;s {CHANNEL_LABEL[channel].toLowerCase()} ads{scoped ? ", not this client's own" : ""}: green at or better, amber a
+        little worse, red well off. Paused ads that spent in the period are listed and greyed.
       </p>
 
       {listed.length === 0 ? (
@@ -479,6 +524,7 @@ export function PortfolioCreativeGallery({
               rank={i + 1}
               shareOfSpend={totals.spend > 0 && r.ad.delivered ? r.ad.spend / totals.spend : null}
               showAccount={!scoped}
+              bars={portfolioBars[channel]}
             />
           ))}
         </ul>

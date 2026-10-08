@@ -138,6 +138,11 @@ moving between screens on the same period costs no extra Meta call. Pure logic l
 `components/creative-performance/`, `components/funnel/` and `components/funnels/` and is
 tested in `src/test/`. Keep it that way:
 
+- **Ad cards are graded, not labelled (since 2026-10-07).** Each ad's Cost / lead, Link CTR and Hook are coloured
+  against the whole visible portfolio's figure on that lead source (`portfolioCostPer`, `portfolioAdRates`,
+  `GradedValue`; green at or better, amber a little worse, red well off), and the gallery states those averages.
+  On a client's profile the bar is still the portfolio's, never the client's own ads. No per-ad verdict pill.
+  The Winners / Money wasters tiles still use the verdicts below.
 - **Verdicts are statistical claims** (`verdicts.ts`): one-sided Poisson test at 90% against the
   benchmark, plus a material gap, plus a spend floor for winners. Never label an ad or group a
   winner / money waster from a raw ratio, and never lower the bar to make a board look fuller.

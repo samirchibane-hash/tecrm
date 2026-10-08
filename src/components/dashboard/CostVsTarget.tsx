@@ -1,21 +1,8 @@
 import { formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { MARK, TEXT, type CostStatus } from "./costMarks";
 
-export type CostStatus = "success" | "warning" | "danger";
-
-export const TEXT: Record<CostStatus, string> = {
-  success: "text-success",
-  warning: "text-warning",
-  danger: "text-danger",
-};
-
-// Shape as well as color, so the three states survive color blindness and print:
-// circle = at or under target, square = up to 25% over, triangle = further over.
-export const MARK: Record<CostStatus, string> = {
-  success: "h-2 w-2 rounded-full bg-success",
-  warning: "h-2 w-2 rounded-[2px] bg-warning",
-  danger: "h-0 w-0 border-x-[5px] border-b-[8px] border-x-transparent border-b-danger",
-};
+export type { CostStatus };
 
 /**
  * What a cost is read against: an account's own target, or the portfolio
@@ -108,6 +95,25 @@ export function RateVsAverage({
       {status && <span aria-hidden className={cn("shrink-0", MARK[status])} />}
       <span className={cn("font-semibold tabular-nums", status ? TEXT[status] : "text-foreground")}>{pctText(value)}</span>
       {where && <span className="sr-only">, {where} the portfolio average</span>}
+    </span>
+  );
+}
+
+/**
+ * Any figure graded against the portfolio: the caller decides the status and
+ * formats the value. Same marks and colours as `CostVsTarget`, so every graded
+ * number in the app reads one way.
+ */
+export function GradedValue({ text, status, title }: { text: string; status: CostStatus | null; title?: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5" title={title}>
+      {status && <span aria-hidden className={cn("shrink-0", MARK[status])} />}
+      <span className={cn("tabular-nums", status ? TEXT[status] : "text-foreground")}>{text}</span>
+      {status && (
+        <span className="sr-only">
+          , {status === "success" ? "at or better than" : status === "warning" ? "a little worse than" : "well off"} the portfolio average
+        </span>
+      )}
     </span>
   );
 }
