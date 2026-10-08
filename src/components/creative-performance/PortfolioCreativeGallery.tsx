@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { formatDistanceToNowStrict } from "date-fns";
 import { AlertTriangle, DollarSign, OctagonX, RefreshCw, Target, TrendingUp } from "lucide-react";
+import { CopyList, type CopyBars } from "./CopyList";
+import { BODY_FOLD, COPY_NOUN, COPY_SORT_OPTIONS, HEADLINE_FOLD, buildCopyRows, copySortValue, type CopyKind, type CopySortKey } from "./copyRows";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,9 +20,9 @@ import { deliveryStatusText } from "./adStatus";
 import { CountFilter } from "./CountFilter";
 import { NO_COUNT_FILTER, describeCount, passesCount, type CountFilterValue } from "./countThreshold";
 import { CreativeName, CreativeThumbnail, Dash } from "./CreativeBits";
-import { usePortfolioCreatives, type CreativeRange, type LeadChannel } from "./useCreativePerformance";
+import { usePortfolioCreatives, type AssetRow, type CreativeRange, type LeadChannel } from "./useCreativePerformance";
 import { useSettings } from "@/hooks/useSettings";
-import { FATIGUE_FREQUENCY, hookRate, portfolioAdRates, portfolioCostPer, scoreAds, type Benchmark, type ScoredAd } from "./verdicts";
+import { FATIGUE_FREQUENCY, hookRate, portfolioAdRates, portfolioCostPer, resultsFor, scoreAds, type Benchmark, type ScoredAd } from "./verdicts";
 import { GradedValue } from "@/components/dashboard/CostVsTarget";
 import { costStatus, rateStatus } from "@/components/dashboard/portfolioBenchmark";
 
@@ -28,6 +30,10 @@ const CHANNEL_LABEL: Record<LeadChannel, string> = { website: "Website leads", f
 const LEAD_NOUN: Record<LeadChannel, string> = { website: "Website leads", form: "Form leads" };
 
 const ALL = "all";
+
+/** Ads (the creative) or copy (the words), and which words. Kept in the URL so a view can be shared. */
+type View = "ads" | "copy";
+const isCopyKind = (v: string | null): v is CopyKind => v === "headline" || v === "body";
 
 /** What the gallery needs to know about each CRM account to judge its ads. */
 export interface PortfolioAccountInfo {
@@ -55,7 +61,7 @@ function Metric({ label, value, title }: { label: string; value: React.ReactNode
 
 /** One ad, big enough to judge the creative itself rather than just its name. */
 /** The portfolio's own figures on one lead source: what each ad's numbers are graded against. */
-type ChannelBars = { cpl: Benchmark | null; linkCtr: number | null; hookRate: number | null };
+type ChannelBars = CopyBars & { hookRate: number | null };
 
 const vsAvg = (value: string, avg: string) => `${value} vs ${avg} portfolio avg`;
 
@@ -224,6 +230,18 @@ export function PortfolioCreativeGallery({
   const [leadFilter, setLeadFilter] = useState<CountFilterValue>(NO_COUNT_FILTER);
   const [apptFilter, setApptFilter] = useState<CountFilterValue>(NO_COUNT_FILTER);
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "spend", dir: "desc" });
+  const [copySort, setCopySort] = useState<{ key: CopySortKey; dir: SortDir }>({ key: "spend", dir: "desc" });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view: View = searchParams.get("view") === "copy" ? "copy" : "ads";
+  const copyParam = searchParams.get("copy");
+  const copyKind: CopyKind = isCopyKind(copyParam) ? copyParam : "headline";
+  const setParam = (key: string, value: string | null) =>
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value === null) next.delete(key);
+      else next.set(key, value);
+      return next;
+    }, { replace: true });
 
   // One bar per channel for every client, pooled across the visible portfolio
   // (not the scoped client alone), so an ad reads the same on every screen.
@@ -231,10 +249,23 @@ export function PortfolioCreativeGallery({
   const portfolioBars = useMemo(() => {
     const hidden = settings.hidden_accounts ?? [];
     const all = data?.accounts ?? [];
-    const bars = (channel: "website" | "form"): ChannelBars => ({
-      cpl: portfolioCostPer(all, channel, "leads", hidden),
-      ...portfolioAdRates(all, channel, hidden),
-    });
+    const bars = (channel: "website" | "form"): ChannelBars => {
+      // Leads ÷ link clicks over the same pool, the bar a line of copy's Click → lead is read against.
+      let clicks = 0, leads = 0;
+      for (const acct of all) {
+        if (acct.error || hidden.includes(acct.accountName)) continue;
+        for (const a of acct.ads ?? []) {
+          if (a.leadChannel !== channel || a.linkClicks <= 0) continue;
+          clicks += a.linkClicks;
+          leads += resultsFor(a, "leads");
+        }
+      }
+      return {
+        cpl: portfolioCostPer(all, channel, "leads", hidden),
+        ...portfolioAdRates(all, channel, hidden),
+        clickToLead: clicks > 0 ? (leads / clicks) * 100 : null,
+      };
+    };
     return { website: bars("website"), form: bars("form") };
   }, [data, settings.hidden_accounts]);
 
@@ -309,6 +340,51 @@ export function PortfolioCreativeGallery({
     },
     [inAccount, channel, leadFilter, apptFilter, sort],
   );
+
+  // The Copy view: the same ads (account, lead source), grouped by their words.
+  // Ads under a tracking gap stay out: their zero leads are unknown, not zero.
+  const copyRows = useMemo(() => {
+    if (view !== "copy") return [];
+    const refs = inAccount
+      .filter((r) => r.channel === channel && !r.trackingGap)
+      .map((r) => ({ ad: r.ad, accountId: r.accountId, accountName: r.accountName }));
+    // Asset rows are keyed by ad id, so every account's can be pooled as one list.
+    const assets = { headlines: [] as AssetRow[], bodies: [] as AssetRow[] };
+    for (const acct of data?.accounts ?? []) {
+      assets.headlines.push(...(acct.assets?.headlines ?? []));
+      assets.bodies.push(...(acct.assets?.bodies ?? []));
+    }
+    return buildCopyRows(copyKind, refs, assets, portfolioBars[channel].cpl);
+  }, [view, inAccount, channel, data, copyKind, portfolioBars]);
+
+  const listedCopy = useMemo(() => {
+    const shown = copyRows
+      .filter((r) => passesCount(r.results, leadFilter))
+      .filter((r) => passesCount(r.appointments, apptFilter));
+    // Catch-all rows (rotating texts Meta didn't split, ads with no headline)
+    // aren't a line of copy, so they never rank among the real ones.
+    const real = shown.filter((r) => !r.catchAll);
+    return [
+      ...sortByKpi(real, (r) => copySortValue(r, copySort.key), copySort.dir, (a, b) => b.spend - a.spend),
+      ...shown.filter((r) => r.catchAll),
+    ];
+  }, [copyRows, leadFilter, apptFilter, copySort]);
+
+  const copyTotals = useMemo(() => {
+    const real = listedCopy.filter((r) => !r.catchAll);
+    const winners = real.filter((r) => r.verdict === "winner");
+    const wasters = real.filter((r) => r.verdict === "waster");
+    return {
+      spend: listedCopy.reduce((s, r) => s + r.spend, 0),
+      leads: listedCopy.reduce((s, r) => s + r.results, 0),
+      texts: real.length,
+      clients: new Set(listedCopy.flatMap((r) => r.clients.map((c) => c.id))).size,
+      winners,
+      wasters,
+      winnerSpend: winners.reduce((s, r) => s + r.spend, 0),
+      wasterSpend: wasters.reduce((s, r) => s + r.spend, 0),
+    };
+  }, [listedCopy]);
 
   const totals = useMemo(() => {
     const spend = listed.reduce((s, r) => s + r.ad.spend, 0);
@@ -399,6 +475,45 @@ export function PortfolioCreativeGallery({
         </Alert>
       )}
 
+      {view === "copy" ? (
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <KpiStatCard
+            label="Spend"
+            value={formatUsd(copyTotals.spend)}
+            icon={DollarSign}
+            detail={
+              `${copyTotals.texts} ${copyTotals.texts === 1 ? COPY_NOUN[copyKind].one : COPY_NOUN[copyKind].many}` +
+              (scoped ? "" : ` · ${copyTotals.clients} ${copyTotals.clients === 1 ? "client" : "clients"}`)
+            }
+          />
+          <KpiStatCard
+            label={LEAD_NOUN[channel]}
+            value={formatCount(copyTotals.leads)}
+            icon={Target}
+            detail={
+              copyTotals.leads > 0
+                ? `${formatUsd(copyTotals.spend / copyTotals.leads, { decimals: true })} blended cost per lead`
+                : "None in this period"
+            }
+          />
+          <KpiStatCard
+            label={`Losing ${COPY_NOUN[copyKind].many}`}
+            value={formatUsd(copyTotals.wasterSpend)}
+            icon={OctagonX}
+            unavailable={!portfolioBars[channel].cpl}
+            unavailableReason="No benchmark"
+            detail={`${copyTotals.wasters.length} · proven dearer than avg`}
+          />
+          <KpiStatCard
+            label={`Winning ${COPY_NOUN[copyKind].many}`}
+            value={formatUsd(copyTotals.winnerSpend)}
+            icon={TrendingUp}
+            unavailable={!portfolioBars[channel].cpl}
+            unavailableReason="No benchmark"
+            detail={`${copyTotals.winners.length} · proven cheaper than avg`}
+          />
+        </div>
+      ) : (
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <KpiStatCard
           label="Spend"
@@ -438,6 +553,7 @@ export function PortfolioCreativeGallery({
           detail={`${totals.winners.length} ${totals.winners.length === 1 ? "ad" : "ads"} · ${pct(totals.winnerSpend)}`}
         />
       </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
@@ -453,6 +569,26 @@ export function PortfolioCreativeGallery({
                 ))}
               </SelectContent>
             </Select>
+          )}
+          <SegmentedControl
+            value={view}
+            onChange={(v) => setParam("view", v === "copy" ? "copy" : null)}
+            label="Analyse"
+            options={[
+              { value: "ads", label: "Creatives", title: "One row per ad: the image or video and its numbers" },
+              { value: "copy", label: "Copy", title: "One row per line of copy, pooled across every ad that runs it" },
+            ]}
+          />
+          {view === "copy" && (
+            <SegmentedControl
+              value={copyKind}
+              onChange={(k) => setParam("copy", k === "headline" ? null : k)}
+              label="Copy element"
+              options={[
+                { value: "headline", label: "Headlines", title: "The bold line under the creative" },
+                { value: "body", label: "Primary text", title: "The text above the creative" },
+              ]}
+            />
           )}
           <SegmentedControl
             value={channel}
@@ -480,7 +616,11 @@ export function PortfolioCreativeGallery({
             anyLabel="Any lead count"
           />
           <CountFilter value={apptFilter} onChange={setApptFilter} noun="appts" anyLabel="Any appt count" />
-          <KpiSortControl options={SORT_OPTIONS} value={sort.key} dir={sort.dir} onChange={(key, dir) => setSort({ key, dir })} />
+          {view === "copy" ? (
+            <KpiSortControl options={COPY_SORT_OPTIONS} value={copySort.key} dir={copySort.dir} onChange={(key, dir) => setCopySort({ key, dir })} />
+          ) : (
+            <KpiSortControl options={SORT_OPTIONS} value={sort.key} dir={sort.dir} onChange={(key, dir) => setSort({ key, dir })} />
+          )}
         </div>
         <Button
           variant="outline"
@@ -503,13 +643,24 @@ export function PortfolioCreativeGallery({
             <span className="font-medium text-foreground">Portfolio average</span>
             {b.cpl && <> · Cost / lead <span className="font-semibold tabular-nums text-foreground">{formatUsd(b.cpl.costPer, { decimals: true })}</span></>}
             {b.linkCtr !== null && <> · Link CTR <span className="font-semibold tabular-nums text-foreground">{formatPercent(b.linkCtr)}</span></>}
-            {b.hookRate !== null && <> · Hook <span className="font-semibold tabular-nums text-foreground">{formatPercent(b.hookRate, 1)}</span></>}
+            {view === "ads" && b.hookRate !== null && <> · Hook <span className="font-semibold tabular-nums text-foreground">{formatPercent(b.hookRate, 1)}</span></>}
+            {view === "copy" && b.clickToLead !== null && <> · Click → lead <span className="font-semibold tabular-nums text-foreground">{formatPercent(b.clickToLead, 1)}</span></>}
             {" "}on {CHANNEL_LABEL[channel].toLowerCase()} ads{scoped ? " across every client" : ""}.
           </p>
         );
       })()}
 
-      {listed.length === 0 ? (
+      {view === "copy" ? (
+        listedCopy.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+            {copyRows.length === 0
+              ? `No ${CHANNEL_LABEL[channel].toLowerCase()} ads delivered in this period, so there's no copy to read.`
+              : `No ${COPY_NOUN[copyKind].many} with ${countFilterText} in this period.`}
+          </p>
+        ) : (
+          <CopyList rows={listedCopy} leadNoun={LEAD_NOUN[channel]} showAccount={!scoped} bars={portfolioBars[channel]} />
+        )
+      ) : listed.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
           {rows.length === 0
             ? "No ads delivered in this period, and none are live."
@@ -534,6 +685,21 @@ export function PortfolioCreativeGallery({
         </ul>
       )}
       <footer className="space-y-1 border-t border-border/60 pt-3">
+        {view === "copy" ? (
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          Meta Ads · {periodCaption}
+          {data && <> · updated {formatDistanceToNowStrict(new Date(data.fetchedAt), { addSuffix: true })}</>}
+          {" · "}sorted by {COPY_SORT_OPTIONS.find((o) => o.key === copySort.key)!.label.toLowerCase()},{" "}
+          {copySort.dir === "asc" ? "lowest" : "highest"} first. One row per {COPY_NOUN[copyKind].one}, pooled across every ad that ran it
+          {scoped ? "" : " and every client using the same words"}. An ad with one {COPY_NOUN[copyKind].one} credits it in full; an ad
+          that rotates several is split with Meta&rsquo;s per-text breakdown, and one Meta didn&rsquo;t split sits in its own row at the
+          end rather than being credited to any text. {CHANNEL_LABEL[channel]} only; ads under a tracking gap are left out.
+          Winning and losing {COPY_NOUN[copyKind].many} pass the same statistical test as ads (90% confidence against the
+          portfolio&rsquo;s cost per lead). {copyKind === "headline"
+            ? `The darker part of a headline is what shows before the feed cuts it off (~${HEADLINE_FOLD} characters).`
+            : `The darker part of a primary text is what shows before “See more” on a phone (~${BODY_FOLD} characters).`}
+        </p>
+        ) : (
         <p className="text-[11px] leading-relaxed text-muted-foreground">
           Meta Ads · {periodCaption}
           {data && <> · updated {formatDistanceToNowStrict(new Date(data.fetchedAt), { addSuffix: true })}</>}
@@ -543,6 +709,7 @@ export function PortfolioCreativeGallery({
           against the whole portfolio&rsquo;s {CHANNEL_LABEL[channel].toLowerCase()} ads{scoped ? ", not this client's own" : ""}: green at or better, amber a
           little worse, red well off. Paused ads that spent in the period are listed and greyed.
         </p>
+        )}
       </footer>
     </div>
   );

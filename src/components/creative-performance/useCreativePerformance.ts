@@ -173,6 +173,8 @@ export function usePortfolioCreatives(range: CreativeRange, enabled = true) {
     retry: noRetryOnAccess,
     // daily: the funnel board splits each page's figures at its copy changes,
     // which needs day-level rows — the period total can't be cut at a boundary.
-    queryFn: () => invoke<PortfolioPerformance>(supabase, { scope: "all", ...range, daily: true }),
+    // detail: Meta's per-headline / per-primary-text breakdown, so the gallery's
+    // Copy view can split ads that rotate several texts.
+    queryFn: () => invoke<PortfolioPerformance>(supabase, { scope: "all", ...range, daily: true, detail: true }),
   });
 }
