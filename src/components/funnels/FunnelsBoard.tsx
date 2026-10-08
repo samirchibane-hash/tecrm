@@ -154,10 +154,12 @@ export function FunnelsBoard({
   if (isLoading || linksLoading || scopeLoading) {
     return (
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
-          {Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-[62px] rounded-xl" />)}
-        </div>
-        {Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
+        {!scoped && (
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+            {Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-[62px] rounded-xl" />)}
+          </div>
+        )}
+        {Array.from({ length: scoped ? 2 : 6 }, (_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
       </div>
     );
   }
@@ -176,45 +178,55 @@ export function FunnelsBoard({
         />
       )}
 
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
-        <KpiStatCard
-          label="Landing pages"
-          value={formatCount(board.rows.length)}
-          icon={Globe}
-          detail={scoped ? `${board.idle} idle` : `${board.clients} ${board.clients === 1 ? "client" : "clients"} · ${board.idle} idle`}
-        />
-        <KpiStatCard
-          label="Ad spend"
-          value={formatUsd(board.spend)}
-          icon={Users}
-          unavailable={metaUnknown}
-          unavailableReason="Meta can't read this ad account"
-          detail={`${board.withTraffic} ${board.withTraffic === 1 ? "page" : "pages"} with traffic`}
-        />
-        <KpiStatCard
-          label="Page views → leads"
-          value={board.cvr !== null ? `${(board.cvr * 100).toFixed(1)}%` : "—"}
-          icon={MousePointerClick}
-          unavailable={metaUnknown}
-          unavailableReason="Meta can't read this ad account"
-          detail={
-            `${formatCount(board.measuredLpv)} views · ${formatCount(board.leads)} attributed ${board.leads === 1 ? "lead" : "leads"}` +
-            (board.unattributedLeads > 0 ? ` · ${formatCount(board.unattributedLeads)} unattributed` : "")
-          }
-        />
-        <KpiStatCard
-          label="Leads → appts"
-          value={board.bookedRate !== null ? `${(board.bookedRate * 100).toFixed(1)}%` : "—"}
-          icon={CalendarCheck}
-          detail={`${formatCount(board.booked)} ${board.booked === 1 ? "appt" : "appts"} from ${formatCount(board.leads)} attributed ${board.leads === 1 ? "lead" : "leads"}`}
-        />
-        <KpiStatCard
-          label="Split tests running"
-          value={formatCount(board.runningTests)}
-          icon={FlaskConical}
-          detail={board.runningTests === 0 ? "None running" : "Measured by page events"}
-        />
-      </div>
+      {/* On a client's profile the rows say all of this already (one or two pages),
+          so the summary tiles are for the portfolio screen only. */}
+      {!scoped && (
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+          <KpiStatCard
+            label="Landing pages"
+            value={formatCount(board.rows.length)}
+            icon={Globe}
+            detail={scoped ? `${board.idle} idle` : `${board.clients} ${board.clients === 1 ? "client" : "clients"} · ${board.idle} idle`}
+          />
+          <KpiStatCard
+            label="Ad spend"
+            value={formatUsd(board.spend)}
+            icon={Users}
+            unavailable={metaUnknown}
+            unavailableReason="Meta can't read this ad account"
+            detail={`${board.withTraffic} ${board.withTraffic === 1 ? "page" : "pages"} with traffic`}
+          />
+          <KpiStatCard
+            label="Page views → leads"
+            value={board.cvr !== null ? `${(board.cvr * 100).toFixed(1)}%` : "—"}
+            icon={MousePointerClick}
+            unavailable={metaUnknown}
+            unavailableReason="Meta can't read this ad account"
+            detail={
+              `${formatCount(board.measuredLpv)} views · ${formatCount(board.leads)} attributed ${board.leads === 1 ? "lead" : "leads"}` +
+              (board.unattributedLeads > 0 ? ` · ${formatCount(board.unattributedLeads)} unattributed` : "")
+            }
+          />
+          <KpiStatCard
+            label="Leads → appts"
+            value={board.bookedRate !== null ? `${(board.bookedRate * 100).toFixed(1)}%` : "—"}
+            icon={CalendarCheck}
+            detail={`${formatCount(board.booked)} ${board.booked === 1 ? "appt" : "appts"} from ${formatCount(board.leads)} attributed ${board.leads === 1 ? "lead" : "leads"}`}
+          />
+          <KpiStatCard
+            label="Split tests running"
+            value={formatCount(board.runningTests)}
+            icon={FlaskConical}
+            detail={board.runningTests === 0 ? "None running" : "Measured by page events"}
+          />
+        </div>
+      )}
+      {scoped && board.unattributedLeads > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {formatCount(board.unattributedLeads)} GoHighLevel {board.unattributedLeads === 1 ? "lead" : "leads"} in this period carry no
+          lp_page / lp_variant, so no page can claim {board.unattributedLeads === 1 ? "it" : "them"}.
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SegmentedControl<Filter>
