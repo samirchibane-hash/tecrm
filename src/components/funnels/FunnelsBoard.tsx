@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
+import { CountFilter } from "@/components/creative-performance/CountFilter";
+import { NO_COUNT_FILTER, describeCount, passesCount, type CountFilterValue } from "@/components/creative-performance/countThreshold";
 import { formatDistanceToNowStrict } from "date-fns";
-import { CalendarCheck, FlaskConical, Globe, MousePointerClick, RefreshCw, Users } from "lucide-react";
+import { CalendarCheck, MousePointerClick, RefreshCw, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -64,6 +66,9 @@ export function FunnelsBoard({
   );
   const [filter, setFilter] = useState<Filter>("traffic");
   const [query, setQuery] = useState("");
+  const [leadFilter, setLeadFilter] = useState<CountFilterValue>(NO_COUNT_FILTER);
+  const [apptFilter, setApptFilter] = useState<CountFilterValue>(NO_COUNT_FILTER);
+  const [spendFilter, setSpendFilter] = useState<CountFilterValue>(NO_COUNT_FILTER);
 
   const { data, isLoading, isError, error, refetch, isFetching } = usePortfolioCreatives(range);
   const { data: links = [], isLoading: linksLoading } = useFunnelRepoLinks();
@@ -136,10 +141,21 @@ export function FunnelsBoard({
       if (filter === "traffic" && !r.perf) return false;
       if (filter === "tests" && !r.runningTest) return false;
       if (filter === "idle" && r.perf) return false;
+      // Unknown (not tracked) leads/appts never pass an active filter; a page with
+      // no ad traffic spent $0, which is a real amount.
+      if (!passesCount(r.verifiedLeads, leadFilter)) return false;
+      if (!passesCount(r.verifiedBooked, apptFilter)) return false;
+      if (!passesCount(r.perf?.spend ?? 0, spendFilter)) return false;
       if (!q) return true;
       return [r.label, r.accountName, r.url, r.headline ?? ""].some((s) => s.toLowerCase().includes(q));
     });
-  }, [board.rows, filter, query]);
+  }, [board.rows, filter, query, leadFilter, apptFilter, spendFilter]);
+
+  const countText = [
+    describeCount(leadFilter, "leads"),
+    describeCount(apptFilter, "appts"),
+    describeCount(spendFilter, "spend", true),
+  ].filter(Boolean).join(" and ");
 
   const unreadable = (data?.accounts ?? [])
     .filter((a) => a.error && !hiddenAccounts.includes(a.accountName))
@@ -155,8 +171,8 @@ export function FunnelsBoard({
     return (
       <div className="space-y-3">
         {!scoped && (
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
-            {Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-[62px] rounded-xl" />)}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-[62px] rounded-xl" />)}
           </div>
         )}
         {Array.from({ length: scoped ? 2 : 6 }, (_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
@@ -183,12 +199,6 @@ export function FunnelsBoard({
       {!scoped && (
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
           <KpiStatCard
-            label="Landing pages"
-            value={formatCount(board.rows.length)}
-            icon={Globe}
-            detail={scoped ? `${board.idle} idle` : `${board.clients} ${board.clients === 1 ? "client" : "clients"} · ${board.idle} idle`}
-          />
-          <KpiStatCard
             label="Ad spend"
             value={formatUsd(board.spend)}
             icon={Users}
@@ -213,12 +223,6 @@ export function FunnelsBoard({
             icon={CalendarCheck}
             detail={`${formatCount(board.booked)} ${board.booked === 1 ? "appt" : "appts"} from ${formatCount(board.leads)} attributed ${board.leads === 1 ? "lead" : "leads"}`}
           />
-          <KpiStatCard
-            label="Split tests running"
-            value={formatCount(board.runningTests)}
-            icon={FlaskConical}
-            detail={board.runningTests === 0 ? "None running" : "Measured by page events"}
-          />
         </div>
       )}
       {scoped && board.unattributedLeads > 0 && (
@@ -229,12 +233,17 @@ export function FunnelsBoard({
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <SegmentedControl<Filter>
-          value={filter}
-          onChange={setFilter}
-          options={FILTERS}
-          label="Filter landing pages"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <SegmentedControl<Filter>
+            value={filter}
+            onChange={setFilter}
+            options={FILTERS}
+            label="Filter landing pages"
+          />
+          <CountFilter value={leadFilter} onChange={setLeadFilter} noun="leads" anyLabel="Any leads" />
+          <CountFilter value={apptFilter} onChange={setApptFilter} noun="appts" anyLabel="Any appts" />
+          <CountFilter value={spendFilter} onChange={setSpendFilter} noun="spend" anyLabel="Any spend" money />
+        </div>
         <div className="flex items-center gap-2">
           {!scoped && (
             <Input
@@ -287,9 +296,11 @@ export function FunnelsBoard({
         <p className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
           {board.rows.length === 0
             ? "No funnel page is registered yet. Add the client's site to funnel_sites and the hourly sync will list its pages."
-            : filter === "traffic"
-              ? "No page had ad traffic in this period."
-              : "No page matches this filter."}
+            : countText
+              ? `No page with ${countText} in this period.`
+              : filter === "traffic"
+                ? "No page had ad traffic in this period."
+                : "No page matches this filter."}
         </p>
       ) : (
         <div className="space-y-2">

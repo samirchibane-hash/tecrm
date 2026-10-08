@@ -26,3 +26,14 @@ describe("count filter", () => {
     expect(describeCount({ op: "any", count: "3" }, "appts")).toBeNull();
   });
 });
+
+describe("amount filters (spend)", () => {
+  it("describes a spend threshold in dollars with 'less than'", () => {
+    expect(describeCount({ op: "lt", count: "500" }, "spend", true)).toBe("less than $500 spend");
+    expect(describeCount({ op: "gt", count: "1200" }, "spend", true)).toBe("more than $1,200 spend");
+  });
+  it("treats an idle page's $0 as a real amount", () => {
+    expect(passesCount(0, { op: "lt", count: "100" })).toBe(true);
+    expect(passesCount(0, { op: "gt", count: "100" })).toBe(false);
+  });
+});

@@ -11,6 +11,8 @@ export interface CountFilterValue {
 export const NO_COUNT_FILTER: CountFilterValue = { op: "any", count: "" };
 
 export const OP_LABEL: Record<Exclude<CountOp, "any">, string> = { gt: "More than", lt: "Fewer than" };
+/** For amounts (spend), where "fewer" reads wrong. */
+export const AMOUNT_OP_LABEL: Record<Exclude<CountOp, "any">, string> = { gt: "More than", lt: "Less than" };
 
 /** The threshold in force, or null when the filter is off. Blank or invalid input leaves the list unfiltered. */
 export function countThreshold({ op, count }: CountFilterValue): number | null {
@@ -26,8 +28,11 @@ export function passesCount(value: number | null, f: CountFilterValue): boolean 
   return f.op === "gt" ? value > t : value < t;
 }
 
-/** "fewer than 3 appts", for empty states. */
-export function describeCount(f: CountFilterValue, noun: string): string | null {
+/** "fewer than 3 appts" (or "less than $500 spend" with `money`), for empty states. */
+export function describeCount(f: CountFilterValue, noun: string, money = false): string | null {
   const t = countThreshold(f);
-  return t === null || f.op === "any" ? null : `${OP_LABEL[f.op].toLowerCase()} ${t} ${noun}`;
+  if (t === null || f.op === "any") return null;
+  return money
+    ? `${AMOUNT_OP_LABEL[f.op].toLowerCase()} $${t.toLocaleString()} ${noun}`
+    : `${OP_LABEL[f.op].toLowerCase()} ${t} ${noun}`;
 }
