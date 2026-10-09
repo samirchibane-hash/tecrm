@@ -23,6 +23,8 @@ export interface Task {
   assigned_to: string | null;
   priority: string;
   completed: boolean;
+  completed_at: string | null;
+  completed_by: string | null;
   stage: string;
   due_date: string | null;
   created_at: string;

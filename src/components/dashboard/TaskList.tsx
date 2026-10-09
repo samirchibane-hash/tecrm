@@ -7,6 +7,9 @@ import { cn } from "@/lib/utils";
 import type { ChangeLogOption } from "@/hooks/useSettings";
 import { TaskDetailSheet } from "@/components/dashboard/tasks/TaskDetailSheet";
 import { NewTaskSheet } from "@/components/dashboard/tasks/NewTaskSheet";
+import { TaskCompletionMeta } from "@/components/tasks/TaskCompletionMeta";
+import { currentCompleterName } from "@/lib/currentCompleter";
+import { completionWrite } from "@/lib/taskCompletion";
 import {
   CAT_SEP,
   CategoryBadge,
@@ -112,13 +115,14 @@ export function TaskList({ accounts, changeLogOptions = [], defaultFilter = "act
   async function handleToggle(task: Task) {
     const completed = !task.completed;
     const stage = completed ? "launched" : "assigned";
+    const stamp = completionWrite(completed, completed ? await currentCompleterName() : null);
     await supabase
       .from("tasks")
-      .update({ completed, stage, updated_at: new Date().toISOString() })
+      .update({ ...stamp, stage, updated_at: new Date().toISOString() })
       .eq("id", task.id);
     refetch();
     if (selectedTask?.id === task.id) {
-      setSelectedTask({ ...selectedTask, completed, stage });
+      setSelectedTask({ ...selectedTask, ...stamp, stage });
     }
   }
 
@@ -335,14 +339,17 @@ function TaskRow({
         )}
       </button>
 
-      <span
-        className={cn(
-          "flex-1 text-sm min-w-0 truncate",
-          task.completed ? "line-through text-muted-foreground opacity-55" : "text-foreground"
-        )}
-      >
-        {task.title}
-      </span>
+      <div className="min-w-0 flex-1">
+        <span
+          className={cn(
+            "block truncate text-sm",
+            task.completed ? "line-through text-muted-foreground" : "text-foreground"
+          )}
+        >
+          {task.title}
+        </span>
+        <TaskCompletionMeta completed={task.completed} completedAt={task.completed_at} completedBy={task.completed_by} />
+      </div>
 
       <div className="flex items-center gap-2 shrink-0 text-xs">
         {task.account_name && (

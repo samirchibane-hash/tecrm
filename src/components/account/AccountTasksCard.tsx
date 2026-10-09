@@ -4,6 +4,9 @@ import { CheckCircle2, Circle, ListTodo, Plus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TaskCompletionMeta } from "@/components/tasks/TaskCompletionMeta";
+import { currentCompleterName } from "@/lib/currentCompleter";
+import { completionWrite } from "@/lib/taskCompletion";
 import { cn } from "@/lib/utils";
 import type { AccountTask } from "./queries";
 
@@ -28,7 +31,8 @@ export function AccountTasksCard({ accountName, tasks, onChange }: { accountName
   }
   async function toggle(task: AccountTask) {
     const completed = !task.completed;
-    await supabase.from("tasks").update({ completed, stage: completed ? "launched" : "assigned" }).eq("id", task.id);
+    const stamp = completionWrite(completed, completed ? await currentCompleterName() : null);
+    await supabase.from("tasks").update({ ...stamp, stage: completed ? "launched" : "assigned" }).eq("id", task.id);
     onChange();
   }
   async function remove(id: string) {
@@ -57,7 +61,7 @@ export function AccountTasksCard({ accountName, tasks, onChange }: { accountName
               })()
             : null;
           return (
-            <div key={task.id} className={cn("group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/20", task.completed && "opacity-55")}>
+            <div key={task.id} className="group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/20">
               <button
                 onClick={() => toggle(task)}
                 aria-label={task.completed ? `Mark "${task.title}" not done` : `Mark "${task.title}" done`}
@@ -65,7 +69,10 @@ export function AccountTasksCard({ accountName, tasks, onChange }: { accountName
               >
                 {task.completed ? <CheckCircle2 className="h-4 w-4 text-primary" /> : <Circle className="h-4 w-4" />}
               </button>
-              <span className={cn("min-w-0 flex-1 truncate text-sm", task.completed ? "text-muted-foreground line-through" : "text-foreground")}>{task.title}</span>
+              <div className="min-w-0 flex-1">
+                <span className={cn("block truncate text-sm", task.completed ? "text-muted-foreground line-through" : "text-foreground")}>{task.title}</span>
+                <TaskCompletionMeta completed={task.completed} completedAt={task.completed_at} completedBy={task.completed_by} />
+              </div>
               <div className="flex shrink-0 items-center gap-2 text-xs">
                 <span className={cn("inline-block h-2 w-2 shrink-0 rounded-full", PRIORITY_DOT[task.priority] ?? PRIORITY_DOT.medium)} title={`${task.priority} priority`}>
                   <span className="sr-only">{task.priority} priority</span>
