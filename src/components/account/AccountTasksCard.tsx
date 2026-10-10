@@ -8,13 +8,15 @@ import { TaskCompletionMeta } from "@/components/tasks/TaskCompletionMeta";
 import { currentCompleterName } from "@/lib/currentCompleter";
 import { completionWrite } from "@/lib/taskCompletion";
 import { cn } from "@/lib/utils";
+import type { TeamMember } from "@/hooks/useTeamMembers";
 import type { AccountTask } from "./queries";
 
 // Priority reads as a dot plus its word for screen readers and on hover.
 const PRIORITY_DOT: Record<string, string> = { high: "bg-danger", medium: "bg-warning", low: "bg-muted-foreground/50" };
 
 /** The client's task list with quick add / complete / delete. */
-export function AccountTasksCard({ accountName, tasks, onChange }: { accountName: string; tasks: AccountTask[]; onChange: () => void }) {
+export function AccountTasksCard({ accountName, tasks, onChange, members = [] }: { accountName: string; tasks: AccountTask[]; onChange: () => void; members?: Pick<TeamMember, "name" | "is_bot">[] }) {
+  const botNames = members.filter((m) => m.is_bot).map((m) => m.name);
   const [isAdding, setIsAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
@@ -71,7 +73,7 @@ export function AccountTasksCard({ accountName, tasks, onChange }: { accountName
               </button>
               <div className="min-w-0 flex-1">
                 <span className={cn("block truncate text-sm", task.completed ? "text-muted-foreground line-through" : "text-foreground")}>{task.title}</span>
-                <TaskCompletionMeta completed={task.completed} completedAt={task.completed_at} completedBy={task.completed_by} category={task.category} />
+                <TaskCompletionMeta completed={task.completed} completedAt={task.completed_at} completedBy={task.completed_by} assignee={task.assigned_to} botNames={botNames} category={task.category} />
               </div>
               <div className="flex shrink-0 items-center gap-2 text-xs">
                 <span className={cn("inline-block h-2 w-2 shrink-0 rounded-full", PRIORITY_DOT[task.priority] ?? PRIORITY_DOT.medium)} title={`${task.priority} priority`}>

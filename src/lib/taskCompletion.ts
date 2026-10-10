@@ -106,17 +106,29 @@ export function completerName(input: {
  * Pass category only when that row does not already show the category chip.
  * The client name is not included — mixed lists already show it.
  */
+/** First name of a bot assignee, when completed_by was left empty. Human assignees are not used. */
+export function botAssigneeFirstName(
+  assignee: string | null | undefined,
+  botNames: readonly string[] | undefined,
+): string | null {
+  if (!assignee || !botNames?.includes(assignee)) return null;
+  return firstName(assignee);
+}
+
 export function completionMeta(input: {
   completed: boolean;
   completedAt: string | null | undefined;
   completedBy: string | null | undefined;
+  /** Task assignee. Used only when it is one of botNames and completed_by is empty. */
+  assignee?: string | null;
+  botNames?: readonly string[];
   category?: string | null;
   now?: Date;
 }): string | null {
   if (!input.completed) return null;
   const parts = [
     formatCompletionDate(input.completedAt, input.now),
-    firstName(input.completedBy),
+    firstName(input.completedBy) ?? botAssigneeFirstName(input.assignee, input.botNames),
     categoryLeaf(input.category),
   ].filter((part): part is string => Boolean(part));
   return parts.length > 0 ? parts.join(" · ") : null;

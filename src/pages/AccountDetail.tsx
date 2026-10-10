@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccountHeader } from "@/components/account/AccountHeader";
 import { AccountKpiSection } from "@/components/account/AccountKpiSection";
 import { AccountTasksCard } from "@/components/account/AccountTasksCard";
+import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { ClientProfileTab } from "@/components/account/ClientProfileTab";
 import { CreativeBriefsList, CreativeTemplatesGrid } from "@/components/account/CreativeProduction";
 import { DriveFolderCard } from "@/components/account/DriveFolder";
@@ -81,6 +82,7 @@ const AccountDetail = () => {
   });
 
   const { data: tasks = [], refetch: refetchTasks } = useAccountTasks(decodedName);
+  const { members } = useTeamMembers();
   const { data: briefs = [] } = useAccountBriefs(decodedName);
   const templates = useCreativeTemplates(decodedName);
   const openTasks = tasks.filter((t) => !t.completed).length;
@@ -149,7 +151,7 @@ const AccountDetail = () => {
           </TabsContent>
 
           <TabsContent value="operations" className="space-y-6">
-            <AccountTasksCard accountName={decodedName} tasks={tasks} onChange={() => refetchTasks()} />
+            <AccountTasksCard accountName={decodedName} tasks={tasks} members={members} onChange={() => refetchTasks()} />
             <AccountWorkLog accountId={accountId} accountName={decodedName} />
             <div className="grid gap-6 lg:grid-cols-2">
               <PointsOfContactCard accountId={accountId} />

@@ -5,6 +5,7 @@ import { AccountTasksCard } from "@/components/account/AccountTasksCard";
 import type { AccountTask } from "@/components/account/queries";
 import { TaskCompletionMeta } from "@/components/tasks/TaskCompletionMeta";
 import {
+  botAssigneeFirstName,
   categoryLeaf,
   completerName,
   completionMeta,
@@ -75,6 +76,15 @@ describe("completionMeta", () => {
     expect(completionMeta({ completed: true, completedAt: null, completedBy: "claude", now })).toBeNull();
   });
 
+  it("uses a bot assignee when completed_by is empty, and not a human", () => {
+    const bots = ["Tommy", "Amy"];
+    expect(completionMeta({ completed: true, completedAt: iso, completedBy: null, assignee: "Tommy - CSM", botNames: ["Tommy - CSM"], now })).toBe(`${day} · Tommy`);
+    expect(completionMeta({ completed: true, completedAt: iso, completedBy: null, assignee: "Tommy", botNames: bots, now })).toBe(`${day} · Tommy`);
+    expect(completionMeta({ completed: true, completedAt: iso, completedBy: "Amy- Image Designer", assignee: "Tommy", botNames: bots, now })).toBe(`${day} · Amy`);
+    expect(completionMeta({ completed: true, completedAt: iso, completedBy: null, assignee: "Samir", botNames: bots, now })).toBe(day);
+    expect(botAssigneeFirstName("Samir", bots)).toBeNull();
+  });
+
   it("keeps the year when the finish was in another year", () => {
     const older = "2024-05-18T12:00:00.000Z";
     expect(formatCompletionDate(older, now)).toBe(format(new Date(older), "MMM d, yyyy"));
@@ -137,6 +147,7 @@ const finished = (overrides: Partial<AccountTask> = {}): AccountTask => ({
   completed_at: "2026-10-07T12:00:00.000Z",
   completed_by: "Tommy - CSM",
   category: null,
+  assigned_to: null,
   ...overrides,
 });
 

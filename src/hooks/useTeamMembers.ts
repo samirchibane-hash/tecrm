@@ -5,6 +5,7 @@ export interface TeamMember {
   id: string;
   name: string;
   position: string | null;
+  is_bot: boolean;
   created_at: string;
 }
 

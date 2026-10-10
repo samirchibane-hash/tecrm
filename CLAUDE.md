@@ -243,7 +243,7 @@ set completed = true,
 where id = '<task uuid>';
 ```
 
-An insert that is already done uses the same columns. `completed_by` is not taken from `assigned_to`. A dashboard session uses the auth profile name (`full_name`, `name`, or `display_name`), then the team-roster first name that the email's local part starts with.
+An insert that is already done uses the same columns. A dashboard session uses the auth profile name (`full_name`, `name`, or `display_name`), then the team-roster first name that the email's local part starts with. Treat Engine bots are `team_members` rows with `is_bot` (first name only: Yan, Tommy, Jimmy, Amy, Miu, David, Alex, Warren, Elon, Jason, Nole). When `completed_by` is empty and `assigned_to` is one of those bots, the completion line uses that assignee's first name. A human assignee is not treated as the completer.
 
 ## Synced mirrors
 
