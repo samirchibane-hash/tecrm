@@ -231,6 +231,20 @@ tested in `src/test/`. Keep it that way:
 - The Performance dashboard is performance only: creative requests live on `/creatives` and
   tasks on `/tasks`, and neither is duplicated back onto the dashboard.
 
+## Marking a task done
+
+There is no completion RPC and no edge function. Bots and the dashboard write `public.tasks` directly. Set `completed = true`, `stage = 'launched'`, and `completed_by` to the display name (`Tommy - CSM`, `Amy- Image Designer`). The `tasks_stamp_completion` trigger fills `completed_at` when that column is omitted, and clears `completed_at` and `completed_by` when `completed` goes back to false. The UI shows the first name only.
+
+```sql
+update public.tasks
+set completed = true,
+    stage = 'launched',
+    completed_by = 'Tommy - CSM'
+where id = '<task uuid>';
+```
+
+An insert that is already done uses the same columns. `completed_by` is not taken from `assigned_to`. A dashboard session uses the auth profile name (`full_name`, `name`, or `display_name`), then the team-roster first name that the email's local part starts with.
+
 ## Synced mirrors
 
 Both run hourly from pg_cron (authorized by the Vault `stripe_sync_cron_secret`, which

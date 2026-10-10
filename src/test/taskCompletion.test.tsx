@@ -5,11 +5,14 @@ import { AccountTasksCard } from "@/components/account/AccountTasksCard";
 import type { AccountTask } from "@/components/account/queries";
 import { TaskCompletionMeta } from "@/components/tasks/TaskCompletionMeta";
 import {
+  categoryLeaf,
+  completerName,
   completionMeta,
   completionWrite,
   firstName,
   formatCompletionDate,
   personNameFromUser,
+  rosterNameForEmail,
 } from "@/lib/taskCompletion";
 
 const now = new Date("2026-10-09T12:00:00.000Z");
@@ -59,8 +62,15 @@ describe("completionMeta", () => {
     expect(completionMeta({ completed: true, completedAt: null, completedBy: "Amy- Image Designer", now })).toBe("Amy");
   });
 
+  it("adds the category leaf when the row does not already show the chip", () => {
+    expect(completionMeta({ completed: true, completedAt: iso, completedBy: "Tommy - CSM", category: "GHL", now })).toBe(`${day} · Tommy · GHL`);
+    expect(completionMeta({ completed: true, completedAt: iso, completedBy: "Tommy - CSM", category: "CRM › GHL", now })).toBe(`${day} · Tommy · GHL`);
+    expect(categoryLeaf("Meta Ads")).toBe("Meta Ads");
+    expect(completionMeta({ completed: true, completedAt: null, completedBy: null, category: "GHL", now })).toBe("GHL");
+  });
+
   it("shows nothing for an open task or an unknown stamp", () => {
-    expect(completionMeta({ completed: false, completedAt: iso, completedBy: "Tommy", now })).toBeNull();
+    expect(completionMeta({ completed: false, completedAt: iso, completedBy: "Tommy", category: "GHL", now })).toBeNull();
     expect(completionMeta({ completed: true, completedAt: null, completedBy: null, now })).toBeNull();
     expect(completionMeta({ completed: true, completedAt: null, completedBy: "claude", now })).toBeNull();
   });
@@ -70,6 +80,21 @@ describe("completionMeta", () => {
     expect(formatCompletionDate(older, now)).toBe(format(new Date(older), "MMM d, yyyy"));
     expect(formatCompletionDate(iso, now)).toBe(format(new Date(iso), "MMM d"));
     expect(formatCompletionDate("not-a-date", now)).toBeNull();
+  });
+});
+
+describe("rosterNameForEmail", () => {
+  const roster = ["Mohammed", "Samir", "Sam", "Amy"];
+
+  it("matches the longest roster first name at the start of the mailbox", () => {
+    expect(rosterNameForEmail("samirchibane94@gmail.com", roster)).toBe("Samir");
+    expect(rosterNameForEmail("Amy-designer@example.com", roster)).toBe("Amy");
+  });
+
+  it("prefers a profile display name over the roster", () => {
+    expect(completerName({ profileName: "Tommy - CSM", email: "samirchibane94@gmail.com", roster })).toBe("Tommy - CSM");
+    expect(completerName({ profileName: null, email: "samirchibane94@gmail.com", roster })).toBe("Samir");
+    expect(completerName({ profileName: null, email: "unknown@example.com", roster })).toBeNull();
   });
 });
 
@@ -111,6 +136,7 @@ const finished = (overrides: Partial<AccountTask> = {}): AccountTask => ({
   updated_at: "2026-10-07T12:00:00.000Z",
   completed_at: "2026-10-07T12:00:00.000Z",
   completed_by: "Tommy - CSM",
+  category: null,
   ...overrides,
 });
 
@@ -120,6 +146,20 @@ describe("AccountTasksCard", () => {
     const line = screen.getByText(/Tommy/);
     expect(line).toHaveTextContent("Tommy");
     expect(line).not.toHaveTextContent("CSM");
+    expect(screen.queryByText("Culligan Rochester")).not.toBeInTheDocument();
+  });
+
+  it("puts the category on the finish line, since this list has no category chip", () => {
+    render(
+      <AccountTasksCard
+        accountName="Culligan Rochester"
+        tasks={[finished({ category: "CRM › GHL" })]}
+        onChange={() => {}}
+      />,
+    );
+    const line = screen.getByText(/Tommy/);
+    expect(line).toHaveTextContent("GHL");
+    expect(line).not.toHaveTextContent("CRM");
     expect(screen.queryByText("Culligan Rochester")).not.toBeInTheDocument();
   });
 

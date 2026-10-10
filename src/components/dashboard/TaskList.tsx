@@ -348,7 +348,12 @@ function TaskRow({
         >
           {task.title}
         </span>
-        <TaskCompletionMeta completed={task.completed} completedAt={task.completed_at} completedBy={task.completed_by} />
+        <TaskCompletionMeta
+          completed={task.completed}
+          completedAt={task.completed_at}
+          completedBy={task.completed_by}
+          category={task.completed ? task.category : null}
+        />
       </div>
 
       <div className="flex items-center gap-2 shrink-0 text-xs">
@@ -357,7 +362,7 @@ function TaskRow({
             {task.account_name}
           </span>
         )}
-        {task.category && <CategoryBadge category={task.category} options={changeLogOptions} />}
+        {task.category && !task.completed && <CategoryBadge category={task.category} options={changeLogOptions} />}
         {task.description && (
           <AlignLeft
             className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0"

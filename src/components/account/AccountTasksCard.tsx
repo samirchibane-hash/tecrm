@@ -71,7 +71,7 @@ export function AccountTasksCard({ accountName, tasks, onChange }: { accountName
               </button>
               <div className="min-w-0 flex-1">
                 <span className={cn("block truncate text-sm", task.completed ? "text-muted-foreground line-through" : "text-foreground")}>{task.title}</span>
-                <TaskCompletionMeta completed={task.completed} completedAt={task.completed_at} completedBy={task.completed_by} />
+                <TaskCompletionMeta completed={task.completed} completedAt={task.completed_at} completedBy={task.completed_by} category={task.category} />
               </div>
               <div className="flex shrink-0 items-center gap-2 text-xs">
                 <span className={cn("inline-block h-2 w-2 shrink-0 rounded-full", PRIORITY_DOT[task.priority] ?? PRIORITY_DOT.medium)} title={`${task.priority} priority`}>
