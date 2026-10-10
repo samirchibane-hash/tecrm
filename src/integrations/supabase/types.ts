@@ -1719,18 +1719,21 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          is_bot: boolean
           name: string
           position: string | null
         }
         Insert: {
           created_at?: string
           id?: string
+          is_bot?: boolean
           name: string
           position?: string | null
         }
         Update: {
           created_at?: string
           id?: string
+          is_bot?: boolean
           name?: string
           position?: string | null
         }

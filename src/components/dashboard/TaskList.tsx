@@ -10,6 +10,7 @@ import { NewTaskSheet } from "@/components/dashboard/tasks/NewTaskSheet";
 import { TaskCompletionMeta } from "@/components/tasks/TaskCompletionMeta";
 import { currentCompleterName } from "@/lib/currentCompleter";
 import { completionWrite } from "@/lib/taskCompletion";
+import { useTeamMembers } from "@/hooks/useTeamMembers";
 import {
   CAT_SEP,
   CategoryBadge,
@@ -39,6 +40,8 @@ export function TaskList({ accounts, changeLogOptions = [], defaultFilter = "act
   const [categoryFilter, setCategoryFilter] = useState("");
   const [newOpen, setNewOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const { members } = useTeamMembers();
+  const botNames = members.filter((m) => m.is_bot).map((m) => m.name);
 
   const { data: tasks = [], refetch, isPending, isError } = useQuery({
     queryKey: ["tasks"],
@@ -236,6 +239,7 @@ export function TaskList({ accounts, changeLogOptions = [], defaultFilter = "act
             commentCount={commentCounts[task.id] ?? 0}
             onToggle={handleToggle}
             onOpen={() => setSelectedTask(task)}
+            botNames={botNames}
           />
         ))}
       </div>
@@ -309,12 +313,14 @@ function TaskRow({
   commentCount,
   onToggle,
   onOpen,
+  botNames,
 }: {
   task: Task;
   changeLogOptions: ChangeLogOption[];
   commentCount: number;
   onToggle: (t: Task) => void;
   onOpen: () => void;
+  botNames: readonly string[];
 }) {
   const priority = PRIORITY[priorityOf(task.priority)];
   const dueInfo = getDueDateInfo(task.due_date);
@@ -352,6 +358,8 @@ function TaskRow({
           completed={task.completed}
           completedAt={task.completed_at}
           completedBy={task.completed_by}
+          assignee={task.assigned_to}
+          botNames={botNames}
           category={task.completed ? task.category : null}
         />
       </div>

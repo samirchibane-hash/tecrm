@@ -31,7 +31,7 @@ export function AssigneeSelect({
       <option value="">{placeholder}</option>
       {members.map((m) => (
         <option key={m.id} value={m.name}>
-          {m.position ? `${m.name} — ${m.position}` : m.name}
+          {m.is_bot || !m.position ? m.name : `${m.name} — ${m.position}`}
         </option>
       ))}
       {hasOrphan && <option value={value}>{value}</option>}
