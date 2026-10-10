@@ -32,6 +32,8 @@ import type { ChangeLogOption } from "@/hooks/useSettings";
 import { AssigneeSelect } from "@/components/AssigneeSelect";
 import { StageSelect } from "@/components/StageSelect";
 import { STAGE_BADGE, STAGE_LABEL, type Stage } from "@/lib/stages";
+import { currentCompleterName } from "@/lib/currentCompleter";
+import { completionWrite } from "@/lib/taskCompletion";
 import { TaskComments } from "./TaskComments";
 import {
   CategoryBadge,
@@ -459,7 +461,12 @@ export function TaskDetailSheet({
                   <div className="flex items-center gap-2">
                     <StageSelect
                       value={task.stage}
-                      onChange={(v) => patch.mutate({ stage: v, completed: v === "launched" })}
+                      onChange={(v) => {
+                        const done = v === "launched";
+                        const apply = (name: string | null) => patch.mutate({ stage: v, ...completionWrite(done, name) });
+                        if (done) void currentCompleterName().then(apply);
+                        else apply(null);
+                      }}
                       disabled={patch.isPending}
                     />
                     {patch.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />}

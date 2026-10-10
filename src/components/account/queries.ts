@@ -9,6 +9,7 @@ export type AccountTask = {
   id: string; title: string; account_name: string | null;
   priority: string; completed: boolean; stage: string; due_date: string | null;
   created_at: string; updated_at: string;
+  completed_at: string | null; completed_by: string | null;
 };
 
 export type AccountBrief = {

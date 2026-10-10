@@ -1667,6 +1667,8 @@ export type Database = {
           assigned_to: string | null
           category: string | null
           completed: boolean
+          completed_at: string | null
+          completed_by: string | null
           created_at: string
           description: string | null
           description_attachments: Json
@@ -1682,6 +1684,8 @@ export type Database = {
           assigned_to?: string | null
           category?: string | null
           completed?: boolean
+          completed_at?: string | null
+          completed_by?: string | null
           created_at?: string
           description?: string | null
           description_attachments?: Json
@@ -1697,6 +1701,8 @@ export type Database = {
           assigned_to?: string | null
           category?: string | null
           completed?: boolean
+          completed_at?: string | null
+          completed_by?: string | null
           created_at?: string
           description?: string | null
           description_attachments?: Json

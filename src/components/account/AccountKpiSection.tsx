@@ -97,8 +97,9 @@ export function AccountKpiSection({
   );
   const compare = prior ? comparisonLabel(prior) : null;
 
-  // A task marks the chart on the day it was completed (the day the change landed);
-  // a brief marks the day its status last moved.
+  // A task marks the chart on the day it was finished. completed_at is that day;
+  // a done task from before the stamp still uses its last update. A brief marks
+  // the day its status last moved.
   const annotations = useMemo((): ChartAnnotation[] => {
     const inRange = (d: Date) => {
       if (dateRange?.from && d < startOfDay(dateRange.from)) return false;
@@ -111,7 +112,7 @@ export function AccountKpiSection({
       if (!inRange(startOfDay(d))) return;
       (grouped[format(d, "yyyy-MM-dd")] ??= []).push(item);
     };
-    tasks.filter((t) => t.completed).forEach((t) => push(t.updated_at, { kind: "task", label: t.title, detail: "Task completed" }));
+    tasks.filter((t) => t.completed).forEach((t) => push(t.completed_at ?? t.updated_at, { kind: "task", label: t.title, detail: "Task completed" }));
     briefs.forEach((req) => push(req.updated_at, { kind: "brief", label: req.template_name, detail: BRIEF_STATUS_LABEL[req.status] ?? req.status }));
     return Object.entries(grouped).map(([date, items]) => ({ date, items })).sort((a, b) => a.date.localeCompare(b.date));
   }, [tasks, briefs, dateRange]);
