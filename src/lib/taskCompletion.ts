@@ -62,21 +62,62 @@ export function completionWrite(
   };
 }
 
+// Same separator tasks.category uses for "Category › Sub-option" (shared.tsx CAT_SEP).
+const CAT_SEP = " › ";
+
+/** The category label a row shows. A sub-option path keeps the leaf, matching the category chip. */
+export function categoryLeaf(category: string | null | undefined): string | null {
+  if (!category) return null;
+  const [top, ...rest] = category.split(CAT_SEP);
+  const leaf = (rest.length > 0 ? rest.join(CAT_SEP) : top).trim();
+  return leaf || null;
+}
+
 /**
- * One muted line for a finished task: "Oct 7 · Tommy".
- * Either part alone is enough. Nothing, when both are unknown.
- * The client name is not included here — mixed lists already show it.
+ * Longest team-roster first name that the email's local part starts with.
+ * samirchibane94@… matches Samir ahead of Sam. No separator is required, because
+ * the admin address is the first name plus the rest of the mailbox.
+ */
+export function rosterNameForEmail(email: string | null | undefined, names: readonly string[]): string | null {
+  const local = email?.split("@")[0]?.toLowerCase() ?? "";
+  if (!local) return null;
+  let best: string | null = null;
+  for (const name of names) {
+    const given = firstName(name);
+    if (!given || given.length < 2) continue;
+    if (!local.startsWith(given.toLowerCase())) continue;
+    if (!best || given.length > best.length) best = given;
+  }
+  return best;
+}
+
+/** Profile display name when the session has one, otherwise the roster match. */
+export function completerName(input: {
+  profileName: string | null;
+  email: string | null | undefined;
+  roster: readonly string[];
+}): string | null {
+  if (input.profileName && firstName(input.profileName)) return input.profileName.trim();
+  return rosterNameForEmail(input.email, input.roster);
+}
+
+/**
+ * One muted line for a finished task: "Oct 7 · Tommy · GHL".
+ * Pass category only when that row does not already show the category chip.
+ * The client name is not included — mixed lists already show it.
  */
 export function completionMeta(input: {
   completed: boolean;
   completedAt: string | null | undefined;
   completedBy: string | null | undefined;
+  category?: string | null;
   now?: Date;
 }): string | null {
   if (!input.completed) return null;
   const parts = [
     formatCompletionDate(input.completedAt, input.now),
     firstName(input.completedBy),
+    categoryLeaf(input.category),
   ].filter((part): part is string => Boolean(part));
   return parts.length > 0 ? parts.join(" · ") : null;
 }
