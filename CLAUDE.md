@@ -142,14 +142,16 @@ tested in `src/test/`. Keep it that way:
   against the whole visible portfolio's figure on that lead source (`portfolioCostPer`, `portfolioAdRates`,
   `GradedValue`; green at or better, amber a little worse, red well off), and the gallery states those averages.
   On a client's profile the bar is still the portfolio's, never the client's own ads. No per-ad verdict pill.
-  The Winners / Money wasters tiles still use the verdicts below.
+- **The gallery's tiles are Spend · Leads · Appts (since 2026-10-20, Samir)**: the Winners / Money wasters (and the Copy
+  view's Winning / Losing) tiles are gone. Appts and its blended cost per appt count only ads whose account tracks Meta's
+  Schedule event (`apptTotals.ts`); untracked ads are named in the tile, and a list with none tracked reads "Not tracked".
 - **The gallery has a Copy view (since 2026-10-07)**: a `Creatives | Copy` switch, then `Headlines | Primary text`, beside
   the lead-source switch (URL `?view=copy&copy=body`), so it shows on `/creatives` and scoped on every account page. One
   row per distinct line of copy (`copyRows.ts`), pooled across ads and across clients running the same words. Attribution
   is `breakdown`'s: one text = the ad in full, rotating texts = Meta's `title_asset` / `body_asset` split (the portfolio
   query sends `detail: true` for it), unsplit rotating ads = a catch-all row at the end. Ads under a tracking gap stay
-  out. Cost / lead, Link CTR and Click → lead (leads ÷ link clicks) are graded against the portfolio like ad cards;
-  Winning / Losing tiles use `judge`. The part of a headline past ~40 characters and of a primary text past ~125 ("See
+  out. Cost / lead, Link CTR and Click → lead (leads ÷ link clicks) are graded against the portfolio like ad cards.
+  The part of a headline past ~40 characters and of a primary text past ~125 ("See
   more") renders muted. Copy is a view of the same gallery, not a second creatives screen.
 - **Verdicts are statistical claims** (`verdicts.ts`): one-sided Poisson test at 90% against the
   benchmark, plus a material gap, plus a spend floor for winners. Never label an ad or group a

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { formatDistanceToNowStrict } from "date-fns";
-import { AlertTriangle, DollarSign, OctagonX, RefreshCw, Target, TrendingUp } from "lucide-react";
+import { AlertTriangle, CalendarCheck, DollarSign, RefreshCw, Target } from "lucide-react";
 import { CopyList, type CopyBars } from "./CopyList";
 import { BODY_FOLD, COPY_NOUN, COPY_SORT_OPTIONS, HEADLINE_FOLD, buildCopyRows, copySortValue, type CopyKind, type CopySortKey } from "./copyRows";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -17,6 +17,7 @@ import { SORT_OPTIONS, adSortValue, type SortKey } from "./adSort";
 import { formatCount, formatPercent, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { deliveryStatusText } from "./adStatus";
+import { apptTotals } from "./apptTotals";
 import { CountFilter } from "./CountFilter";
 import { NO_COUNT_FILTER, describeCount, passesCount, type CountFilterValue } from "./countThreshold";
 import { CreativeName, CreativeThumbnail, Dash } from "./CreativeBits";
@@ -370,42 +371,24 @@ export function PortfolioCreativeGallery({
     ];
   }, [copyRows, leadFilter, apptFilter, copySort]);
 
-  const copyTotals = useMemo(() => {
-    const real = listedCopy.filter((r) => !r.catchAll);
-    const winners = real.filter((r) => r.verdict === "winner");
-    const wasters = real.filter((r) => r.verdict === "waster");
-    return {
-      spend: listedCopy.reduce((s, r) => s + r.spend, 0),
-      leads: listedCopy.reduce((s, r) => s + r.results, 0),
-      texts: real.length,
-      clients: new Set(listedCopy.flatMap((r) => r.clients.map((c) => c.id))).size,
-      winners,
-      wasters,
-      winnerSpend: winners.reduce((s, r) => s + r.spend, 0),
-      wasterSpend: wasters.reduce((s, r) => s + r.spend, 0),
-    };
-  }, [listedCopy]);
+  const copyTotals = useMemo(() => ({
+    spend: listedCopy.reduce((s, r) => s + r.spend, 0),
+    leads: listedCopy.reduce((s, r) => s + r.results, 0),
+    texts: listedCopy.filter((r) => !r.catchAll).length,
+    clients: new Set(listedCopy.flatMap((r) => r.clients.map((c) => c.id))).size,
+    appts: apptTotals(listedCopy),
+  }), [listedCopy]);
 
   const totals = useMemo(() => {
-    const spend = listed.reduce((s, r) => s + r.ad.spend, 0);
-    const leads = listed.reduce((s, r) => s + (r.ad.delivered ? r.results : 0), 0);
-    const winners = listed.filter((r) => r.verdict === "winner");
-    const wasters = listed.filter((r) => r.verdict === "waster");
-    const clients = new Set(listed.map((r) => r.accountId)).size;
-    const delivered = listed.filter((r) => r.ad.delivered && r.ad.spend > 0).length;
+    const delivered = listed.filter((r) => r.ad.delivered);
     return {
-      spend,
-      leads,
-      clients,
-      delivered,
-      winners,
-      wasters,
-      winnerSpend: winners.reduce((s, r) => s + r.ad.spend, 0),
-      wasterSpend: wasters.reduce((s, r) => s + r.ad.spend, 0),
-      // Verdicts are withheld wholesale when every listed ad sits under a
-      // tracking gap: the tiles must not read "0 wasters" as an all-clear.
+      spend: listed.reduce((s, r) => s + r.ad.spend, 0),
+      leads: delivered.reduce((s, r) => s + r.results, 0),
+      clients: new Set(listed.map((r) => r.accountId)).size,
+      delivered: delivered.filter((r) => r.ad.spend > 0).length,
+      appts: apptTotals(delivered.map((r) => ({ spend: r.ad.spend, appointments: r.ad.appointments }))),
+      // Every listed ad under a tracking gap: zero leads is unknown, not an all-clear.
       withheld: listed.length > 0 && listed.every((r) => r.trackingGap),
-      unbenchmarked: listed.length > 0 && listed.every((r) => !r.benchmark),
     };
   }, [listed]);
 
@@ -413,14 +396,13 @@ export function PortfolioCreativeGallery({
     describeCount(leadFilter, LEAD_NOUN[channel].toLowerCase()),
     describeCount(apptFilter, "appts"),
   ].filter(Boolean).join(" and ");
-  const pct = (n: number) => (totals.spend > 0 ? `${Math.round((n / totals.spend) * 100)}% of spend` : "");
   const listedGaps = gaps.filter((g) => g.channel === channel && (account === ALL || g.accountId === account));
 
   if (isLoading) {
     return (
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-[62px] rounded-xl" />)}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-[62px] rounded-xl" />)}
         </div>
         {Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-[232px] rounded-xl" />)}
       </div>
@@ -475,85 +457,50 @@ export function PortfolioCreativeGallery({
         </Alert>
       )}
 
-      {view === "copy" ? (
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <KpiStatCard
-            label="Spend"
-            value={formatUsd(copyTotals.spend)}
-            icon={DollarSign}
-            detail={
-              `${copyTotals.texts} ${copyTotals.texts === 1 ? COPY_NOUN[copyKind].one : COPY_NOUN[copyKind].many}` +
-              (scoped ? "" : ` · ${copyTotals.clients} ${copyTotals.clients === 1 ? "client" : "clients"}`)
-            }
-          />
-          <KpiStatCard
-            label={LEAD_NOUN[channel]}
-            value={formatCount(copyTotals.leads)}
-            icon={Target}
-            detail={
-              copyTotals.leads > 0
-                ? `${formatUsd(copyTotals.spend / copyTotals.leads, { decimals: true })} blended cost per lead`
-                : "None in this period"
-            }
-          />
-          <KpiStatCard
-            label={`Losing ${COPY_NOUN[copyKind].many}`}
-            value={formatUsd(copyTotals.wasterSpend)}
-            icon={OctagonX}
-            unavailable={!portfolioBars[channel].cpl}
-            unavailableReason="No benchmark"
-            detail={`${copyTotals.wasters.length} · proven dearer than avg`}
-          />
-          <KpiStatCard
-            label={`Winning ${COPY_NOUN[copyKind].many}`}
-            value={formatUsd(copyTotals.winnerSpend)}
-            icon={TrendingUp}
-            unavailable={!portfolioBars[channel].cpl}
-            unavailableReason="No benchmark"
-            detail={`${copyTotals.winners.length} · proven cheaper than avg`}
-          />
-        </div>
-      ) : (
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <KpiStatCard
-          label="Spend"
-          value={formatUsd(totals.spend)}
-          icon={DollarSign}
-          detail={
-            `${totals.delivered} ${totals.delivered === 1 ? "ad" : "ads"}` +
-            (scoped ? "" : ` · ${totals.clients} ${totals.clients === 1 ? "client" : "clients"}`)
-          }
-        />
-        <KpiStatCard
-          label={LEAD_NOUN[channel]}
-          value={formatCount(totals.leads)}
-          icon={Target}
-          detail={
-            totals.leads > 0
-              ? `${formatUsd(totals.spend / totals.leads, { decimals: true })} blended cost per lead`
-              : totals.withheld
-                ? "None recorded — check tracking"
-                : "None in this period"
-          }
-        />
-        <KpiStatCard
-          label="Money wasters"
-          value={formatUsd(totals.wasterSpend)}
-          icon={OctagonX}
-          unavailable={totals.withheld || totals.unbenchmarked}
-          unavailableReason={totals.withheld ? "Withheld: check tracking" : "No benchmark"}
-          detail={`${totals.wasters.length} ${totals.wasters.length === 1 ? "ad" : "ads"} · ${pct(totals.wasterSpend)}`}
-        />
-        <KpiStatCard
-          label="Winners"
-          value={formatUsd(totals.winnerSpend)}
-          icon={TrendingUp}
-          unavailable={totals.withheld || totals.unbenchmarked}
-          unavailableReason={totals.withheld ? "Withheld: check tracking" : "No benchmark"}
-          detail={`${totals.winners.length} ${totals.winners.length === 1 ? "ad" : "ads"} · ${pct(totals.winnerSpend)}`}
-        />
-      </div>
-      )}
+      {(() => {
+        // One tile row for both views: spend, leads and appts over what's listed.
+        const t = view === "copy"
+          ? { spend: copyTotals.spend, leads: copyTotals.leads, count: copyTotals.texts, noun: COPY_NOUN[copyKind], clients: copyTotals.clients, appts: copyTotals.appts }
+          : { spend: totals.spend, leads: totals.leads, count: totals.delivered, noun: { one: "ad", many: "ads" }, clients: totals.clients, appts: totals.appts };
+        const untracked = t.appts.untracked > 0 ? ` · ${t.appts.untracked} not tracked` : "";
+        return (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <KpiStatCard
+              label="Spend"
+              value={formatUsd(t.spend)}
+              icon={DollarSign}
+              detail={
+                `${t.count} ${t.count === 1 ? t.noun.one : t.noun.many}` +
+                (scoped ? "" : ` · ${t.clients} ${t.clients === 1 ? "client" : "clients"}`)
+              }
+            />
+            <KpiStatCard
+              label={LEAD_NOUN[channel]}
+              value={formatCount(t.leads)}
+              icon={Target}
+              detail={
+                t.leads > 0
+                  ? `${formatUsd(t.spend / t.leads, { decimals: true })} blended cost per lead`
+                  : view === "ads" && totals.withheld
+                    ? "None recorded — check tracking"
+                    : "None in this period"
+              }
+            />
+            <KpiStatCard
+              label="Appts"
+              value={formatCount(t.appts.appointments)}
+              icon={CalendarCheck}
+              unavailable={t.appts.tracked === 0}
+              unavailableReason="Not tracked on these ads"
+              detail={
+                (t.appts.costPerAppt !== null
+                  ? `${formatUsd(t.appts.costPerAppt, { decimals: true })} blended cost per appt`
+                  : "None in this period") + untracked
+              }
+            />
+          </div>
+        );
+      })()}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
@@ -694,8 +641,7 @@ export function PortfolioCreativeGallery({
           {scoped ? "" : " and every client using the same words"}. An ad with one {COPY_NOUN[copyKind].one} credits it in full; an ad
           that rotates several is split with Meta&rsquo;s per-text breakdown, and one Meta didn&rsquo;t split sits in its own row at the
           end rather than being credited to any text. {CHANNEL_LABEL[channel]} only; ads under a tracking gap are left out.
-          Winning and losing {COPY_NOUN[copyKind].many} pass the same statistical test as ads (90% confidence against the
-          portfolio&rsquo;s cost per lead). {copyKind === "headline"
+          Appts count only ads whose account tracks Meta&rsquo;s Schedule event. {copyKind === "headline"
             ? `The darker part of a headline is what shows before the feed cuts it off (~${HEADLINE_FOLD} characters).`
             : `The darker part of a primary text is what shows before “See more” on a phone (~${BODY_FOLD} characters).`}
         </p>
@@ -707,7 +653,8 @@ export function PortfolioCreativeGallery({
           {sort.dir === "asc" ? "lowest" : "highest"} first; ads with no figure for it sit last. {CHANNEL_LABEL[channel]} only: website and instant-form leads cost too
           differently to rank together, so one source shows at a time. Cost / lead, Link CTR and Hook are graded
           against the whole portfolio&rsquo;s {CHANNEL_LABEL[channel].toLowerCase()} ads{scoped ? ", not this client's own" : ""}: green at or better, amber a
-          little worse, red well off. Paused ads that spent in the period are listed and greyed.
+          little worse, red well off. Appts count only ads whose account tracks Meta&rsquo;s Schedule event. Paused ads that
+          spent in the period are listed and greyed.
         </p>
         )}
       </footer>
