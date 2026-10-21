@@ -15,6 +15,8 @@ export type GhlKpiRow = {
   type: string | null;
   created_on: string;
   appointment_status?: string | null;
+  /** The day the appointment is for (a `date` column, yyyy-MM-dd). */
+  appointment_time?: string | null;
   deal_value?: number | null;
 };
 
@@ -45,20 +47,70 @@ export function ghlRowsInRange<T extends GhlKpiRow>(rows: readonly T[], range: D
 }
 
 const isLead = (c: GhlKpiRow) => {
-  const t = c.type?.toLowerCase();
+  const t = c.type?.toLowerCase().trim();
   return t === "lead" || t === "water test";
 };
-const isAppt = (c: GhlKpiRow) => {
-  const t = c.type?.toLowerCase();
+/** A booked contact: any appointment row, cancelled or not (the report's list shows both). */
+export const isBooked = (c: GhlKpiRow) => {
+  const t = c.type?.toLowerCase().trim();
   return t === "appointment" || t === "water test";
 };
+/** A booking that counts: cancelled ones still list (with their pill) but aren't appointments. */
+const isAppt = (c: GhlKpiRow) => isBooked(c) && c.appointment_status !== "cancelled";
+
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * The day the appointment is for, as yyyy-MM-dd, read from `appointment_time`.
+ * The column is a Postgres `date` today (yyyy-MM-dd); the other formats are read
+ * defensively in case n8n starts sending GHL's start time as text. Null when the
+ * field holds no date, so the caller falls back to `created_on`.
+ * The date is read as written (the calendar's local day), never shifted via UTC.
+ */
+export function appointmentDay(c: Pick<GhlKpiRow, "appointment_time">): string | null {
+  const t = c.appointment_time?.trim();
+  if (!t) return null;
+  const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const us = t.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+  if (us) return `${us[3]}-${pad(+us[1])}-${pad(+us[2])}`;
+  const named = t.match(/\b([a-z]{3})[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b/i);
+  const month = named ? MONTHS.indexOf(named[1].toLowerCase()) : -1;
+  if (named && month >= 0) return `${named[3]}-${pad(month + 1)}-${pad(+named[2])}`;
+  return null;
+}
+
+/** How far before a period a booking for a day inside it can have come in. Period queries filtered on created_on reach back this far. */
+export const BOOKING_LOOKBACK_DAYS = 60;
+
+/** The day a booking belongs to on every screen: its appointment date, else the day the row came in. */
+export const bookingDay = (c: GhlKpiRow) => appointmentDay(c) ?? c.created_on;
+
+/**
+ * Bookings in a period by the day the appointment is for, so the count matches
+ * the client's GHL calendar. A contact who opts in on Oct 30 for a Nov 3 test is
+ * a November appointment. Cancelled bookings are included (see `isAppt`).
+ */
+export function ghlBookingsInRange<T extends GhlKpiRow>(rows: readonly T[], range: DateRange | undefined): T[] {
+  return rows.filter((c) => {
+    if (!isBooked(c)) return false;
+    const day = bookingDay(c);
+    return !!day && inRange(parseDay(day), range);
+  });
+}
 
 /**
  * Every account KPI for one period. Ratios are weighted the way Ads Manager
  * reports them (CTR = clicks ÷ impressions, not the mean of each row's CTR), so
  * a $2 day can't pull the period's CPC as hard as a $200 day.
  */
-export function computeAccountKpis(adRows: readonly AdRow[], ghl: readonly GhlKpiRow[]): Record<KpiKey, number> {
+export function computeAccountKpis(
+  adRows: readonly AdRow[],
+  ghl: readonly GhlKpiRow[],
+  /** The period's bookings (`ghlBookingsInRange`). Omitted = the bookings among `ghl`. */
+  bookings: readonly GhlKpiRow[] = ghl,
+): Record<KpiKey, number> {
   const sum = (f: (r: AdRow) => number | null | undefined) => adRows.reduce((s, r) => s + (f(r) ?? 0), 0);
   const totalSpend = sum((r) => r["Cost: Amount spend"]);
   const totalClicks = sum((r) => r["Performance: Clicks"]);
@@ -71,7 +123,7 @@ export function computeAccountKpis(adRows: readonly AdRow[], ghl: readonly GhlKp
   // The lead count is GoHighLevel contacts, never Meta's pixel lead (GHL's CAPI
   // re-fires on contact updates, so Meta runs ~2x truth).
   const ghlLeads = ghl.filter(isLead).length;
-  const ghlAppointments = ghl.filter(isAppt).length;
+  const ghlAppointments = bookings.filter(isAppt).length;
   const sold = ghl.filter((c) => c.appointment_status === "sold");
   const totalRevenue = sold.reduce((s, c) => s + (c.deal_value ?? 0), 0);
   return {
@@ -99,25 +151,37 @@ export function computeAccountKpis(adRows: readonly AdRow[], ghl: readonly GhlKp
 export type KpiSeries = Partial<Record<KpiKey, { date: string; value: number }[]>>;
 
 /** One daily series per chartable KPI, built with the same definitions as the tiles. */
-export function buildKpiSeries(adRows: readonly AdRow[], ghl: readonly GhlKpiRow[]): KpiSeries {
+export function buildKpiSeries(
+  adRows: readonly AdRow[],
+  ghl: readonly GhlKpiRow[],
+  /** The period's bookings, charted on the day they're for. Omitted = the bookings among `ghl`. */
+  bookings: readonly GhlKpiRow[] = ghl,
+): KpiSeries {
   const adByDate: Record<string, AdRow[]> = {};
   for (const r of adRows) if (r["Report: Date"]) (adByDate[r["Report: Date"]] ??= []).push(r);
   const ghlByDate: Record<string, GhlKpiRow[]> = {};
   for (const c of ghl) if (c.created_on) (ghlByDate[c.created_on] ??= []).push(c);
+  const bookedByDate: Record<string, GhlKpiRow[]> = {};
+  for (const c of bookings) {
+    if (!isBooked(c)) continue;
+    const d = bookingDay(c);
+    if (d) (bookedByDate[d] ??= []).push(c);
+  }
 
   const adDates = Object.keys(adByDate).sort();
   const ghlDates = Object.keys(ghlByDate).sort();
-  const allDates = [...new Set([...adDates, ...ghlDates])].sort();
-  const day = (date: string) => computeAccountKpis(adByDate[date] ?? [], ghlByDate[date] ?? []);
+  const bookedDates = Object.keys(bookedByDate).sort();
+  const allDates = [...new Set([...adDates, ...ghlDates, ...bookedDates])].sort();
+  const day = (date: string) =>
+    computeAccountKpis(adByDate[date] ?? [], ghlByDate[date] ?? [], bookedByDate[date] ?? []);
   const round = (v: number) => +v.toFixed(3);
 
   const series: KpiSeries = {};
   const metaKeys: KpiKey[] = ["totalSpend", "totalClicks", "totalImpressions", "totalReach", "avgCTR", "avgCPC", "avgCPM", "webApptTotal", "apptTotal"];
   const adDays = adDates.map((date) => ({ date, k: day(date) }));
   for (const key of metaKeys) series[key] = adDays.map(({ date, k }) => ({ date, value: round(k[key]) }));
-  const ghlDays = ghlDates.map((date) => ({ date, k: day(date) }));
-  series.ghlLeads = ghlDays.map(({ date, k }) => ({ date, value: k.ghlLeads }));
-  series.ghlAppointments = ghlDays.map(({ date, k }) => ({ date, value: k.ghlAppointments }));
+  series.ghlLeads = ghlDates.map((date) => ({ date, value: day(date).ghlLeads }));
+  series.ghlAppointments = bookedDates.map((date) => ({ date, value: day(date).ghlAppointments }));
   const allDays = allDates.map((date) => ({ date, k: day(date) }));
   series.ghlCostPerLead = allDays.map(({ date, k }) => ({ date, value: +k.ghlCostPerLead.toFixed(2) }));
   series.ghlCostPerAppt = allDays.map(({ date, k }) => ({ date, value: +k.ghlCostPerAppt.toFixed(2) }));

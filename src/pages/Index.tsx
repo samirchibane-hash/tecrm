@@ -20,6 +20,7 @@ import { format, startOfDay, subDays } from "date-fns";
 import { useSettings } from "@/hooks/useSettings";
 import type { AdRow } from "@/hooks/useCouplerData";
 import { useAllAccounts } from "@/hooks/useAllAccounts";
+import { BOOKING_LOOKBACK_DAYS, computeAccountKpis, ghlBookingsInRange, ghlRowsInRange } from "@/lib/accountKpis";
 
 // ─── Component ───────────────────────────────────────────────────────────────
 const Index = () => {
@@ -84,7 +85,8 @@ const Index = () => {
   // Date range is in the query key so this refetches when the picker changes.
   const ghlFetchFrom = useMemo(() => {
     if (!dateRange?.from) return startOfDay(subDays(new Date(), 180));
-    return startOfDay(dateRange.from);
+    // Bookings count on the day they're for, so reach back for contacts who booked ahead.
+    return startOfDay(subDays(dateRange.from, BOOKING_LOOKBACK_DAYS));
   }, [dateRange]);
 
   const { data: allGhlConversions = [] } = useQuery({
@@ -143,27 +145,14 @@ const Index = () => {
     return accountGroups.map(([name, rows]) => {
       const accountId = accountIdMap[name];
 
-      const filterGhl = (from?: Date, to?: Date) =>
-        allGhlConversions.filter((c) => {
-          if (c.tecrm_id !== accountId) return false;
-          if (!from) return true;
-          const [y, m, d] = c.created_on.split("-").map(Number);
-          const dateVal = new Date(y, m - 1, d);
-          if (dateVal < from) return false;
-          if (to && dateVal > new Date(to.getTime() + 86400000 - 1)) return false;
-          return true;
-        });
-
-      const ghl = filterGhl(dateRange?.from, dateRange?.to);
+      const accountGhl = allGhlConversions.filter((c) => c.tecrm_id === accountId);
+      const ghl = ghlRowsInRange(accountGhl, dateRange);
 
       const totalSpend = rows.reduce((s, r) => s + (r["Cost: Amount spend"] ?? 0), 0);
 
-      const ghlLeads = ghl.filter((c) =>
-        c.type?.toLowerCase() === "lead" || c.type?.toLowerCase() === "water test"
-      ).length;
-      const ghlAppointments = ghl.filter((c) =>
-        c.type?.toLowerCase() === "appointment" || c.type?.toLowerCase() === "water test"
-      ).length;
+      // One definition with the account page: leads by the day they came in,
+      // appointments by the day they're for (cancelled ones out).
+      const { ghlLeads, ghlAppointments } = computeAccountKpis([], ghl, ghlBookingsInRange(accountGhl, dateRange));
       const ghlCostPerLead = ghlLeads > 0 ? totalSpend / ghlLeads : 0;
       const ghlCostPerAppt = ghlAppointments > 0 ? totalSpend / ghlAppointments : 0;
 

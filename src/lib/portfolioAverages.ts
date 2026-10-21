@@ -8,6 +8,8 @@ import { computeAccountKpis, type GhlKpiRow } from "./accountKpis";
 export interface ClientPeriod {
   adRows: readonly AdRow[];
   ghl: readonly GhlKpiRow[];
+  /** The period's bookings by appointment day; omitted = the bookings among `ghl`. */
+  bookings?: readonly GhlKpiRow[];
   spendKnown: boolean;
 }
 
@@ -38,7 +40,7 @@ export interface PortfolioAverages {
  * known-spend client's rows into one Ads-Manager-weighted figure.
  */
 export function portfolioAverages(clients: readonly ClientPeriod[]): PortfolioAverages {
-  const kpis = clients.map((c) => ({ ...c, k: computeAccountKpis(c.adRows, c.ghl) }));
+  const kpis = clients.map((c) => ({ ...c, k: computeAccountKpis(c.adRows, c.ghl, c.bookings ?? c.ghl) }));
   const bench = portfolioBenchmark(
     kpis.map((c) => ({ spend: c.k.totalSpend, spendKnown: c.spendKnown, leads: c.k.ghlLeads, appointments: c.k.ghlAppointments })),
   );

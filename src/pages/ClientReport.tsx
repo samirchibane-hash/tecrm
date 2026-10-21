@@ -19,6 +19,7 @@ import {
   buildKpiSeries,
   comparisonLabel,
   computeAccountKpis,
+  ghlBookingsInRange,
   ghlRowsInRange,
   previousPeriod,
   priorCoverage,
@@ -75,10 +76,8 @@ function ClientReportView({ accountId, accountName }: { accountId: string; accou
   // No rows at all means the account isn't connected to GHL — not "0 leads".
   const ghlUnmapped = !ghlLoading && ghlRaw.length === 0;
   const ghlRows = useMemo(() => ghlRowsInRange(ghlRaw, dateRange), [ghlRaw, dateRange]);
-  const appointments = useMemo(
-    () => ghlRows.filter((c) => ["appointment", "water test"].includes(c.type?.toLowerCase() ?? "")),
-    [ghlRows],
-  );
+  // Bookings sit in the period they're for (the client's GHL calendar), not the day they came in.
+  const appointments = useMemo(() => ghlBookingsInRange(ghlRaw, dateRange), [ghlRaw, dateRange]);
 
   // ── Change log sources ───────────────────────────────────────────────────
   const { data: updates = [] } = useQuery({
@@ -128,8 +127,8 @@ function ClientReportView({ accountId, accountName }: { accountId: string; accou
     () => ALL_KPIS.filter((k) => settings.enabled_kpis.includes(k.key)).map((k) => k.key),
     [settings.enabled_kpis],
   );
-  const kpis = useMemo(() => computeAccountKpis(adRows, ghlRows), [adRows, ghlRows]);
-  const series = useMemo(() => buildKpiSeries(adRows, ghlRows), [adRows, ghlRows]);
+  const kpis = useMemo(() => computeAccountKpis(adRows, ghlRows, appointments), [adRows, ghlRows, appointments]);
+  const series = useMemo(() => buildKpiSeries(adRows, ghlRows, appointments), [adRows, ghlRows, appointments]);
   const untracked = useMemo(() => untrackedKpis(adRows), [adRows]);
 
   // Change vs the same number of days just before, withheld per source when
@@ -137,7 +136,12 @@ function ClientReportView({ accountId, accountName }: { accountId: string; accou
   const prior = useMemo(() => previousPeriod(dateRange), [dateRange]);
   const coverage = useMemo(() => priorCoverage(prior, ghlRaw), [prior, ghlRaw]);
   const priorKpis = useMemo(
-    () => (prior ? computeAccountKpis(adRowsInRange(accountAdRows, prior), ghlRowsInRange(ghlRaw, prior)) : null),
+    () => (prior ? computeAccountKpis(
+            adRowsInRange(accountAdRows, prior),
+            ghlRowsInRange(ghlRaw, prior),
+            ghlBookingsInRange(ghlRaw, prior),
+          )
+        : null),
     [prior, accountAdRows, ghlRaw],
   );
 
