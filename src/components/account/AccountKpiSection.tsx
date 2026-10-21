@@ -10,7 +10,6 @@ import {
   buildKpiSeries,
   comparisonLabel,
   computeAccountKpis,
-  ghlBookingsInRange,
   ghlRowsInRange,
   kpiChange,
   previousPeriod,
@@ -84,16 +83,8 @@ export function AccountKpiSection({
   const untracked = useMemo(() => untrackedKpis(filteredAdData), [filteredAdData]);
 
   const ghlConversions = useMemo(() => ghlRowsInRange(ghlRaw, dateRange), [ghlRaw, dateRange]);
-  // Appointments count on the day they're for, like the client's GHL calendar.
-  const ghlBookings = useMemo(() => ghlBookingsInRange(ghlRaw, dateRange), [ghlRaw, dateRange]);
-  const kpis = useMemo(
-    () => computeAccountKpis(filteredAdData, ghlConversions, ghlBookings),
-    [filteredAdData, ghlConversions, ghlBookings],
-  );
-  const chartSeriesData = useMemo(
-    () => buildKpiSeries(filteredAdData, ghlConversions, ghlBookings),
-    [filteredAdData, ghlConversions, ghlBookings],
-  );
+  const kpis = useMemo(() => computeAccountKpis(filteredAdData, ghlConversions), [filteredAdData, ghlConversions]);
+  const chartSeriesData = useMemo(() => buildKpiSeries(filteredAdData, ghlConversions), [filteredAdData, ghlConversions]);
 
   // The same number of days just before this period. A source that doesn't hold
   // those days (Meta's 90-day window, GHL before its first sync) gets no change
@@ -101,12 +92,7 @@ export function AccountKpiSection({
   const prior = useMemo(() => previousPeriod(dateRange), [dateRange]);
   const coverage = useMemo(() => priorCoverage(prior, ghlRaw), [prior, ghlRaw]);
   const priorKpis = useMemo(
-    () => (prior ? computeAccountKpis(
-            adRowsInRange(accountAdRows, prior),
-            ghlRowsInRange(ghlRaw, prior),
-            ghlBookingsInRange(ghlRaw, prior),
-          )
-        : null),
+    () => (prior ? computeAccountKpis(adRowsInRange(accountAdRows, prior), ghlRowsInRange(ghlRaw, prior)) : null),
     [prior, accountAdRows, ghlRaw],
   );
   const compare = prior ? comparisonLabel(prior) : null;

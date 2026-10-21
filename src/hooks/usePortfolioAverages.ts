@@ -5,7 +5,7 @@ import { useCouplerData, useMetaGapAccounts } from "@/hooks/useCouplerData";
 import { useAllAccounts } from "@/hooks/useAllAccounts";
 import { useAllGhlConversions } from "@/hooks/useAccountGhlConversions";
 import { useSettings } from "@/hooks/useSettings";
-import { adRowsInRange, BOOKING_LOOKBACK_DAYS, ghlBookingsInRange, ghlRowsInRange } from "@/lib/accountKpis";
+import { adRowsInRange, ghlRowsInRange } from "@/lib/accountKpis";
 import { portfolioAverages, type PortfolioAverages } from "@/lib/portfolioAverages";
 
 /**
@@ -20,10 +20,7 @@ export function usePortfolioAverages(dateRange: DateRange | undefined): Portfoli
   const { data: accounts = [] } = useAllAccounts();
   const { settings } = useSettings();
   const metaGaps = useMetaGapAccounts();
-  const since = format(
-    startOfDay(dateRange?.from ? subDays(dateRange.from, BOOKING_LOOKBACK_DAYS) : subDays(new Date(), 180)),
-    "yyyy-MM-dd",
-  );
+  const since = format(startOfDay(dateRange?.from ?? subDays(new Date(), 180)), "yyyy-MM-dd");
   const { data: ghl, isLoading: ghlLoading } = useAllGhlConversions(since);
 
   return useMemo(() => {
@@ -31,14 +28,12 @@ export function usePortfolioAverages(dateRange: DateRange | undefined): Portfoli
     const hidden = settings.hidden_accounts ?? [];
     const rows = adRowsInRange(adRows ?? [], dateRange);
     const inRange = ghlRowsInRange(ghl, dateRange);
-    const booked = ghlBookingsInRange(ghl, dateRange);
     return portfolioAverages(
       accounts
         .filter((a) => !hidden.includes(a.account_name))
         .map((a) => ({
           adRows: rows.filter((r) => r["Account: Account name"] === a.account_name),
           ghl: inRange.filter((c) => c.tecrm_id === a.id),
-          bookings: booked.filter((c) => c.tecrm_id === a.id),
           spendKnown: !metaDown && !metaGaps.has(a.account_name),
         })),
     );

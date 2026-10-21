@@ -3,10 +3,8 @@ import type { AdRow } from "@/hooks/useCouplerData";
 import type { KpiKey } from "@/components/dashboard/AccountCard";
 import {
   adRowsInRange,
-  appointmentDay,
   comparisonLabel,
   computeAccountKpis,
-  ghlBookingsInRange,
   ghlRowsInRange,
   kpiChange,
   previousPeriod,
@@ -81,48 +79,6 @@ describe("computeAccountKpis", () => {
     const range = { from: new Date(2026, 8, 2), to: new Date(2026, 8, 3) };
     expect(adRowsInRange([ad("2026-09-01"), ad("2026-09-02"), ad("2026-09-03"), ad("2026-09-04")], range)).toHaveLength(2);
     expect(ghlRowsInRange([...leads(1, "2026-09-01"), ...leads(1, "2026-09-03")], range)).toHaveLength(1);
-  });
-
-  it("leaves cancelled bookings out of appointments but keeps them as leads", () => {
-    const k = computeAccountKpis([], [
-      { type: "water test", created_on: "2026-10-06" },
-      { type: "water test", created_on: "2026-10-06", appointment_status: "cancelled" },
-    ]);
-    expect(k.ghlLeads).toBe(2);
-    expect(k.ghlAppointments).toBe(1);
-  });
-});
-
-describe("appointmentDay", () => {
-  it("reads the calendar day from each format n8n and the report write", () => {
-    expect(appointmentDay({ appointment_time: "2026-10-17" })).toBe("2026-10-17");
-    expect(appointmentDay({ appointment_time: "2026-10-31T21:00:00-04:00" })).toBe("2026-10-31");
-    expect(appointmentDay({ appointment_time: "11/3/2026 10:00 AM" })).toBe("2026-11-03");
-    expect(appointmentDay({ appointment_time: "Tuesday, November 3, 2026 10:00 AM" })).toBe("2026-11-03");
-  });
-
-  it("returns null when the field holds no date", () => {
-    expect(appointmentDay({ appointment_time: "10:30" })).toBeNull();
-    expect(appointmentDay({ appointment_time: "" })).toBeNull();
-    expect(appointmentDay({ appointment_time: null })).toBeNull();
-  });
-});
-
-describe("ghlBookingsInRange", () => {
-  const october = { from: new Date(2026, 9, 1), to: new Date(2026, 9, 31) };
-
-  it("puts a booking in the month it's for, not the month it came in", () => {
-    const rows: GhlKpiRow[] = [
-      { type: "water test", created_on: "2026-09-29", appointment_time: "2026-10-02" },
-      { type: "water test", created_on: "2026-10-30", appointment_time: "2026-11-03" },
-      { type: "lead", created_on: "2026-10-05" },
-    ];
-    expect(ghlBookingsInRange(rows, october).map((r) => r.created_on)).toEqual(["2026-09-29"]);
-  });
-
-  it("falls back to the day the row came in when the time has no date", () => {
-    const rows: GhlKpiRow[] = [{ type: "water test", created_on: "2026-10-05", appointment_time: "10:30" }];
-    expect(ghlBookingsInRange(rows, october)).toHaveLength(1);
   });
 });
 
