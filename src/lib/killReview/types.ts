@@ -21,7 +21,9 @@ export const KILL_REVIEW_COLUMNS = [
   "ad_name",
   "adset_id",
   "adset_name",
+  "campaign_id",
   "campaign_name",
+  "business_id",
   "lead_source",
   "thumbnail_url",
   "cur_since",
@@ -34,6 +36,7 @@ export const KILL_REVIEW_COLUMNS = [
   "cur_appts",
   "cplc",
   "ctr",
+  "cpc",
   "prev_spend",
   "prev_leads",
   "prev_cpl",
@@ -63,8 +66,12 @@ export type CreativeKillReviewRow = {
   ad_name: string;
   adset_id: string;
   adset_name: string;
-  /** Not in the current runs. Kept so a ClearDeals or internal campaign can be excluded. */
+  /** Meta campaign id. Null on runs before 2026-10-29. */
+  campaign_id: string | null;
+  /** Not in the Oct 22 / Oct 26 runs. Kept so a ClearDeals or internal campaign can be excluded. */
   campaign_name: string | null;
+  /** Meta business id for the Ads Manager link. Omitted from the URL when null. */
+  business_id: string | null;
   /** Website pixel only. Instant Forms never belong in this review. */
   lead_source: KillLeadSource;
   /**
@@ -86,6 +93,11 @@ export type CreativeKillReviewRow = {
   cplc: number | null;
   /** Link CTR (inline link clicks ÷ impressions), in percent units. */
   ctr: number | null;
+  /**
+   * Cost per click on all clicks, only when the run supplied it.
+   * Never derived from link clicks.
+   */
+  cpc: number | null;
   prev_spend: number;
   prev_leads: number;
   prev_cpl: number | null;

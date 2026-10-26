@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { KillReview } from "@/components/kill-review/KillReview";
+import { KillReviewCard } from "@/components/kill-review/KillReviewCard";
+import { KILL_REVIEW_FIXTURE } from "@/lib/killReview/fixtureData";
 import { formatKillMoney } from "@/lib/killReview/format";
 import { killReviewRuns, loadKillReviews } from "@/lib/killReview/load";
 
@@ -30,13 +32,31 @@ describe("KillReview", () => {
     expect(screen.getAllByText("Turn off")).toHaveLength(8);
     expect(screen.getAllByText("Schedule (Meta pixel)").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Ad 1, Culligan Rochester")).toBeInTheDocument();
+    expect(screen.getByLabelText("Ad 3, Culligan Rochester")).toHaveTextContent("CPLC $8.15 · Link CTR 0.62%");
+    expect(document.body.textContent ?? "").not.toMatch(/\bCPC\b/);
     expect(screen.getAllByText("Only live ad in this ad set").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Only live in ad set: unknown").length).toBeGreaterThan(0);
 
     for (const link of screen.getAllByRole("link", { name: /Ads Manager/ })) {
       const url = new URL(link.getAttribute("href") ?? "", "https://adsmanager.facebook.com");
       expect(url.searchParams.get("act")).toMatch(/^\d+$/);
+      expect(url.searchParams.has("business_id")).toBe(false);
     }
+  });
+
+  it("puts CPLC and link CTR beside an early-signal chip, and CPC only when the row has it", () => {
+    const ad3 = KILL_REVIEW_FIXTURE.find((row) => row.run_date === "2026-10-26" && row.n === 3)!;
+    const { unmount } = render(<KillReviewCard row={ad3} selected={false} onSelectedChange={() => {}} />);
+    const card = screen.getByLabelText("Ad 3, Culligan Rochester");
+    expect(card).toHaveTextContent("Early signal · $50+ spent, CPLC over $5");
+    expect(card).toHaveTextContent("CPLC $8.15 · Link CTR 0.62%");
+    expect(card.textContent ?? "").not.toMatch(/\bCPC\b/);
+    unmount();
+
+    render(
+      <KillReviewCard row={{ ...ad3, cpc: 1.25 }} selected={false} onSelectedChange={() => {}} />,
+    );
+    expect(screen.getByLabelText("Ad 3, Culligan Rochester")).toHaveTextContent("· CPC $1.25");
   });
 
   it("copies the selected stable numbers", async () => {

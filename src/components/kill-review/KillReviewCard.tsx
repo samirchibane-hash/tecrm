@@ -84,7 +84,7 @@ export function KillReviewCard({
               <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{row.adset_name}</p>
             </div>
             <a
-              href={adsManagerAdUrl(row.act, row.ad_id)}
+              href={adsManagerAdUrl(row.act, row.ad_id, row.business_id)}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex shrink-0 items-center gap-1 text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
@@ -112,10 +112,16 @@ export function KillReviewCard({
           </div>
 
           <div className="space-y-1.5">
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
               {row.rules_hit.map((rule) => (
-                <span key={rule} title={RULE_COPY[rule].detail}>
+                <span key={rule} className="inline-flex flex-wrap items-center gap-2" title={RULE_COPY[rule].detail}>
                   <StatusPill status="warning">{RULE_COPY[rule].label}</StatusPill>
+                  {rule === "d" && (
+                    <span className="text-sm font-medium tabular-nums text-foreground">
+                      {`CPLC ${formatKillMoneyOrDash(row.cplc)} · Link CTR ${formatKillPercentOrDash(row.ctr)}`}
+                      {row.cpc != null ? ` · CPC ${formatKillMoney(row.cpc)}` : ""}
+                    </span>
+                  )}
                 </span>
               ))}
             </div>

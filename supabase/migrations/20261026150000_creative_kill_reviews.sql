@@ -20,7 +20,9 @@ create table if not exists public.creative_kill_reviews (
   ad_name text not null,
   adset_id text not null,
   adset_name text not null,
+  campaign_id text,
   campaign_name text,
+  business_id text,
   lead_source text not null default 'website',
   thumbnail_url text,
   cur_since date not null,
@@ -33,6 +35,7 @@ create table if not exists public.creative_kill_reviews (
   cur_appts numeric not null,
   cplc numeric,
   ctr numeric,
+  cpc numeric,
   prev_spend numeric not null,
   prev_leads numeric not null,
   prev_cpl numeric,
@@ -77,6 +80,15 @@ create table if not exists public.creative_kill_reviews (
 comment on table public.creative_kill_reviews is
   'One row per flagged website ad on a kill-review run. Team-readable. Yan publishes; the dashboard does not pause ads.';
 
+comment on column public.creative_kill_reviews.campaign_id is
+  'Meta campaign id. Null on runs before 2026-10-29.';
+
+comment on column public.creative_kill_reviews.business_id is
+  'Meta business id for the Ads Manager link. Null leaves business_id off the URL.';
+
+comment on column public.creative_kill_reviews.cpc is
+  'Cost per click on all clicks, only when the run supplied it. Never derived from link clicks.';
+
 comment on column public.creative_kill_reviews.cur_appts is
   'Meta pixel Schedule events in the current 14 days. Not GoHighLevel appointments.';
 
@@ -88,6 +100,47 @@ comment on column public.creative_kill_reviews.rules_hit is
 
 comment on column public.creative_kill_reviews.thumbnail_url is
   'Object path in the creative-kill-thumbs bucket, or an absolute URL. The bucket is private.';
+
+-- The act check above rejects the internal Meta account on the row itself.
+-- This also rejects a row whose linked accounts.id is that same ad account,
+-- even when the published act string is a client account.
+create or replace function public.creative_kill_reviews_guard()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+declare
+  linked_act text;
+begin
+  if replace(btrim(new.act), 'act_', '') = '1170300274125472' then
+    raise exception 'creative_kill_reviews rejects the internal ad account'
+      using errcode = '23514';
+  end if;
+
+  if new.account_id is not null then
+    select a.fb_ad_account_id into linked_act
+    from public.accounts a
+    where a.id = new.account_id;
+
+    if linked_act is not null
+       and replace(btrim(linked_act), 'act_', '') = '1170300274125472' then
+      raise exception 'creative_kill_reviews rejects the internal ad account'
+        using errcode = '23514';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists creative_kill_reviews_guard on public.creative_kill_reviews;
+create trigger creative_kill_reviews_guard
+  before insert or update of act, account_id on public.creative_kill_reviews
+  for each row
+  execute function public.creative_kill_reviews_guard();
+
+revoke all on function public.creative_kill_reviews_guard() from public, anon;
+grant execute on function public.creative_kill_reviews_guard() to authenticated, service_role;
 
 create index if not exists creative_kill_reviews_run_idx
   on public.creative_kill_reviews (run_date desc, n);

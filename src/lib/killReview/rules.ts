@@ -60,8 +60,15 @@ export const VERDICT_LABEL: Record<KillVerdict, string> = {
   keep: "Keep",
 };
 
-/** Treat Engine's own ad account. Never a client kill-review row. */
+/** Treat Engine's own Meta ad account. Never a client kill-review row. */
 export const INTERNAL_AD_ACCOUNT = "act_1170300274125472";
+const INTERNAL_AD_ACCOUNT_NUMBER = "1170300274125472";
+
+/** True for act_1170300274125472 with or without the act_ prefix. */
+export function isInternalAdAccount(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return value.trim().replace(/^act_/, "") === INTERNAL_AD_ACCOUNT_NUMBER;
+}
 
 const TRUE_H2O = /true\s*h2o/i;
 const CLEAR_DEALS = /clear\s*deals/i;
@@ -73,8 +80,8 @@ const INTERNAL_WORD = /\binternal\b/i;
  * are out because lead_source must be the website pixel.
  */
 export function inKillReviewScope(row: CreativeKillReviewRow): boolean {
-  const act = row.act.startsWith("act_") ? row.act : `act_${row.act}`;
-  if (act === INTERNAL_AD_ACCOUNT) return false;
+  // Hard exclude by Meta ad account id, independent of the name filters below.
+  if (isInternalAdAccount(row.act) || isInternalAdAccount(row.account_id)) return false;
   if (row.lead_source !== "website") return false;
   if (TRUE_H2O.test(row.client_name) || TRUE_H2O.test(row.campaign_name ?? "")) return false;
   const named = [row.client_name, row.campaign_name, row.adset_name, row.ad_name];
@@ -87,9 +94,11 @@ export function inKillReviewScope(row: CreativeKillReviewRow): boolean {
  * Ads Manager `act` is the account number only. The act_ prefix is stripped,
  * matching AccountHeader.
  */
-export function adsManagerAdUrl(act: string, adId: string): string {
+export function adsManagerAdUrl(act: string, adId: string, businessId?: string | null): string {
   const accountNumber = act.replace(/^act_/, "");
   const params = new URLSearchParams({ act: accountNumber, selected_ad_ids: adId });
+  const business = businessId?.trim();
+  if (business) params.set("business_id", business);
   return `https://adsmanager.facebook.com/adsmanager/manage/ads?${params.toString()}`;
 }
 

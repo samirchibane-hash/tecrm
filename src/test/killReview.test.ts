@@ -61,6 +61,13 @@ describe("kill review fixture", () => {
     expect(migration).toContain("creative-kill-thumbs");
     expect(migration).toContain("public.is_admin()");
     expect(migration).toMatch(/revoke all on public\.creative_kill_reviews from anon/i);
+    expect(migration).toContain("creative_kill_reviews_guard");
+    expect(migration).toContain("fb_ad_account_id");
+    expect(migration).toContain("1170300274125472");
+  });
+
+  it("leaves campaign, business, and all-clicks CPC empty on these two runs", () => {
+    expect(KILL_REVIEW_FIXTURE.every((row) => row.campaign_id == null && row.business_id == null && row.cpc == null)).toBe(true);
   });
 
   it("keeps Oct 26 verdicts and leaves Oct 22 uncalled", () => {
@@ -105,6 +112,8 @@ describe("kill review scope and reply", () => {
     expect(inKillReviewScope(sample)).toBe(true);
     expect(inKillReviewScope(withPatch({ act: "act_1170300274125472" }))).toBe(false);
     expect(inKillReviewScope(withPatch({ act: "1170300274125472" }))).toBe(false);
+    expect(inKillReviewScope(withPatch({ account_id: "act_1170300274125472" }))).toBe(false);
+    expect(inKillReviewScope(withPatch({ account_id: " 1170300274125472 " }))).toBe(false);
     expect(inKillReviewScope(withPatch({ client_name: "True H2O" }))).toBe(false);
     expect(inKillReviewScope(withPatch({ campaign_name: "ClearDeals - water" }))).toBe(false);
     expect(inKillReviewScope(withPatch({ campaign_name: "Internal prospecting" }))).toBe(false);
@@ -135,16 +144,116 @@ describe("kill review scope and reply", () => {
     expect(hiddenByAct.some((row) => row.act === sample.act)).toBe(false);
   });
 
+  it("prefers account_id for the account and the hidden list", () => {
+    const visible = loadKillReviews({
+      runDate: sample.run_date,
+      hiddenAccounts: ["Culligan Rochester"],
+      accounts: [{ id: "uuid-visible", account_name: "Kinetico UT", fb_ad_account_id: "act_999" }],
+      rows: [{
+        ...sample,
+        account_id: "uuid-visible",
+        client_name: "Culligan Rochester",
+        campaign_id: "1200001",
+        campaign_name: "Website leads",
+        business_id: "555",
+        cpc: 0.9,
+      }],
+    });
+    expect(visible).toHaveLength(1);
+    expect(visible[0]).toMatchObject({
+      account_id: "uuid-visible",
+      campaign_id: "1200001",
+      campaign_name: "Website leads",
+      business_id: "555",
+      cpc: 0.9,
+    });
+
+    const hiddenById = loadKillReviews({
+      runDate: sample.run_date,
+      hiddenAccounts: ["Hidden Dealer"],
+      accounts: [{ id: "uuid-hidden", account_name: "Hidden Dealer", fb_ad_account_id: "act_111" }],
+      rows: [{ ...sample, account_id: "uuid-hidden", client_name: "Not Hidden Co" }],
+    });
+    expect(hiddenById).toEqual([]);
+
+    const preferred = loadKillReviews({
+      runDate: sample.run_date,
+      hiddenAccounts: [],
+      accounts: [
+        { id: "by-id", account_name: "By Id", fb_ad_account_id: "act_1" },
+        { id: "by-act", account_name: "By Act", fb_ad_account_id: sample.act },
+      ],
+      rows: [{ ...sample, account_id: "by-id" }],
+    });
+    expect(preferred[0]?.account_id).toBe("by-id");
+
+    const unknown = loadKillReviews({
+      runDate: sample.run_date,
+      hiddenAccounts: [],
+      accounts: [{ id: "by-act", account_name: "Culligan Rochester", fb_ad_account_id: sample.act }],
+      rows: [{ ...sample, account_id: "published-uuid" }],
+    });
+    expect(unknown[0]?.account_id).toBe("published-uuid");
+  });
+
+  it("drops a client act when the linked account is the internal ad account", () => {
+    const byId = loadKillReviews({
+      runDate: sample.run_date,
+      hiddenAccounts: [],
+      accounts: [{ id: "te", account_name: "Treat Engine", fb_ad_account_id: "1170300274125472" }],
+      rows: [{ ...sample, account_id: "te", client_name: "Treat Engine" }],
+    });
+    expect(byId).toEqual([]);
+
+    const byName = loadKillReviews({
+      runDate: sample.run_date,
+      hiddenAccounts: [],
+      accounts: [{ id: "te", account_name: "Treat Engine", fb_ad_account_id: "act_1170300274125472" }],
+      rows: [{ ...sample, account_id: null, client_name: "Treat Engine" }],
+    });
+    expect(byName).toEqual([]);
+  });
+
+  it("keeps a supplied campaign and CPC, and leaves them empty when the row omits them", () => {
+    const legacy: CreativeKillReviewRow = { ...sample };
+    delete (legacy as Partial<CreativeKillReviewRow>).campaign_id;
+    delete (legacy as Partial<CreativeKillReviewRow>).business_id;
+    delete (legacy as Partial<CreativeKillReviewRow>).cpc;
+    const [filled] = loadKillReviews({
+      runDate: sample.run_date,
+      hiddenAccounts: [],
+      accounts: [],
+      rows: [legacy],
+    });
+    expect(filled.campaign_id).toBeNull();
+    expect(filled.business_id).toBeNull();
+    expect(filled.cpc).toBeNull();
+
+    const [blankBusiness] = loadKillReviews({
+      runDate: sample.run_date,
+      hiddenAccounts: [],
+      accounts: [],
+      rows: [{ ...sample, business_id: "  ", cpc: 0 }],
+    });
+    expect(blankBusiness.business_id).toBeNull();
+    expect(blankBusiness.cpc).toBe(0);
+  });
+
   it("builds the reply from the stable numbers", () => {
     expect(copyReply([6, 3, 4, 3])).toBe("turn off 3, 4, 6");
     expect(copyReply([])).toBe("");
   });
 
-  it("strips the act_ prefix for Ads Manager", () => {
+  it("strips the act_ prefix for Ads Manager and omits an unknown business", () => {
     const url = new URL(adsManagerAdUrl("act_1417432623684500", "52591514415503"));
     expect(url.searchParams.get("act")).toBe("1417432623684500");
     expect(url.searchParams.get("selected_ad_ids")).toBe("52591514415503");
+    expect(url.searchParams.get("business_id")).toBeNull();
     expect(url.toString()).not.toContain("act_");
+
+    expect(new URL(adsManagerAdUrl("act_1417432623684500", "52591514415503", null)).searchParams.get("business_id")).toBeNull();
+    expect(new URL(adsManagerAdUrl("act_1417432623684500", "52591514415503", "  ")).searchParams.get("business_id")).toBeNull();
+    expect(new URL(adsManagerAdUrl("act_1417432623684500", "52591514415503", "998877")).searchParams.get("business_id")).toBe("998877");
   });
 
   it("sorts a missing CPL after priced ads and keeps n stable", () => {
