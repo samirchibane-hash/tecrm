@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { metaUnavailableReason, useCouplerData, useMetaGapAccounts } from "@/hooks/useCouplerData";
@@ -20,6 +20,14 @@ import { format, startOfDay, subDays } from "date-fns";
 import { useSettings } from "@/hooks/useSettings";
 import type { AdRow } from "@/hooks/useCouplerData";
 import { useAllAccounts } from "@/hooks/useAllAccounts";
+import { SortableTh } from "@/components/dashboard/SortableTh";
+import {
+  CLIENT_SORT_KEYS,
+  DEFAULT_CLIENT_SORT,
+  firstSortDir,
+  sortClientRows,
+  type ClientSortKey,
+} from "@/components/dashboard/clientTableSort";
 
 // ─── Component ───────────────────────────────────────────────────────────────
 const Index = () => {
@@ -200,6 +208,55 @@ const Index = () => {
 
   const gapNames = tableRows.filter((r) => metaGaps.has(r.name)).map((r) => r.name);
 
+  // Column sort lives in the URL (?sort=cpl&dir=asc) so a sorted view can be
+  // shared and survives the back button. No param = biggest spender first.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sortParam = searchParams.get("sort");
+  const sortKey: ClientSortKey = CLIENT_SORT_KEYS.includes(sortParam as ClientSortKey)
+    ? (sortParam as ClientSortKey)
+    : DEFAULT_CLIENT_SORT.key;
+  const dirParam = searchParams.get("dir");
+  const sortDir = dirParam === "asc" || dirParam === "desc" ? dirParam : sortParam ? firstSortDir(sortKey) : DEFAULT_CLIENT_SORT.dir;
+  const onSort = (key: ClientSortKey) => {
+    const dir = key === sortKey ? (sortDir === "asc" ? "desc" : "asc") : firstSortDir(key);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (key === DEFAULT_CLIENT_SORT.key && dir === DEFAULT_CLIENT_SORT.dir) {
+        next.delete("sort");
+        next.delete("dir");
+      } else {
+        next.set("sort", key);
+        next.set("dir", dir);
+      }
+      return next;
+    }, { replace: true });
+  };
+  const sortedRows = useMemo(
+    () =>
+      sortClientRows(
+        tableRows,
+        (r) => {
+          const budget = dailyBudgetByName.get(r.name);
+          return {
+            name: r.name,
+            spend: isError || metaGaps.has(r.name) ? null : r.totalSpend,
+            leads: r.ghlLeads,
+            appointments: r.ghlAppointments,
+            activeAds: activeAdsByName.get(r.name) ?? null,
+            // Lifetime-only budgets have no daily figure, so they're unknown here.
+            dailyBudget: !budget || (budget.daily === 0 && budget.hasLifetimeBudget) ? null : budget.daily,
+          };
+        },
+        sortKey,
+        sortDir,
+      ),
+    [tableRows, isError, metaGaps, activeAdsByName, dailyBudgetByName, sortKey, sortDir],
+  );
+  const sortProps = (key: ClientSortKey) => ({
+    active: key === sortKey ? sortDir : null,
+    onSort: () => onSort(key),
+  });
+
   return (
     <div>
       <div className="mx-auto max-w-5xl px-4 py-6 sm:py-10 sm:px-6 lg:px-8">
@@ -325,47 +382,35 @@ const Index = () => {
               <table className="w-full text-sm min-w-[780px]">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground">
-                      Account
-                    </th>
-                    <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground">
-                      Spend
-                    </th>
-                    <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground">
-                      GHL Leads
-                    </th>
-                    <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground">
-                      CPL
-                    </th>
-                    <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground">
-                      GHL Appts
-                    </th>
-                    <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground">
-                      CPA
-                    </th>
-                    <th
-                      className="text-right py-3 px-4 text-xs font-medium text-muted-foreground"
+                    <SortableTh align="left" {...sortProps("account")}>Account</SortableTh>
+                    <SortableTh {...sortProps("spend")}>Spend</SortableTh>
+                    <SortableTh {...sortProps("leads")}>GHL Leads</SortableTh>
+                    <SortableTh {...sortProps("cpl")}>CPL</SortableTh>
+                    <SortableTh {...sortProps("appts")}>GHL Appts</SortableTh>
+                    <SortableTh {...sortProps("cpa")}>CPA</SortableTh>
+                    <SortableTh
+                      {...sortProps("ads")}
                       title="Ads delivering in Meta right now (not tied to the selected period)"
                     >
                       Active Ads
-                    </th>
-                    <th
-                      className="text-right py-3 px-4 text-xs font-medium text-muted-foreground"
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps("budget")}
                       title="Daily budget of live campaigns and ad sets in Meta right now (not tied to the selected period)"
                     >
                       Daily Budget
-                    </th>
+                    </SortableTh>
                     <th className="py-3 px-4 w-8" />
                   </tr>
                 </thead>
                 <tbody>
-                  {tableRows.map((row, i) => {
+                  {sortedRows.map((row, i) => {
                     // A client whose spend Meta couldn't read has no real cost per
                     // result, so it gets no judgement either.
                     const known = !isError && !metaGaps.has(row.name);
                     const cplStatus = known ? costStatus(row.ghlCostPerLead, benchmark.cpl) : null;
                     const cpaStatus = known ? costStatus(row.ghlCostPerAppt, benchmark.cpa) : null;
-                    const isLast = i === tableRows.length - 1;
+                    const isLast = i === sortedRows.length - 1;
                     return (
                       <tr
                         key={row.name}
