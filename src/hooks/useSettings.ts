@@ -119,7 +119,7 @@ export function useSettings() {
   const scope = useSupabaseScope();
   const settingsKey = ["settings", scope];
 
-  const { data: settings, isLoading } = useQuery({
+  const { data: settings, isLoading, isError } = useQuery({
     queryKey: settingsKey,
     queryFn: () => fetchSettings(supabase),
     staleTime: 30_000,
@@ -162,6 +162,7 @@ export function useSettings() {
   return {
     settings: settings ?? DEFAULTS,
     isLoading,
+    isError,
     updateSettings: mutation.mutate,
   };
 }

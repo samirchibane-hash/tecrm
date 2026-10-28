@@ -22,6 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DashboardPeriodPicker } from "@/components/dashboard/DashboardPeriodPicker";
 import { PortfolioCreativeGallery } from "@/components/creative-performance/PortfolioCreativeGallery";
+import { KillReviewTab } from "@/components/kill-review/KillReviewTab";
 import { useDashboardPeriod } from "@/hooks/useDashboardPeriod";
 import { useSettings } from "@/hooks/useSettings";
 import {
@@ -65,15 +66,20 @@ const CLIENT_COLORS = [
 
 const Creatives = () => {
   const queryClient = useQueryClient();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Active tab. Performance opens first: what the ads are doing decides what
-  // gets briefed next, so it comes before the library and the request queue.
-  type TabId = "performance" | "library" | "requests";
-  const TAB_IDS: TabId[] = ["performance", "library", "requests"];
+  // gets briefed next. Kill review sits with it — same ads, the turn-off pass.
+  type TabId = "performance" | "kill" | "library" | "requests";
+  const TAB_IDS: TabId[] = ["performance", "kill", "library", "requests"];
   const param = searchParams.get("tab");
-  const initialTab: TabId = TAB_IDS.find((t) => t === param) ?? "performance";
-  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+  const activeTab: TabId = TAB_IDS.find((t) => t === param) ?? "performance";
+  const setActiveTab = (next: TabId) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "performance") params.delete("tab");
+    else params.set("tab", next);
+    setSearchParams(params, { replace: true });
+  };
 
   // ── Creative performance state ──────────────────────────────────────────
   // The same period control the Performance and Funnels screens use, so a range
@@ -81,7 +87,7 @@ const Creatives = () => {
   const { dateRange, label: periodLabel, creativeRange, onChange: onPeriodChange } = useDashboardPeriod();
   // Clients hidden from the Performance dashboard stay hidden here: one setting,
   // one meaning, so a hidden client can't reappear on another screen.
-  const { settings } = useSettings();
+  const { settings, isLoading: settingsLoading, isError: settingsError } = useSettings();
 
   // ── Template Library state ──────────────────────────────────────────────
   // Template Library columns default to every client; the operator can hide specific
@@ -424,7 +430,7 @@ const Creatives = () => {
 
         <PageHeader
           title="Creatives"
-          description="Live creative performance, the template library, and the request queue"
+          description="Live creative performance, the kill review, the template library, and the request queue"
           actions={
             activeTab === "performance" ? (
               <DashboardPeriodPicker dateRange={dateRange} label={periodLabel} onChange={onPeriodChange} />
@@ -435,6 +441,7 @@ const Creatives = () => {
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
           <TabsList className="mb-6">
             <TabsTrigger value="performance">Creative Performance</TabsTrigger>
+            <TabsTrigger value="kill">Kill review</TabsTrigger>
             <TabsTrigger value="library">Template Library</TabsTrigger>
             <TabsTrigger value="requests" className="gap-1.5">
               Creative Requests
@@ -453,6 +460,19 @@ const Creatives = () => {
               periodCaption={periodLabel}
               accounts={accounts.map((a) => ({ id: a.id, account_name: a.account_name, target_cpl: a.target_cpl }))}
               hiddenAccounts={settings.hidden_accounts}
+            />
+          </TabsContent>
+
+          <TabsContent value="kill">
+            <KillReviewTab
+              accounts={accounts.map((a) => ({
+                id: a.id,
+                account_name: a.account_name,
+                fb_ad_account_id: a.fb_ad_account_id ?? null,
+              }))}
+              hiddenAccounts={settings.hidden_accounts}
+              settingsLoading={settingsLoading}
+              settingsError={settingsError}
             />
           </TabsContent>
 
