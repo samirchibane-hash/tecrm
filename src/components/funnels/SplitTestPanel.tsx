@@ -124,7 +124,9 @@ export function SplitTestPanel({ test, compact = false }: { test: SplitTest; com
       {test.arms.length === 0 ? (
         <p className="px-3 py-3 text-[11px] text-muted-foreground">No arm has reported a view yet.</p>
       ) : (
-        <div className="overflow-x-auto">
+        // relative: the sr-only header label is absolutely positioned, and would
+        // otherwise escape this scroller and widen the whole page on phones.
+        <div className="relative overflow-x-auto">
           <table className="w-full min-w-[640px] text-xs">
             <thead>
               <tr className="text-[10px] uppercase tracking-wide text-muted-foreground">

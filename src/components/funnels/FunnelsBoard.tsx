@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { CountFilter } from "@/components/creative-performance/CountFilter";
 import { NO_COUNT_FILTER, describeCount, passesCount, type CountFilterValue } from "@/components/creative-performance/countThreshold";
 import { formatDistanceToNowStrict } from "date-fns";
@@ -19,10 +20,17 @@ import { analyzePortfolioFunnel, type FunnelAccountInfo, type PortfolioGhl } fro
 import { formatCount, formatUsd } from "@/lib/format";
 import { buildFunnelsBoard } from "./funnelRows";
 import { FunnelPageCard } from "./FunnelPageCard";
+import { TemplatesBoard } from "./TemplatesBoard";
 import { FUNNEL_SORT_OPTIONS, funnelSortValue, type FunnelSortKey } from "./funnelSort";
 import { useFunnelSplitTests, useVariantBookings, useVariantDaily } from "./useFunnelsData";
 
 type Filter = "all" | "traffic" | "tests" | "idle";
+type Tab = "pages" | "templates";
+
+const TABS: { value: Tab; label: string }[] = [
+  { value: "pages", label: "Pages" },
+  { value: "templates", label: "Templates" },
+];
 
 /** Earlier than any conversion this CRM holds, so "All time" really is all of it. */
 const ALL_TIME_FLOOR = "2024-01-01";
@@ -67,6 +75,18 @@ export function FunnelsBoard({
     () => (accountId ? accounts.filter((a) => a.id !== accountId).map((a) => a.account_name) : hiddenSetting),
     [accountId, accounts, hiddenSetting],
   );
+  // The tab lives in the URL (?funnels=templates) so it can be linked and survives
+  // the back button. Not "view": the creative gallery beside this board on the
+  // account page already owns that one.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab: Tab = searchParams.get("funnels") === "templates" ? "templates" : "pages";
+  const setTab = (next: Tab) =>
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (next === "pages") params.delete("funnels");
+      else params.set("funnels", next);
+      return params;
+    }, { replace: true });
   const [filter, setFilter] = useState<Filter>("traffic");
   const [query, setQuery] = useState("");
   const [leadFilter, setLeadFilter] = useState<CountFilterValue>(NO_COUNT_FILTER);
@@ -249,6 +269,8 @@ export function FunnelsBoard({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
+          <SegmentedControl<Tab> value={tab} onChange={setTab} options={TABS} label="Funnels view" />
+          {tab === "pages" && <>
           <SegmentedControl<Filter>
             value={filter}
             onChange={setFilter}
@@ -259,9 +281,10 @@ export function FunnelsBoard({
           <CountFilter value={apptFilter} onChange={setApptFilter} noun="appts" anyLabel="Any appts" />
           <CountFilter value={spendFilter} onChange={setSpendFilter} noun="spend" anyLabel="Any spend" money />
           <KpiSortControl options={sortOptions} value={sort.key} dir={sort.dir} onChange={(key, dir) => setSort({ key, dir })} />
+          </>}
         </div>
         <div className="flex items-center gap-2">
-          {!scoped && (
+          {!scoped && tab === "pages" && (
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -294,7 +317,9 @@ export function FunnelsBoard({
         </p>
       )}
 
-      {rows.length === 0 ? (
+      {tab === "templates" ? (
+        <TemplatesBoard rows={board.rows} scoped={scoped} periodCaption={periodCaption} averages={averages} />
+      ) : rows.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
           {board.rows.length === 0
             ? "No funnel page is registered yet. Add the client's site to funnel_sites and the hourly sync will list its pages."

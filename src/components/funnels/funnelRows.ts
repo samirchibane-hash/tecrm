@@ -156,6 +156,13 @@ export interface FunnelRow {
   offer: OfferKey | null;
   angle: AngleKey | null;
   copySyncedAt: string | null;
+  /**
+   * The landing-page template this page is built on. A split-test router has
+   * no sections of its own, so it takes its arms' template.
+   */
+  templateKey: string | null;
+  /** Set on a split-test arm page (okc-1-a): the router it belongs to (okc-1). */
+  armOf: string | null;
   /** Performance in the selected period. Null when no ad sent traffic here. */
   perf: PortfolioPage | null;
   /**
@@ -445,6 +452,18 @@ export function buildFunnelsBoard({
     bookingsByKey.set(key, [...(bookingsByKey.get(key) ?? []), b]);
   }
 
+  // Arm pages are the router's URL plus a letter (okc-1 → okc-1-a).
+  const linkKeys = new Set(links.map((l) => normalizePageUrl(l.url)));
+  const armTemplates = new Map<string, string[]>();
+  const routerOf = (key: string) => {
+    const base = key.replace(/-[a-z]$/, "");
+    return base !== key && linkKeys.has(base) ? base : null;
+  };
+  for (const l of links) {
+    const router = routerOf(normalizePageUrl(l.url));
+    if (router && l.template_key) armTemplates.set(router, [...(armTemplates.get(router) ?? []), l.template_key]);
+  }
+
   const rows: FunnelRow[] = [];
   for (const link of links) {
     if (hidden.includes(link.account_name)) continue;
@@ -487,6 +506,8 @@ export function buildFunnelsBoard({
       offer: copy.offer,
       angle: copy.angle,
       copySyncedAt: link.copy_synced_at,
+      templateKey: link.template_key ?? armTemplates.get(key)?.sort()[0] ?? null,
+      armOf: routerOf(key),
       perf,
       // Filled in below, once it is known whether this client sends attribution
       // at all: a page under a client that never has cannot be read as zero.

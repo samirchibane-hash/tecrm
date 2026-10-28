@@ -121,3 +121,27 @@ export function useVariantBookings(since: string | undefined, until?: string) {
     },
   });
 }
+
+/** A landing-page template: a page skeleton every funnel page is built from. */
+export interface FunnelTemplate {
+  key: string;
+  name: string;
+  description: string;
+  sections: string[];
+  status: "active" | "legacy";
+}
+
+/** The template catalogue, in the order it was introduced. */
+export function useFunnelTemplates() {
+  return useQuery({
+    queryKey: ["funnel-templates"],
+    queryFn: async (): Promise<FunnelTemplate[]> => {
+      const { data, error } = await supabase
+        .from("funnel_templates")
+        .select("key, name, description, sections, status")
+        .order("sort_order");
+      if (error) throw error;
+      return (data ?? []).map((t) => ({ ...t, status: t.status === "legacy" ? "legacy" : "active" }));
+    },
+  });
+}

@@ -29,7 +29,7 @@ export function useFunnelRepoLinks() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("account_links")
-        .select("account_name, url, label, page_title, page_headline, page_subhead, page_cta, copy_synced_at")
+        .select("account_name, url, label, page_title, page_headline, page_subhead, page_cta, copy_synced_at, template_key, page_sections")
         .eq("source", "funnel_repo")
         .order("account_name", { ascending: true });
       if (error) throw error;

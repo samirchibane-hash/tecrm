@@ -44,6 +44,9 @@ export interface FunnelPageCopy {
   page_subhead: string | null;
   page_cta: string | null;
   copy_synced_at: string | null;
+  /** The template github-sync matched from the page's sections (funnel_templates.key). Null on a router. */
+  template_key?: string | null;
+  page_sections?: string[] | null;
 }
 
 /**

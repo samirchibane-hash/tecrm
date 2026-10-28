@@ -52,13 +52,16 @@ export type Database = {
           id: string
           label: string
           page_cta: string | null
+          page_sections: string[] | null
           page_headline: string | null
           page_subhead: string | null
           page_title: string | null
           repo: string | null
           repo_path: string | null
           source: string
+          structure_synced_at: string | null
           synced_at: string | null
+          template_key: string | null
           url: string
         }
         Insert: {
@@ -69,13 +72,16 @@ export type Database = {
           id?: string
           label: string
           page_cta?: string | null
+          page_sections?: string[] | null
           page_headline?: string | null
           page_subhead?: string | null
           page_title?: string | null
           repo?: string | null
           repo_path?: string | null
           source?: string
+          structure_synced_at?: string | null
           synced_at?: string | null
+          template_key?: string | null
           url: string
         }
         Update: {
@@ -86,16 +92,27 @@ export type Database = {
           id?: string
           label?: string
           page_cta?: string | null
+          page_sections?: string[] | null
           page_headline?: string | null
           page_subhead?: string | null
           page_title?: string | null
           repo?: string | null
           repo_path?: string | null
           source?: string
+          structure_synced_at?: string | null
           synced_at?: string | null
+          template_key?: string | null
           url?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "account_links_template_key_fkey"
+            columns: ["template_key"]
+            isOneToOne: false
+            referencedRelation: "funnel_templates"
+            referencedColumns: ["key"]
+          },
+        ]
       }
       account_poc: {
         Row: {
@@ -998,6 +1015,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      funnel_templates: {
+        Row: {
+          created_at: string
+          description: string
+          key: string
+          name: string
+          sections: string[]
+          sort_order: number
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          key: string
+          name: string
+          sections: string[]
+          sort_order?: number
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          key?: string
+          name?: string
+          sections?: string[]
+          sort_order?: number
+          status?: string
+        }
+        Relationships: []
       }
       funnel_variant_events: {
         Row: {

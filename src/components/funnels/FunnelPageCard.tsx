@@ -42,12 +42,19 @@ export function FunnelPageCard({
   showAccount = true,
   periodCaption,
   averages,
+  previewTest = false,
 }: {
   row: FunnelRow;
   showAccount?: boolean;
   periodCaption?: string;
   /** Portfolio averages the rates are coloured against (the board's measured pages). */
   averages?: { cvr: number | null; bookedRate: number | null };
+  /**
+   * Collapsed, still show the running test's arms in compact form (the
+   * Templates tab, where the variations are the point). Expanding shows the
+   * full panel in their place.
+   */
+  previewTest?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [sheet, setSheet] = useState<"ads" | "history" | null>(null);
@@ -115,6 +122,12 @@ export function FunnelPageCard({
           />
         </dl>
       </button>
+
+      {!open && previewTest && row.runningTest && (
+        <div className="border-t border-border/60 bg-muted/20 px-4 py-3">
+          <SplitTestPanel test={row.runningTest} compact />
+        </div>
+      )}
 
       {open && (
         <div id={panelId} className="space-y-3 border-t border-border/60 bg-muted/20 px-4 py-3">

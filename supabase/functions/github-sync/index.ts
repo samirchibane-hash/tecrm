@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isAdminRequest, unauthorizedResponse } from "../_shared/admin-auth.ts";
+import { classifyTemplate, pageSections } from "../_shared/funnelTemplate.ts";
 
 // Mirrors commits from every repo the GitHub token can see into the Claude Log,
 // starting 2026-09-01, then re-links them to CRM accounts from
@@ -144,7 +145,7 @@ async function syncFunnelPages(db: ReturnType<typeof createClient>, token: strin
   if (error) throw new Error(`funnel_sites: ${error.message}`);
 
   const { data: known } = await db.from("account_links")
-    .select("repo, repo_path, blob_sha, page_title, page_headline, page_subhead, page_cta, copy_synced_at")
+    .select("repo, repo_path, blob_sha, page_title, page_headline, page_subhead, page_cta, copy_synced_at, template_key, page_sections, structure_synced_at")
     .eq("source", "funnel_repo");
   const seen = new Map((known ?? []).map((k) => [`${k.repo}:${k.repo_path}`, k]));
 
@@ -170,26 +171,35 @@ async function syncFunnelPages(db: ReturnType<typeof createClient>, token: strin
       const prev = seen.get(`${site.repo}:${e.path}`);
       // Unchanged pages keep the copy the run that read them extracted, along
       // with that run's timestamp. A null copy_synced_at means the page has
-      // never been parsed for its headline, so it's re-read once.
+      // never been parsed for its headline, so it's re-read once; a null
+      // structure_synced_at, never read for its template, the same.
       let read = {
         page_title: prev?.page_title ?? null,
         page_headline: prev?.page_headline ?? null,
         page_subhead: prev?.page_subhead ?? null,
         page_cta: prev?.page_cta ?? null,
         copy_synced_at: prev?.copy_synced_at ?? null,
+        template_key: prev?.template_key ?? null,
+        page_sections: prev?.page_sections ?? null,
+        structure_synced_at: prev?.structure_synced_at ?? null,
       };
       let reread = false;
-      if (!prev || prev.blob_sha !== e.sha || !prev.copy_synced_at) {
+      if (!prev || prev.blob_sha !== e.sha || !prev.copy_synced_at || !prev.structure_synced_at) {
         const { body } = await gh(`/repos/${site.repo}/git/blobs/${e.sha}`, token);
         const bytes = Uint8Array.from(atob(String(body.content ?? "").replace(/\n/g, "")), (c) => c.charCodeAt(0));
         const html = new TextDecoder().decode(bytes);
         const hero = heroCopy(html);
+        const sections = pageSections(html);
+        const now = new Date().toISOString();
         read = {
           page_title: pageTitle(html),
           page_headline: hero.headline,
           page_subhead: hero.subhead,
           page_cta: hero.cta,
-          copy_synced_at: new Date().toISOString(),
+          copy_synced_at: now,
+          template_key: classifyTemplate(sections),
+          page_sections: sections,
+          structure_synced_at: now,
         };
         reread = true;
       }
