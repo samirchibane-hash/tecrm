@@ -229,6 +229,16 @@ tested in `src/test/`. Keep it that way:
   many pages it pools. It's testing money: show how far off, never a verdict label. On a client's own page (scoped board) the bar is still
   the whole visible portfolio's, never the client's own pages, which with one test per client would always
   read green.
+- **The Funnels board has a Templates tab (since 2026-10-27)**: a `Pages | Templates` switch (URL `?funnels=templates`,
+  not `view`, which the creative gallery owns on the account page), so it shows scoped on every account page too. It
+  groups the board's own rows by landing-page template (`templateRows.ts`), never recomputes them: live = a page on
+  the template had ad traffic in the period, built = idle, plus the clients it isn't built for yet. Arm pages fold
+  into their router, whose test carries every arm. Templates are **detected, never tagged by hand**: github-sync reads
+  each page's `<section>` order (`_shared/funnelTemplate.ts`, shared with the tests) into `account_links.page_sections`
+  and matches it to `funnel_templates` (`short`, `long_form`, `long_form_v1`); a router has no sections and takes its
+  arms' template. A page on a new skeleton shows as "doesn't match a template": add a `funnel_templates` row and a
+  rule in `classifyTemplate`. The pooled template conversion rate mixes markets, so it is a lead for the next test,
+  never a verdict, and reads "needs traffic" under `MIN_GROUP_VIEWS`.
 - The function returns paused ads that spent in the period only to callers that send `v: 2`.
 - The Performance dashboard is performance only: creative requests live on `/creatives` and
   tasks on `/tasks`, and neither is duplicated back onto the dashboard.
