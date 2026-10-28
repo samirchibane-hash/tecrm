@@ -37,6 +37,9 @@ const Index = () => {
         .from("clients")
         .select("id, full_name, business_name, service, plan, submitted_at, account_id, status, onboarded_at")
         .is("account_id", null)
+        // ClearDeals (service "sales") is run from its own project, so its
+        // customers aren't Treat Engine clients. Null service still shows.
+        .or("service.is.null,service.neq.sales")
         .order("submitted_at", { ascending: false })
         .limit(10);
       if (error) throw error;
