@@ -238,7 +238,9 @@ tested in `src/test/`. Keep it that way:
   and matches it to `funnel_templates` (`short`, `long_form`, `long_form_v1`); a router has no sections and takes its
   arms' template. A page on a new skeleton shows as "doesn't match a template": add a `funnel_templates` row and a
   rule in `classifyTemplate`. The pooled template conversion rate mixes markets, so it is a lead for the next test,
-  never a verdict, and reads "needs traffic" under `MIN_GROUP_VIEWS`.
+  never a verdict, and reads "needs traffic" under `MIN_GROUP_VIEWS`. Each template card shows the top of one real page
+  (`public/template-thumbs/<key>.jpg` + `manifest.json`, rendered by the workspace's `execution/template_thumbnails.py`
+  from `funnels/dist` with trackers blocked); its link is a `?v=<arm>` preview so a click never counts as a visit.
 - The function returns paused ads that spent in the period only to callers that send `v: 2`.
 - The Performance dashboard is performance only: creative requests live on `/creatives` and
   tasks on `/tasks`, and neither is duplicated back onto the dashboard.

@@ -1,0 +1,20 @@
+{
+  "short": {
+    "src": "/template-thumbs/short.jpg",
+    "client": "Kinetico of SW Idaho",
+    "page": "meridian-1",
+    "url": "https://test.kineticotv.co/meridian-1?v=c"
+  },
+  "long_form": {
+    "src": "/template-thumbs/long_form.jpg",
+    "client": "Tarheel Pure Water",
+    "page": "wilmington-2",
+    "url": "https://test.tarheelwatersystems.com/wilmington-2?v=a"
+  },
+  "long_form_v1": {
+    "src": "/template-thumbs/long_form_v1.jpg",
+    "client": "Select Source Water",
+    "page": "dfw-1",
+    "url": "https://test.selectsourcewater.co/dfw-1"
+  }
+}

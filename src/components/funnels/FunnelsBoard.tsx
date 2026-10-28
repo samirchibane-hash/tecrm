@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { KpiStatCard } from "@/components/dashboard/KpiStatCard";
 import { SourceUnavailableNotice } from "@/components/dashboard/SourceUnavailableNotice";
 import { SegmentedControl } from "@/components/SegmentedControl";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KpiSortControl } from "@/components/KpiSortControl";
 import { sortByKpi, type SortDir } from "@/lib/kpiSort";
 import { usePortfolioCreatives, type CreativeRange } from "@/components/creative-performance/useCreativePerformance";
@@ -221,6 +222,13 @@ export function FunnelsBoard({
 
   return (
     <div className="space-y-4">
+      {/* Same tabs as the Creatives page, so the two analysis screens read alike. */}
+      <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
+        <TabsList className="mb-2">
+          {TABS.map((t) => <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>)}
+        </TabsList>
+      </Tabs>
+
       {unreadable.length > 0 && (
         <SourceUnavailableNotice
           source="Meta Ads"
@@ -269,19 +277,20 @@ export function FunnelsBoard({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <SegmentedControl<Tab> value={tab} onChange={setTab} options={TABS} label="Funnels view" />
-          {tab === "pages" && <>
-          <SegmentedControl<Filter>
-            value={filter}
-            onChange={setFilter}
-            options={FILTERS}
-            label="Filter landing pages"
-          />
-          <CountFilter value={leadFilter} onChange={setLeadFilter} noun="leads" anyLabel="Any leads" />
-          <CountFilter value={apptFilter} onChange={setApptFilter} noun="appts" anyLabel="Any appts" />
-          <CountFilter value={spendFilter} onChange={setSpendFilter} noun="spend" anyLabel="Any spend" money />
-          <KpiSortControl options={sortOptions} value={sort.key} dir={sort.dir} onChange={(key, dir) => setSort({ key, dir })} />
-          </>}
+          {tab === "pages" && (
+            <>
+              <SegmentedControl<Filter>
+                value={filter}
+                onChange={setFilter}
+                options={FILTERS}
+                label="Filter landing pages"
+              />
+              <CountFilter value={leadFilter} onChange={setLeadFilter} noun="leads" anyLabel="Any leads" />
+              <CountFilter value={apptFilter} onChange={setApptFilter} noun="appts" anyLabel="Any appts" />
+              <CountFilter value={spendFilter} onChange={setSpendFilter} noun="spend" anyLabel="Any spend" money />
+              <KpiSortControl options={sortOptions} value={sort.key} dir={sort.dir} onChange={(key, dir) => setSort({ key, dir })} />
+            </>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {!scoped && tab === "pages" && (

@@ -42,19 +42,12 @@ export function FunnelPageCard({
   showAccount = true,
   periodCaption,
   averages,
-  previewTest = false,
 }: {
   row: FunnelRow;
   showAccount?: boolean;
   periodCaption?: string;
   /** Portfolio averages the rates are coloured against (the board's measured pages). */
   averages?: { cvr: number | null; bookedRate: number | null };
-  /**
-   * Collapsed, still show the running test's arms in compact form (the
-   * Templates tab, where the variations are the point). Expanding shows the
-   * full panel in their place.
-   */
-  previewTest?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [sheet, setSheet] = useState<"ads" | "history" | null>(null);
@@ -69,12 +62,13 @@ export function FunnelPageCard({
 
   return (
     <article className="overflow-hidden rounded-xl border border-border/60 bg-card">
-      <button
-        type="button"
+      {/* The whole row toggles for the mouse; the title is the real button for
+          keyboard and screen readers (its click bubbles here). Not one big
+          <button>: the open-page link has to sit in the row, and a link can't
+          live inside a button. */}
+      <div
         onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-controls={panelId}
-        className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className="flex w-full cursor-pointer items-start gap-3 px-4 py-3 text-left hover:bg-muted/40"
       >
         <ChevronRight
           className={cn("mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none", open && "rotate-90")}
@@ -85,8 +79,26 @@ export function FunnelPageCard({
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             {/* The client is the title across the portfolio; on a client's own page every
                 card is that client, so the page name leads there instead. */}
-            <span className="truncate text-sm font-semibold text-foreground">{showAccount ? row.accountName : row.label}</span>
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={panelId}
+              className="min-w-0 truncate rounded-sm text-left text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+            >
+              {showAccount ? row.accountName : row.label}
+            </button>
             {showAccount && <span className="truncate text-xs text-muted-foreground">{row.label}</span>}
+            <a
+              href={row.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`Open ${row.label} in a new tab`}
+              title={`Open ${row.url.replace(/^https?:\/\//, "")} in a new tab`}
+              className="-m-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+            </a>
             {row.runningTest && (() => {
               const v = verdictLine(row.runningTest);
               return v.signal ? <span title={v.detail}><StatusPill status={v.tone}>{v.short}</StatusPill></span> : null;
@@ -121,13 +133,7 @@ export function FunnelPageCard({
             }
           />
         </dl>
-      </button>
-
-      {!open && previewTest && row.runningTest && (
-        <div className="border-t border-border/60 bg-muted/20 px-4 py-3">
-          <SplitTestPanel test={row.runningTest} compact />
-        </div>
-      )}
+      </div>
 
       {open && (
         <div id={panelId} className="space-y-3 border-t border-border/60 bg-muted/20 px-4 py-3">

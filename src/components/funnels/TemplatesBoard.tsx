@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { ChevronRight, FlaskConical } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ChevronRight, ExternalLink, FlaskConical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCount } from "@/lib/format";
 import { StatusPill } from "@/components/StatusPill";
@@ -48,6 +49,71 @@ function TemplateWireframe({ sections }: { sections: string[] }) {
   );
 }
 
+/** One real page per template, rendered by execution/template_thumbnails.py into public/template-thumbs. */
+interface TemplateThumb {
+  src: string;
+  client: string;
+  page: string;
+  /** A preview link (?v=<arm> on a split test), so opening it never counts as a visit. */
+  url: string;
+}
+
+function useTemplateThumbs() {
+  return useQuery({
+    queryKey: ["template-thumbs"],
+    queryFn: async (): Promise<Record<string, TemplateThumb>> => {
+      const res = await fetch("/template-thumbs/manifest.json");
+      return res.ok ? res.json() : {};
+    },
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * The top of a real page on this template, linking to a preview of it. Falls
+ * back to the drawn section order when no thumbnail has been rendered yet.
+ */
+function TemplateThumbnail({ thumb, templateName, sections }: { thumb: TemplateThumb | undefined; templateName: string; sections: string[] }) {
+  const [broken, setBroken] = useState(false);
+  const box = "relative block w-24 shrink-0 overflow-hidden rounded-lg border border-border/70 bg-muted sm:w-36";
+  if (!thumb || broken) {
+    return (
+      <div className={cn(box, "flex aspect-[4/3] items-center justify-center")}>
+        <TemplateWireframe sections={sections} />
+      </div>
+    );
+  }
+  return (
+    <div className="shrink-0">
+      <a
+        href={thumb.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        title={`Open ${thumb.client} ${thumb.page} in a new tab (preview, not counted as a visit)`}
+        className={cn(box, "group/thumb aspect-[4/3] transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}
+      >
+        <img
+          src={thumb.src}
+          alt={`Top of ${thumb.client}'s ${thumb.page}, an example of the ${templateName} template`}
+          loading="lazy"
+          onError={() => setBroken(true)}
+          className="h-full w-full object-cover object-top transition-transform duration-200 group-hover/thumb:scale-[1.03] motion-reduce:transition-none"
+        />
+        <span
+          aria-hidden
+          className="absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-md bg-card/90 text-foreground opacity-0 shadow-sm transition-opacity group-hover/thumb:opacity-100 group-focus-visible/thumb:opacity-100"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+        </span>
+      </a>
+      <p className="mt-1 hidden w-36 truncate text-[10px] text-muted-foreground sm:block" title={`${thumb.client} · ${thumb.page}`}>
+        Example · {thumb.page}
+      </p>
+    </div>
+  );
+}
+
 /** A client on a template: a dot that carries the status, plus the word for it. */
 function ClientChip({ name, status }: { name: string; status: "live" | "built" }) {
   return (
@@ -64,12 +130,14 @@ function ClientChip({ name, status }: { name: string; status: "live" | "built" }
 
 function TemplateCard({
   group,
+  thumb,
   scoped,
   defaultOpen,
   periodCaption,
   averages,
 }: {
   group: TemplateGroup;
+  thumb: TemplateThumb | undefined;
   scoped: boolean;
   defaultOpen: boolean;
   periodCaption: string;
@@ -95,22 +163,28 @@ function TemplateCard({
 
   return (
     <article className="overflow-hidden rounded-xl border border-border/60 bg-card">
-      <button
-        type="button"
+      {/* Same row model as the page cards: the row toggles for the mouse, the
+          title is the real button, and the thumbnail link can sit inside. */}
+      <div
         onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-controls={panelId}
-        className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className="flex w-full cursor-pointer items-start gap-3 px-4 py-3 text-left hover:bg-muted/40"
       >
         <ChevronRight
           className={cn("mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none", open && "rotate-90")}
           aria-hidden
         />
-        <TemplateWireframe sections={template.sections} />
+        <TemplateThumbnail thumb={thumb} templateName={template.name} sections={template.sections} />
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="truncate text-sm font-semibold text-foreground">{template.name}</span>
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={panelId}
+              className="min-w-0 truncate rounded-sm text-left text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+            >
+              {template.name}
+            </button>
             {template.status === "legacy" && <StatusPill status="neutral">Legacy</StatusPill>}
             {scoped && (
               group.liveClients > 0
@@ -119,6 +193,9 @@ function TemplateCard({
             )}
           </div>
           <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{template.description}</p>
+          <p className="mt-1 hidden truncate text-[11px] text-muted-foreground/80 sm:block" title="The page's sections, top to bottom">
+            {template.sections.join(" → ")}
+          </p>
           {/* Phones get the coverage as one line instead of the grid. */}
           <p className="mt-1 text-xs tabular-nums text-muted-foreground md:hidden">
             {scoped
@@ -146,7 +223,7 @@ function TemplateCard({
           <Stat label="Tests" value={formatCount(group.runningTests)} title="Split tests running on this template's pages" />
           <Stat label="Conv." value={conv} title={group.cvr !== null ? `${POOLED} ${formatCount(group.leads)} leads ÷ ${formatCount(group.views)} views, ${group.measuredPages} ${group.measuredPages === 1 ? "page" : "pages"}.` : undefined} />
         </dl>
-      </button>
+      </div>
 
       {open && (
         <div id={panelId} className="space-y-4 border-t border-border/60 bg-muted/20 px-4 py-3">
@@ -177,7 +254,6 @@ function TemplateCard({
                   showAccount={false}
                   periodCaption={periodCaption}
                   averages={averages}
-                  previewTest
                 />
               ))}
             </section>
@@ -215,6 +291,7 @@ export function TemplatesBoard({
   averages: { cvr: number | null; bookedRate: number | null };
 }) {
   const { data: templates, isLoading, isError, refetch, isFetching } = useFunnelTemplates();
+  const { data: thumbs = {} } = useTemplateThumbs();
   const board = useMemo(
     () => buildTemplateBoard(rows, templates ?? [], { minViews: MIN_GROUP_VIEWS }),
     [rows, templates],
@@ -261,6 +338,7 @@ export function TemplatesBoard({
         <TemplateCard
           key={g.template.key}
           group={g}
+          thumb={thumbs[g.template.key]}
           scoped={scoped}
           defaultOpen={g.template.key === firstOpen && g.clients.length > 0}
           periodCaption={periodCaption}
