@@ -3,7 +3,7 @@
 // Pure (no Deno APIs) so github-sync and the CRM's tests share one definition.
 // Keys match public.funnel_templates.
 
-export type FunnelTemplateKey = "short" | "long_form" | "long_form_v1";
+export type FunnelTemplateKey = "short" | "long_form" | "long_form_v1" | "listicle";
 
 /**
  * The page's <section>s in order, each named by its first class (or id):
@@ -26,6 +26,9 @@ export function pageSections(html: string): string[] {
  * page missing one block is still long-form.
  */
 export function classifyTemplate(sections: string[]): FunnelTemplateKey | null {
+  // Article / listicle ("PFAS by Apple", 2026-11-11): an article header instead
+  // of a hero, then numbered <section class="item"> blocks and a closing form.
+  if (sections.filter((s) => s === "item").length >= 3) return "listicle";
   if (!sections.includes("hero")) return null;
   const has = (s: string) => sections.includes(s);
   if (has("agitation") || has("villain") || has("mechanism")) return "long_form";

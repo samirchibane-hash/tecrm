@@ -31,6 +31,11 @@ describe("classifyTemplate", () => {
     expect(classifyTemplate(["hero", "problem", "solution", "offer", "steps", "reviews", "faq", "final-cta"])).toBe("long_form_v1");
   });
 
+  it("tags the listicle article, which has no hero section", () => {
+    expect(classifyTemplate(["item", "item", "item", "item", "item", "item", "item", "close", "sources"])).toBe("listicle"); // rochester-pfas-a
+    expect(classifyTemplate(["item", "item", "close"])).toBeNull(); // too few items to be an article
+  });
+
   it("leaves routers, booking pages and unknown skeletons untagged", () => {
     expect(classifyTemplate([])).toBeNull();
     expect(classifyTemplate(["calendar"])).toBeNull();

@@ -16,5 +16,11 @@
     "client": "Select Source Water",
     "page": "dfw-1",
     "url": "https://test.selectsourcewater.co/dfw-1"
+  },
+  "listicle": {
+    "src": "/template-thumbs/listicle.jpg",
+    "client": "Culligan Rochester",
+    "page": "rochester-pfas",
+    "url": "https://www.culliganrochesterny.com/rochester-pfas?v=a"
   }
 }
