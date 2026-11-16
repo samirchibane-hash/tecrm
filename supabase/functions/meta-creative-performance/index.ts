@@ -31,7 +31,7 @@ const GRAPH = "https://graph.facebook.com/v25.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-report-token",
 };
 
 const PRESETS = new Set(["last_7d", "last_14d", "last_30d", "this_month", "last_month", "maximum"]);
@@ -407,7 +407,19 @@ serve(async (req) => {
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-  if (!(await isAdminRequest(req))) return unauthorizedResponse(corsHeaders);
+  // Signed-in admins can read any account. A client report token (the same one
+  // behind /report/:token, also held server-side by the client's ClearDeals
+  // workspace) unlocks exactly one account: its ads, plus its funnel pages and
+  // split-test arm counts, with agency-only links stripped.
+  let reportAccountId: string | null = null;
+  if (!(await isAdminRequest(req))) {
+    const reportToken = req.headers.get("x-report-token") ?? "";
+    if (!UUID_RE.test(reportToken)) return unauthorizedResponse(corsHeaders);
+    const sr = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: acct } = await sr.from("accounts").select("id").eq("report_token", reportToken).maybeSingle();
+    if (!acct) return unauthorizedResponse(corsHeaders);
+    reportAccountId = acct.id as string;
+  }
 
   try {
     const body = await req.json().catch(() => ({}));
@@ -417,6 +429,34 @@ serve(async (req) => {
     const token = Deno.env.get("META_ACCESS_TOKEN");
     if (!token) throw new MetaError("META_AUTH", "META_ACCESS_TOKEN is not set");
     const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    // ── One client, by report token (client report / ClearDeals Campaigns) ─────
+    if (reportAccountId) {
+      const { data: account, error } = await db
+        .from("accounts").select("account_name, fb_ad_account_id").eq("id", reportAccountId).maybeSingle();
+      if (error || !account) throw new Error(`accounts: ${error?.message ?? "not found"}`);
+
+      const { data: links } = await db
+        .from("account_links")
+        .select("id, url, label, page_headline, template_key")
+        .eq("account_name", account.account_name);
+      const linkIds = (links ?? []).map((l) => l.id as string);
+      let variantQuery = db.from("funnel_variant_daily").select("account_link_id, variant, day, views, leads").in("account_link_id", linkIds.length ? linkIds : ["00000000-0000-0000-0000-000000000000"]);
+      if ("since" in range) variantQuery = variantQuery.gte("day", range.since).lte("day", range.until);
+      const { data: variants } = await variantQuery;
+      const urlById = new Map((links ?? []).map((l) => [l.id as string, l.url as string]));
+      const pages = (links ?? []).map((l) => ({ url: l.url, label: l.label, headline: l.page_headline, template: l.template_key }));
+      const variantDaily = (variants ?? []).map((v) => ({ url: urlById.get(v.account_link_id as string) ?? "", variant: v.variant, day: v.day, views: Number(v.views ?? 0), leads: Number(v.leads ?? 0) }));
+
+      const actId = account.fb_ad_account_id as string | null;
+      if (!actId) {
+        return json({ adAccount: null, period: null, accountSpend: null, appointmentsTracked: false, liveBudget: null, ads: [], assets: null, daily: null, pages, variantDaily, fetchedAt: new Date().toISOString() });
+      }
+      const result = await loadAccount(actId, range, false, token, body.daily === true);
+      // Agency-only: Ads Manager deep links and the account id stay out of client hands.
+      const ads = result.ads.map(({ adsManagerUrl: _drop, ...a }) => a);
+      return json({ ...result, adAccount: { name: account.account_name, currency: result.adAccount.currency }, ads, pages, variantDaily, fetchedAt: new Date().toISOString() });
+    }
 
     // ── Every linked account (Performance dashboard) ──────────────────────────
     if (body.scope === "all") {
