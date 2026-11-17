@@ -185,7 +185,7 @@ const AD_FIELDS = [
   "id,name,effective_status,created_time",
   "campaign{id,name,daily_budget,lifetime_budget}",
   "adset{id,name,optimization_goal,daily_budget,lifetime_budget}",
-  "creative.thumbnail_width(320).thumbnail_height(320){id,object_type,video_id,thumbnail_url,title,body,call_to_action_type,object_story_spec,asset_feed_spec}",
+  "creative.thumbnail_width(320).thumbnail_height(320){id,object_type,video_id,thumbnail_url,image_url,title,body,call_to_action_type,object_story_spec,asset_feed_spec}",
 ].join(",");
 
 const INSIGHT_FIELDS = [
@@ -337,6 +337,9 @@ async function loadAccount(actId: string, range: Range, detail: boolean, token: 
       optimizationGoal: goal ?? null,
       format: isVideo ? "video" : "image",
       thumbnailUrl: ad.creative?.thumbnail_url ?? null,
+      // The ad's original, uncropped image (image ads only). thumbnail_url above is a
+      // 320px square crop: fine for a grid, but it cuts off 4:5 feed ads.
+      imageUrl: ad.creative?.image_url ?? ad.creative?.object_story_spec?.link_data?.picture ?? null,
       adsManagerUrl: `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${actNumber}&selected_ad_ids=${id}`,
       // Meta returns no insights row when an ad had no impressions in the period.
       delivered: !!ins,
