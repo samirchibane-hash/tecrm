@@ -217,6 +217,12 @@ function liveDailyBudget(liveAds: Graph[]) {
   return { daily: cents / 100, hasLifetimeBudget: lifetime };
 }
 
+/** Ad statuses a client's setup screen reports on (everything except deleted/archived). */
+const AD_SETUP_STATUSES = [
+  "ACTIVE", "PENDING_REVIEW", "IN_PROCESS", "PREAPPROVED", "DISAPPROVED", "WITH_ISSUES",
+  "PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "PENDING_BILLING_INFO",
+];
+
 const DELIVERED = JSON.stringify([{ field: "impressions", operator: "GREATER_THAN", value: 0 }]);
 
 /** Per-text rows of a title_asset / body_asset breakdown, merged across placement variants. */
@@ -455,10 +461,26 @@ serve(async (req) => {
       if (!actId) {
         return json({ adAccount: null, period: null, accountSpend: null, appointmentsTracked: false, liveBudget: null, ads: [], assets: null, daily: null, pages, variantDaily, fetchedAt: new Date().toISOString() });
       }
-      const result = await loadAccount(actId, range, false, token, body.daily === true);
+      const [result, statusRows] = await Promise.all([
+        loadAccount(actId, range, false, token, body.daily === true),
+        // Every ad that isn't deleted or archived, with its review/delivery status, so a
+        // new client's screen can say "in review" / "approved, starting soon" before any
+        // spend exists. Best-effort: a failure only hides the setup detail.
+        graphAll(`${actId}/ads`, {
+          fields: "effective_status,campaign{name}",
+          filtering: JSON.stringify([{ field: "effective_status", operator: "IN", value: AD_SETUP_STATUSES }]),
+          limit: "200",
+        }, token).catch((e) => {
+          console.warn("meta-creative-performance: ad status lookup failed", actId, (e as Error)?.message);
+          return null;
+        }),
+      ]);
       // Agency-only: Ads Manager deep links and the account id stay out of client hands.
       const ads = result.ads.map(({ adsManagerUrl: _drop, ...a }) => a);
-      return json({ ...result, adAccount: { name: account.account_name, currency: result.adAccount.currency }, ads, pages, variantDaily, fetchedAt: new Date().toISOString() });
+      const adStatuses = statusRows
+        ? statusRows.map((a) => ({ status: String(a.effective_status ?? ""), campaign: (a.campaign?.name ?? null) as string | null }))
+        : null;
+      return json({ ...result, adAccount: { name: account.account_name, currency: result.adAccount.currency }, ads, adStatuses, pages, variantDaily, fetchedAt: new Date().toISOString() });
     }
 
     // ── Every linked account (Performance dashboard) ──────────────────────────
